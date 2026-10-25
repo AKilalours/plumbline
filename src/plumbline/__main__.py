@@ -5,7 +5,7 @@
     python -m plumbline --fresh               # start from an empty warehouse
 
 Steps: build the store (once per run), sync it through the faulty mock API, ingest every source,
-resolve persons, apply deletions to whole persons. Each step's own command still exists for
+resolve persons, apply deletions to whole persons, build the data products (dbt models and tests). Each step's own command still exists for
 working on one stage at a time.
 """
 from __future__ import annotations
@@ -103,6 +103,22 @@ def main(argv=None) -> int:
                 out["innocent_records_removed"] = sum(after["innocent_records_removed"].values())
         return out
     step("person_deletion", do_privacy)
+
+    def do_products():
+        from .products.build import build
+        out = build(wh)
+        if a.score:
+            from .products.evaluate import score_products
+            with duckdb.connect(str(wh), read_only=True) as con:
+                sc = score_products(con, run)
+            out["current_address_correct"] = sc["attributes"]["current_address"]["correct_when_filled"]
+            out["current_address_ceiling"] = sc["address_ceiling"]
+            out["moves_for_segments"] = {k: sc["moves"]["used_for_segments"][k]
+                                         for k in ("precision", "recall_of_detectable", "median_days_late")}
+            out["work_personal_link_correct"] = sc["b2b2c"]["linked_and_both_correct_of_linkable"]
+            out["household_f1"] = sc["households"]["f1"]
+        return out
+    step("products", do_products)
     print(json.dumps(summary, indent=2))
     return 0
 

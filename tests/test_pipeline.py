@@ -20,7 +20,8 @@ def test_one_command_runs_the_whole_pipeline(tmp_path, capsys, monkeypatch):
     assert main(args) == 0
     out = capsys.readouterr().out
     summary = json.loads(out[out.index("{"):])
-    assert list(summary) == ["store_build", "store_sync", "ingest", "identity", "person_deletion"]
+    assert list(summary) == ["store_build", "store_sync", "ingest", "identity", "person_deletion", "products"]
+    assert summary["products"]["tests"] == summary["products"]["tests_passed"] >= 20
     assert summary["ingest"]["violations"] == {}
     assert summary["identity"]["accuracy"]["f1"] > 0.9
     assert summary["person_deletion"]["innocent_records_removed"] == 0

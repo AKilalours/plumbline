@@ -1,0 +1,26 @@
+name: plumbline
+version: "0.1.0"
+config-version: 2
+profile: plumbline
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # "Today" for freshness and segments. The synthetic world ends on 2025-12-31.
+  as_of: "2025-12-31"
+  stale_after_days: 365
+
+models:
+  plumbline:
+    +schema: products
+    staging: {+materialized: view}
+    intermediate: {+materialized: table}
+    marts: {+materialized: table}
+seeds:
+  plumbline:
+    +schema: products

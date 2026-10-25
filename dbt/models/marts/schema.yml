@@ -1,0 +1,52 @@
+version: 2
+models:
+  - name: dim_person
+    description: Golden person record. One row per resolved person; every value carries its source and date.
+    columns:
+      - name: person_key
+        data_tests: [unique, not_null]
+      - name: address_source
+        data_tests:
+          - accepted_values:
+              arguments: {values: [crm, vendor, store]}
+      - name: records
+        data_tests: [not_null]
+      - name: household_key
+        data_tests:
+          - relationships:
+              arguments: {to: ref('dim_household'), field: household_key}
+              config: {where: "address_line is not null"}
+  - name: dim_person_address_history
+    description: Address history with valid_from and valid_to, for point-in-time lookups.
+    columns:
+      - name: person_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_person'), field: person_key}
+      - name: valid_from
+        data_tests: [not_null]
+  - name: dim_household
+    columns:
+      - name: household_key
+        data_tests: [unique, not_null]
+  - name: fct_life_events
+    columns:
+      - name: confidence
+        data_tests:
+          - accepted_values:
+              arguments: {values: [high, medium, low]}
+      - name: event_type
+        data_tests:
+          - accepted_values:
+              arguments: {values: [move]}
+  - name: mart_activation_audience
+    description: Contactable people by channel and segment, with compliance rules applied.
+    columns:
+      - name: person_key
+        data_tests:
+          - unique
+          - relationships:
+              arguments: {to: ref('dim_person'), field: person_key}
+      - name: email_ok
+        data_tests: [not_null]

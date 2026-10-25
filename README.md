@@ -15,13 +15,14 @@ against the answer key, and the tests that hold each one are named.
 | Ingestion | 0 invariant violations; 100 injected faults change nothing; a crashed API sync resumes without loss |
 | Identity resolution | F1 **0.981** (precision 97.4%, recall 98.8%) vs 0.927 for exact email-or-phone matching |
 | Person-level deletion | deleted people with data left: 23 → **11** of 500; records of people who never asked, removed: 69 → **50** |
-| Tests | 76, each a stated promise; deliberate breaks show which ones bite |
+| Golden person (dbt) | current address right for 90.6% of people, against a ceiling of 91.8% (the rest moved and no source saw it); work and personal identities linked 98.9% right |
+| Tests | 84 Python tests and 23 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 | Phase | What | Status |
 | --- | --- | --- |
 | 0 | Synthetic world and answer key | Done |
 | 1 | Module A: ingestion, including the store API connector | Done |
-| 2 | Module B: identity resolution and person-level deletion | Done; golden person table (dbt) next |
+| 2 | Module B: identity resolution, person-level deletion, data products (dbt) | Done |
 | 3 | Module C: models | Planned |
 | 4 | Modules D and E: agents | Planned |
 
@@ -121,6 +122,56 @@ A known date of birth that disagrees vetoes the match (father and son, one name,
 - 1 innocent vendor record: two Jonathan Deckers at one address, both born in 1945; the deleted one's
   tombstone came from a CRM row without a date of birth.
 
+## Data products (dbt)
+
+`dbt/` turns resolved records into the tables a marketing product actually reads, in the warehouse's
+`products` schema. dbt runs inside the Dagster job and from `python -m plumbline`.
+
+| Model | What it is |
+| --- | --- |
+| `dim_person` | The golden person: one row per person, each value with the source and date that vouched for it, conflict counts, staleness, orders, revenue, email engagement |
+| `dim_person_address_history` | Where each person lived over time (`valid_from`, `valid_to`): "where did they live on 2025-06-30" is a range lookup |
+| `fct_life_events` | Detected moves, each with the evidence behind it and a confidence level |
+| `dim_household` | People at one current address |
+| `mart_activation_audience` | Who may be contacted on which channel, and segments (customers, high value, lapsed, recent movers, work and personal identity linked) |
+
+Scored against the answer key (seed 7; `python -m plumbline --score`):
+
+| | Result | What it is compared with |
+| --- | --- | --- |
+| Current address | **90.6%** right | ceiling 91.8%: the other 8.2% moved and no source reported the new address |
+| Address on a past date | 97.0% (2024-06-30), 95.0% (2025-03-31) | the true address on that date |
+| Phone, date of birth, job title | 99.6%, 99.5%, 99.2% right when filled | |
+| Work and personal email linked | **98.9%** right | of the 6,931 people for whom some source ever carried both |
+| Moves used for segments | 84% precision, 70% of detectable moves found, a median 50 days after the move | 3,143 of 12,079 true moves were detectable at all |
+| Households | precision 97.1%, recall 85.8% | true households |
+
+What the scores changed, in order:
+
+1. **Misspellings looked like moves.** "ROGERS AVE" and "ROGERSLAVENUE" were two addresses, which split
+   the evidence and created false moves (precision 48%). Spellings are now merged per person (same house
+   number, same zip or none, street lines at least 0.9 alike) before anything is chosen. Address accuracy
+   went from 89.2% to 90.6%, move precision from 48% to 73%.
+2. **Vendor dates are delivery dates.** A vendor re-sending an old address looked like a move back.
+   Measured precision of a detected move by its evidence: store order 86%, CRM edit 79%, vendor only 45%,
+   worse than a coin flip. Moves carry that confidence; segments use only store and CRM evidence (84%).
+   In production these rates would come from a labelled audit sample.
+3. **"As of a date" is the end of that day.** Comparing timestamps to the bare date (midnight) dropped
+   every event on the as-of day, and the compliance test caught 15 unsubscribes the audience would have
+   emailed. One macro now defines it, with a regression test.
+4. **Consent is not point in time.** An audience rebuilt for an earlier date included people who
+   unsubscribed later. Attributes are as of a date; unsubscribes and deletions always apply.
+5. **An unsubscribe belongs to the address.** Six came from family inboxes that identity resolution
+   rightly attached to nobody; checking the address, not the person, covers them.
+
+On address choice the scores were honest with me: "newest address that is still being confirmed" beats
+"latest mention wins" by 0.4 points and "most trusted source wins" by 0.8. A small, consistent edge,
+not a large one. Most of the remaining gap is the ceiling.
+
+The gap between what is true and what a brand's own sources can see (only 26% of moves are detectable;
+6,931 of 49,918 people ever show both a work and a personal email) is the size of the problem
+third-party enrichment exists to close.
+
 ## How ingestion works
 
 Each source is one YAML contract in `sources/`: its files, key, column types and which columns
@@ -160,7 +211,8 @@ dagster dev -m plumbline.ingest.orchestration            # optional: the same pi
 ```
 
 `python -m plumbline` builds the store, syncs it through the faulty mock API, ingests every source,
-resolves persons and applies deletions, then prints one summary. Add `--fresh` to start from an
+resolves persons, applies deletions and builds the dbt data products with their tests, then prints
+one summary. Add `--fresh` to start from an
 empty warehouse. Each stage also has its own command for working on one at a time:
 
 ```bash

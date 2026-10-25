@@ -88,11 +88,19 @@ def person_level_deletion(plumbline: PlumblineConfig) -> dg.MaterializeResult:
                                           "rows_removed": dg.MetadataValue.json(out["rows_removed"])})
 
 
-ingest_job = dg.define_asset_job("ingest_job", selection=[warehouse, persons, person_level_deletion])
+@dg.asset(group_name="products", deps=[person_level_deletion],
+          description="dbt build: golden person, address history, life events, households, activation audience, and their tests.")
+def data_products(plumbline: PlumblineConfig) -> dg.MaterializeResult:
+    from ..products.build import build
+    out = build(plumbline.warehouse)
+    return dg.MaterializeResult(metadata={k: dg.MetadataValue.int(v) for k, v in out.items()})
+
+
+ingest_job = dg.define_asset_job("ingest_job", selection=[warehouse, persons, person_level_deletion, data_products])
 nightly = dg.ScheduleDefinition(job=ingest_job, cron_schedule="0 2 * * *", execution_timezone="America/New_York")
 
 defs = dg.Definitions(
-    assets=[warehouse, persons, person_level_deletion],
+    assets=[warehouse, persons, person_level_deletion, data_products],
     asset_checks=checks,
     jobs=[ingest_job],
     schedules=[nightly],

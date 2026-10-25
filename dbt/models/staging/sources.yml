@@ -1,0 +1,16 @@
+version: 2
+sources:
+  - name: wh
+    description: Tables written by Plumbline's ingestion, identity and privacy stages.
+    schema: main
+    tables:
+      - name: current_crm
+      - name: current_vendor
+      - name: current_store
+      - name: current_email
+      - name: identity_map
+      - name: identity_records
+      - name: identity_store_profiles
+      - name: suppression
+      - name: delivery_rows
+      - name: ingest_ledger

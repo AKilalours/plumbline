@@ -1,0 +1,13 @@
+attribute,source,rank,why
+name,crm,1,the customer typed it into their own account
+name,store,2,typed at checkout
+name,vendor,3,third party compiled
+address,store,1,a parcel was shipped there on that date
+address,crm,2,customer edited but often left stale after a move
+address,vendor,3,third party compiled
+email,crm,1,account login
+email,store,2,order receipts go there
+email,vendor,3,third party compiled
+email,email,4,send log only
+phone,crm,1,account profile
+phone,vendor,2,third party compiled

@@ -5,6 +5,7 @@ Tables written (replaced on every run, in one transaction):
   identity_map       (source, record_id) -> person_key for every current record, including each
                      store order and each email event; unresolved rows say why
   identity_pairs     scored candidate pairs >= 0.5, so any merge can be explained afterwards
+  identity_store_profiles  which store orders make up each store customer profile
 
 Email events carry only an address. An event joins a person when its address appears on records of
 exactly one person. An address on two persons (a shared family inbox) is left unresolved on purpose:
@@ -52,7 +53,9 @@ def resolve(con: duckdb.DuckDBPyConnection, threshold: float = MATCH_THRESHOLD, 
 
     con.execute("BEGIN")
     try:
-        for name, df in (("identity_records", recs), ("identity_map", idmap), ("identity_pairs", strong)):
+        profiles = profile_orders.rename(columns={"record_id": "profile_id"})
+        for name, df in (("identity_records", recs), ("identity_map", idmap), ("identity_pairs", strong),
+                         ("identity_store_profiles", profiles)):
             con.register("_df", df)
             con.execute(f"CREATE OR REPLACE TABLE {name} AS SELECT * FROM _df")
             con.unregister("_df")

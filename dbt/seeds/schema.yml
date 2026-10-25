@@ -1,0 +1,12 @@
+version: 2
+seeds:
+  - name: personal_email_domains
+    description: Consumer mailbox providers. Any other domain is treated as a work email (B2B2C link).
+    columns:
+      - name: domain
+        data_tests: [unique, not_null]
+  - name: source_trust
+    description: Tie-break order when two sources report a value on the same day. Recency decides first.
+    columns:
+      - name: rank
+        data_tests: [not_null]

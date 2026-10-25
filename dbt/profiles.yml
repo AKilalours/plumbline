@@ -1,0 +1,7 @@
+plumbline:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('PLUMBLINE_WAREHOUSE', '../data/warehouse.duckdb') }}"
+      threads: 4

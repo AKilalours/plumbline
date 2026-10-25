@@ -6,11 +6,11 @@ key: [crm_id]
 latest_by: [updated_at]          # within a key, the newest updated_at wins
 columns:
   crm_id:         {type: string, required: true, pattern: '^C\d{8}$'}
-  first_name:     {type: name}
-  last_name:      {type: name, required: true}
+  first_name:     {type: name, identity: first_name}
+  last_name:      {type: name, required: true, identity: last_name}
   email:          {type: email, privacy: email}
   phone:          {type: phone, privacy: phone}
-  street_address: {type: address}
-  zip:            {type: zip}
+  street_address: {type: address, identity: street}
+  zip:            {type: zip, identity: zip}
   created_at:     {type: date, required: true}
   updated_at:     {type: date, required: true}

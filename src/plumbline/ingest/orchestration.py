@@ -2,8 +2,9 @@
 
     dagster dev -m plumbline.ingest.orchestration
 
-One asset (the warehouse after ingesting every delivered file) and four asset checks, each a promise
-from engine.py, evaluated after every run. A failed check blocks nothing silently: it shows red in the
+Three assets in order: the warehouse after ingesting every delivered file, persons (identity
+resolution) and person-level deletion. Four asset checks on the warehouse, each a promise from
+engine.py, evaluated after every run. A failed check blocks nothing silently: it shows red in the
 Dagster UI and its counts are attached as metadata.
 """
 
@@ -25,12 +26,16 @@ class PlumblineConfig(dg.ConfigurableResource):
     contracts_dir: str = "sources"
 
 
-def _violations(cfg: PlumblineConfig, needle: str) -> dict[str, int]:
+def _violations(cfg: PlumblineConfig, needles: tuple[str, ...]) -> dict[str, int]:
     con = duckdb.connect(cfg.warehouse, read_only=True)
     try:
-        return {k: v for k, v in check_invariants(con, load_contracts(cfg.contracts_dir)).items() if needle in k}
+        v = check_invariants(con, load_contracts(cfg.contracts_dir))
     finally:
         con.close()
+    found = {k: n for k, n in v.items() if any(x in k for x in needles)}
+    if not found:  # a renamed counter must fail loudly, not turn the check silently green
+        raise RuntimeError(f"no invariant matches {needles}")
+    return found
 
 
 @dg.asset(group_name="ingestion", description="Every delivered file loaded once into DuckDB, with ledger, quarantine and suppression.")
@@ -44,27 +49,50 @@ def warehouse(context: dg.AssetExecutionContext, plumbline: PlumblineConfig) -> 
                                           "rejected_files": dg.MetadataValue.json(rejected)})
 
 
-def _check(name: str, needle: str, description: str):
+def _check(name: str, needles: tuple[str, ...], description: str):
     @dg.asset_check(asset=warehouse, name=name, description=description)
     def _c(plumbline: PlumblineConfig) -> dg.AssetCheckResult:
-        v = _violations(plumbline, needle)
+        v = _violations(plumbline, needles)
         return dg.AssetCheckResult(passed=sum(v.values()) == 0,
                                    metadata={k: dg.MetadataValue.int(n) for k, n in v.items()})
     return _c
 
 
 checks = [
-    _check("one_current_row_per_key", "duplicate_current_keys", "Each key has exactly one current row."),
-    _check("no_row_stored_twice", "duplicate_stored_rows", "Re-sends and replays never duplicate stored rows."),
-    _check("deleted_people_stay_deleted", "suppressed", "No row in bronze or quarantine matches a deletion request."),
-    _check("every_row_has_a_loaded_file", "without_a_loaded_delivery", "Every stored row traces to a loaded delivery."),
+    _check("one_current_row_per_key", ("duplicate_current_keys",), "Each key has exactly one current row."),
+    _check("no_row_stored_twice", ("duplicate_stored_rows",), "Re-sends and replays never duplicate stored rows."),
+    _check("deleted_people_stay_deleted", ("erasable_rows_in_bronze", "quarantine.suppressed_rows"),
+           "No row in bronze or quarantine matches a deletion request."),
+    _check("every_row_has_a_loaded_file", ("without_a_loaded_delivery",), "Every stored row traces to a loaded delivery."),
 ]
 
-ingest_job = dg.define_asset_job("ingest_job", selection=[warehouse])
+
+@dg.asset(group_name="identity", deps=[warehouse],
+          description="Records from every source resolved into persons (Splink + cannot-link clustering).")
+def persons(plumbline: PlumblineConfig) -> dg.MaterializeResult:
+    from ..identity.pipeline import resolve
+    with duckdb.connect(plumbline.warehouse) as con:
+        out = resolve(con)
+    return dg.MaterializeResult(metadata={k: dg.MetadataValue.int(v) if isinstance(v, int) else dg.MetadataValue.float(float(v))
+                                          for k, v in out.items() if v is not None})
+
+
+@dg.asset(group_name="privacy", deps=[persons],
+          description="Deletion requests applied to whole persons: tombstone matches plus the identity graph.")
+def person_level_deletion(plumbline: PlumblineConfig) -> dg.MaterializeResult:
+    from ..privacy.person_deletion import expand_deletions
+    with duckdb.connect(plumbline.warehouse) as con:
+        out = expand_deletions(con, load_contracts(plumbline.contracts_dir))
+    return dg.MaterializeResult(metadata={"persons_deleted": dg.MetadataValue.int(out["persons_deleted"]),
+                                          "held_for_review": dg.MetadataValue.int(out["held_for_review"]),
+                                          "rows_removed": dg.MetadataValue.json(out["rows_removed"])})
+
+
+ingest_job = dg.define_asset_job("ingest_job", selection=[warehouse, persons, person_level_deletion])
 nightly = dg.ScheduleDefinition(job=ingest_job, cron_schedule="0 2 * * *", execution_timezone="America/New_York")
 
 defs = dg.Definitions(
-    assets=[warehouse],
+    assets=[warehouse, persons, person_level_deletion],
     asset_checks=checks,
     jobs=[ingest_job],
     schedules=[nightly],

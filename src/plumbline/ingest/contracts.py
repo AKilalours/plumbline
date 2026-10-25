@@ -35,6 +35,7 @@ class Column:
     max: float | None = None
     privacy: str | None = None   # "email" or "phone": hashed and checked against suppression
     optional: bool = False       # may be absent from a delivery; every other column must be present
+    identity: str | None = None  # first_name/last_name/full_name/street/zip/dob: kept as tombstone keys on deletion
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,10 @@ class SourceContract:
     latest_by: tuple[str, ...] = ()
     aliases: dict[str, str] = field(default_factory=dict)
     role: str = "data"           # "data" or "suppression"
+
+    @property
+    def identity_cols(self) -> dict[str, str]:
+        return {col.identity: n for n, col in self.columns.items() if col.identity}
 
     @property
     def table(self) -> str:
@@ -64,7 +69,9 @@ def load_contract(path: str | Path) -> SourceContract:
             cols[name] = Column(name=name, type=t, required=bool(spec.get("required", False)),
                                 pattern=spec.get("pattern"), values=tuple(spec.get("values", ())),
                                 min=spec.get("min"), max=spec.get("max"), privacy=spec.get("privacy"),
-                                optional=bool(spec.get("optional", False)))
+                                optional=bool(spec.get("optional", False)), identity=spec.get("identity"))
+            if cols[name].identity not in (None, "first_name", "last_name", "full_name", "street", "zip", "dob"):
+                raise ContractError(f"{path}: column {name} has unknown identity role {cols[name].identity!r}")
         c = SourceContract(name=raw["name"], kind=raw["kind"], files=raw["files"], key=tuple(raw["key"]),
                            columns=cols, latest_by=tuple(raw.get("latest_by") or ()),
                            aliases=dict(raw.get("aliases") or {}), role=raw.get("role", "data"))

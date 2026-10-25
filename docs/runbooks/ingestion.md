@@ -53,7 +53,28 @@ not caught (8 of 500 deleted people on the seed-7 run). Phase 2 identity matchin
 Rerun the same command. Each file loads in one transaction together with its ledger row, so a crash
 leaves no partial file behind, and the rerun picks up exactly the files that did not finish.
 
-## 5. Last resort: rebuild from scratch
+## 5. The store sync failed
+
+- `AuthError (401)`: the token is wrong or revoked. Do not retry in a loop; fix `STORE_API_TOKEN`.
+- `gave up after N retries`: the store was down longer than the backoff budget. Nothing is lost:
+  the watermark did not move and `sources/store/_sync_state.json` holds the last good cursor.
+  Rerun the sync later and it resumes from that page.
+- To re-pull everything (for example after the store fixed bad data on its side), delete
+  `_sync_state.json` only. The loader skips every row it already has, so this costs time, not correctness.
+
+## 6. The deletion review queue is not empty
+
+`deletion_review` lists persons that might be a leftover of a deleted person but where the evidence
+is not enough to delete automatically:
+- `one_key_matches`: same first name, last name and zip as a deleted person's purged row, nothing else.
+  Usually a namesake. Delete only if another source confirms it (same work email domain, a store
+  order shipped to the deleted person's old address).
+- `tombstone_matches_several_persons`: one deleted row fits two current persons. Never delete both.
+
+Seed 7 baseline: 7 persons queued, 1 of them a real leftover. A sudden jump means the identity model
+or a source changed; check `identity_pairs` for the persons involved before acting.
+
+## 7. Last resort: rebuild from scratch
 
 ```bash
 mv data/warehouse.duckdb data/warehouse.broken.duckdb

@@ -67,15 +67,23 @@ def expected_keys(run_dir: Path, source: str) -> set[str]:
             groups[g] = (d["version"], d["path"])
     priv = [d for d in deliveries if d["source"] == "privacy"][0]
     dels = pd.read_csv(run_dir / priv["path"], dtype=str)
-    bad_e, bad_p = set(dels["email_sha256"]), set(dels["phone_sha256"])
+    bad_p = set(dels["phone_sha256"].dropna())
+    req_phone_by_email: dict[str, set] = {}
+    for e_h, p_h in zip(dels["email_sha256"], dels["phone_sha256"]):
+        if isinstance(e_h, str):
+            req_phone_by_email.setdefault(e_h, set()).add(p_h if isinstance(p_h, str) else None)
     alive: set[str] = set()
     for _, path in groups.values():
         df = pd.read_csv(run_dir / path, dtype=str, keep_default_na=False)
         for _, r in df.iterrows():
             e = r.get("email", "").strip().lower()
             p = re.sub(r"\D", "", r.get("phone", ""))[-10:]
-            if (e and _sha(e) in bad_e) or (p and _sha(p) in bad_p):
-                continue
+            ph = _sha(p) if len(p) == 10 else None
+            if ph and ph in bad_p:
+                continue                      # a phone match erases
+            req = req_phone_by_email.get(_sha(e)) if e else None
+            if req is not None and (ph is None or None in req or ph in req):
+                continue                      # an email match erases unless the row's phone is someone else's
             alive.add(r[KEYS[source]])
     return alive
 
@@ -338,3 +346,36 @@ def test_rebuild_from_scratch_is_identical(run, tmp_path):
         assert _current(ca, s) == _current(cb, s)
     q = "SELECT source, reason, count(*) FROM quarantine GROUP BY 1, 2 ORDER BY 1, 2"
     assert ca.execute(q).fetchall() == cb.execute(q).fetchall()
+
+
+def test_erasure_rule_is_never_null():
+    """Regression: a NULL phone made the erase predicate NULL, and NOT NULL hid the row from the
+    current view although no deletion request matched it."""
+    from plumbline.ingest.erasure import erase_sql
+    con = duckdb.connect()
+    con.execute("CREATE TABLE suppression (email_sha256 VARCHAR, phone_sha256 VARCHAR)")
+    con.execute("INSERT INTO suppression VALUES ('e1', 'p1'), ('e2', NULL)")
+    rows = [(None, None, False), ("e9", None, False), (None, "p1", True), ("e1", None, True),
+            ("e1", "p1", True), ("e1", "p7", False), ("e2", "p7", True)]
+    for e, p, want in rows:
+        got = con.execute(f"SELECT {erase_sql('$1', '$2')}", [e, p]).fetchone()[0]
+        assert got is want, (e, p, got)
+
+
+def test_shared_inbox_keeps_family_members_with_their_own_phone(run, tmp_path):
+    """A request names one person's email and phone. A family member who shares the inbox but has
+    a different phone of their own is not the requester and must not be erased."""
+    wh = tmp_path / "wh.duckdb"
+    req = sorted((run / "sources" / "privacy").glob("*.csv"))[0]
+    dels = pd.read_csv(req, dtype=str)
+    crm_files = sorted((run / "sources" / "crm").glob("*.csv"))
+    crm = pd.concat([pd.read_csv(f, dtype=str, keep_default_na=False) for f in crm_files])
+    wanted = set(dels.email_sha256)
+    # a requester's email as it appears in CRM; then add a housemate with a phone of their own
+    email = next(e for e in crm.email if e and _sha(e.strip().lower()) in wanted)
+    row = crm.iloc[[0]].assign(crm_id="C99999999", first_name="Housemate", email=email, phone="5550000001")
+    row.to_csv(crm_files[0].with_name("crm_zz_housemate.csv"), index=False)
+    ingest(run, wh, CONTRACTS)
+    con = _con(wh)
+    assert con.execute("SELECT count(*) FROM current_crm WHERE crm_id = 'C99999999'").fetchone()[0] == 1
+    assert con.execute("SELECT count(*) FROM current_crm WHERE email = ?", [email]).fetchone()[0] == 1

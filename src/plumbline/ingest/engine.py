@@ -36,6 +36,8 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+from ..privacy import tombstones
+from .erasure import QUARANTINE_ERASE, RequestIndex, contract_erase_sql
 from .contracts import BadValue, SourceContract, email_hash, normalize, phone_hash
 
 SQL_TYPES = {"date": "DATE", "timestamp": "TIMESTAMP", "int": "INTEGER", "float": "DOUBLE", "flag": "BOOLEAN"}
@@ -97,6 +99,9 @@ def ensure_schema(con: duckdb.DuckDBPyConnection, contracts: dict[str, SourceCon
     con.execute("CREATE TABLE IF NOT EXISTS schema_drift (source VARCHAR, delivery_id VARCHAR, column_name VARCHAR, action VARCHAR)")
     con.execute("""CREATE TABLE IF NOT EXISTS suppression (
         request_id VARCHAR PRIMARY KEY, email_sha256 VARCHAR, phone_sha256 VARCHAR, received_date DATE, delivery_id VARCHAR)""")
+    con.execute("""CREATE TABLE IF NOT EXISTS deletion_tombstones (
+        tombstone_id VARCHAR, key_hash VARCHAR, reason VARCHAR, request_id VARCHAR, strength VARCHAR,
+        created_at TIMESTAMP)""")
     con.execute("""CREATE TABLE IF NOT EXISTS suppression_log (
         source VARCHAR, delivery_id VARCHAR, action VARCHAR, rows INTEGER, logged_at TIMESTAMP)""")
     for c in contracts.values():
@@ -114,10 +119,7 @@ def _create_current_view(con, c: SourceContract) -> None:
     key = ", ".join(f'"{k}"' for k in c.key)
     order = [f'"{k}" DESC NULLS LAST' for k in c.latest_by] + ["_first_seen_at DESC", "_first_version DESC",
                                                                 "_first_row_number DESC"]
-    sup = " AND ".join(
-        f'(b."_sha_{n}" IS NULL OR b."_sha_{n}" NOT IN (SELECT {("email" if c.columns[n].privacy == "email" else "phone")}_sha256 '
-        f'FROM suppression WHERE {("email" if c.columns[n].privacy == "email" else "phone")}_sha256 IS NOT NULL))'
-        for n in _privacy_cols(c)) or "TRUE"
+    sup = f"NOT {contract_erase_sql(c, 'b')}"
     con.execute(f"""CREATE OR REPLACE VIEW current_{c.name} AS
         WITH loaded AS (SELECT delivery_id, group_key, version FROM ingest_ledger
                         WHERE source = '{c.name}' AND status = 'loaded'),
@@ -182,11 +184,6 @@ def _raw_hashes(c: SourceContract, raw: dict) -> tuple[str | None, str | None]:
     return e, p
 
 
-def _suppressed(con) -> tuple[set[str], set[str]]:
-    rows = con.execute("SELECT email_sha256, phone_sha256 FROM suppression").fetchall()
-    return {e for e, _ in rows if e}, {p for _, p in rows if p}
-
-
 def load_delivery(con, c: SourceContract, run_dir: Path, d: Delivery,
                   contracts: dict[str, SourceContract]) -> LoadResult:
     """`contracts` is every source, needed because a deletion request purges all of them."""
@@ -223,23 +220,22 @@ def load_delivery(con, c: SourceContract, run_dir: Path, d: Delivery,
     if missing:
         return _reject(con, c, d, res, "missing_columns:" + ",".join(missing), drift)
 
-    sup_e, sup_p = _suppressed(con)
+    requests = RequestIndex(con)
 
-    def deleted(raw: dict) -> bool:
-        # Checked before anything is stored, quarantine included: a deleted person's
-        # broken row must not be kept just because it failed validation.
-        e_h, p_h = _raw_hashes(c, raw)
-        return (e_h is not None and e_h in sup_e) or (p_h is not None and p_h in sup_p)
-
+    # Checked before anything is stored, quarantine included: a deleted person's broken row must
+    # not be kept just because it failed validation.
     seen: dict[tuple, str] = {}
     out_rows: list[dict] = []
+    blocked: list[dict] = []
     for i, row in enumerate(reader, start=1):
         if not row:
             continue
         res.rows_in += 1
         raw = dict(zip(mapped, row))
-        if deleted(raw):
+        hit = requests.match(*_raw_hashes(c, raw))
+        if hit:
             res.rows_suppressed += 1
+            blocked.append((raw, *hit))
             continue
         if len(row) != len(mapped):
             quarantine.append((c.name, did, i, "bad_field_count", json.dumps(row), None, None))
@@ -292,6 +288,7 @@ def load_delivery(con, c: SourceContract, run_dir: Path, d: Delivery,
         if res.rows_suppressed:
             con.execute("INSERT INTO suppression_log VALUES (?, ?, 'blocked_at_load', ?, now())",
                         [c.name, did, res.rows_suppressed])
+            tombstones.record(con, blocked, c.identity_cols, f"blocked:{c.name}")
         _ledger(con, d, res)
         con.execute("COMMIT")
     except Exception:
@@ -327,22 +324,27 @@ def _apply_suppression(con, did: str, rows: list[dict], contracts: dict[str, Sou
         if dc.role != "data":
             continue
         t, src = dc.table, dc.name
-        conds = []
-        for col in _privacy_cols(dc):
-            kind = dc.columns[col].privacy
-            conds.append(f'"_sha_{col}" IN (SELECT {kind}_sha256 FROM suppression WHERE {kind}_sha256 IS NOT NULL)')
-        if not conds:
+        if not _privacy_cols(dc):
             continue
-        n = con.execute(f"SELECT count(*) FROM {t} WHERE {' OR '.join(conds)}").fetchone()[0]
+        where = contract_erase_sql(dc)
+        n = con.execute(f"SELECT count(*) FROM {t} WHERE {where}").fetchone()[0]
+        if n and dc.identity_cols:
+            e = next((x for x, col in dc.columns.items() if col.privacy == "email"), None)
+            ph = next((x for x, col in dc.columns.items() if col.privacy == "phone"), None)
+            cols = ", ".join(f'"{x}"' for x in dc.identity_cols.values())
+            shas = ", ".join([f'"_sha_{e}" AS _e' if e else "NULL AS _e", f'"_sha_{ph}" AS _p' if ph else "NULL AS _p"])
+            gone = con.execute(f"SELECT {cols}, {shas} FROM {t} WHERE {where}").df().astype(object)
+            gone = gone.where(gone.notna(), None)
+            idx = RequestIndex(con)
+            rows = [(r, *idx.match(r["_e"], r["_p"])) for r in gone.to_dict("records")]
+            tombstones.record(con, rows, dc.identity_cols, f"purged:{src}")
         if n:
-            con.execute(f"DELETE FROM {t} WHERE {' OR '.join(conds)}")
+            con.execute(f"DELETE FROM {t} WHERE {where}")
             con.execute("INSERT INTO suppression_log VALUES (?, ?, 'purged', ?, now())", [src, did, n])
             purged += n
-    q = con.execute("""SELECT count(*) FROM quarantine WHERE
-        sha_email IN (SELECT email_sha256 FROM suppression) OR sha_phone IN (SELECT phone_sha256 FROM suppression)""").fetchone()[0]
+    q = con.execute(f"SELECT count(*) FROM quarantine WHERE {QUARANTINE_ERASE}").fetchone()[0]
     if q:
-        con.execute("""DELETE FROM quarantine WHERE
-            sha_email IN (SELECT email_sha256 FROM suppression) OR sha_phone IN (SELECT phone_sha256 FROM suppression)""")
+        con.execute(f"DELETE FROM quarantine WHERE {QUARANTINE_ERASE}")
         con.execute("INSERT INTO suppression_log VALUES ('quarantine', ?, 'purged', ?, now())", [did, q])
         purged += q
     return new, purged

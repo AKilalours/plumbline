@@ -14,6 +14,7 @@ dependencies = [
   "faker>=24,<40",
   "duckdb>=1.1",
   "pyyaml>=6",
+  "splink>=4.0.6,<5",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +24,9 @@ orchestration = ["dagster>=1.9", "dagster-webserver>=1.9"]
 [project.scripts]
 plumbline-synth = "plumbline.synth.cli:main"
 plumbline-ingest = "plumbline.ingest.__main__:main"
+plumbline-store = "plumbline.store.__main__:main"
+plumbline-identity = "plumbline.identity.__main__:main"
+plumbline-privacy = "plumbline.privacy.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

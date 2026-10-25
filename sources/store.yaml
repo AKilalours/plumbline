@@ -1,0 +1,19 @@
+# Kestrel online store orders, landed page by page by the store API connector.
+name: store
+kind: api
+files: "sources/store/*.csv"
+key: [order_id]
+latest_by: [updated_at]          # a refund bumps updated_at, so the refunded version wins
+columns:
+  order_id:         {type: string, required: true, pattern: '^KO\d{8}$'}
+  customer_email:   {type: email, required: true, privacy: email}
+  first_name:       {type: name, identity: first_name}
+  last_name:        {type: name, identity: last_name}
+  ship_street:      {type: address, identity: street}
+  ship_zip:         {type: zip, identity: zip}
+  created_at:       {type: timestamp, required: true}
+  updated_at:       {type: timestamp, required: true}
+  financial_status: {type: enum, values: [paid, refunded], required: true}
+  total_price:      {type: float, min: 0}
+  item_count:       {type: int, min: 1}
+  currency:         {type: enum, values: [USD], required: true}

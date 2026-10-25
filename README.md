@@ -2,15 +2,26 @@
 
 **A consumer data platform where every value has a receipt.**
 
-Invented people with a hidden answer key arrive through the kind of messy feeds real vendors
-send. Plumbline loads those feeds, will match people across them and model them, and every
-number it reports is measured against the answer key.
+100,000 invented New Yorkers, with a hidden answer key, reach a fictional outdoor brand through
+four messy feeds: a CRM, a third-party data vendor, email events and an online store API that
+throttles, crashes and changes data mid-sync. Plumbline loads them, works out which records are the
+same person, and deletes people who ask to be deleted, everywhere. Every number below is measured
+against the answer key, and the tests that hold each one are named.
+
+**At a glance** (seed 7, 100,000 people, 314,579 rows, one command, 72 s on a laptop-class machine):
+
+| | Result |
+| --- | --- |
+| Ingestion | 0 invariant violations; 100 injected faults change nothing; a crashed API sync resumes without loss |
+| Identity resolution | F1 **0.981** (precision 97.4%, recall 98.8%) vs 0.927 for exact email-or-phone matching |
+| Person-level deletion | deleted people with data left: 23 → **11** of 500; records of people who never asked, removed: 69 → **50** |
+| Tests | 76, each a stated promise; deliberate breaks show which ones bite |
 
 | Phase | What | Status |
 | --- | --- | --- |
 | 0 | Synthetic world and answer key | Done |
-| 1 | Module A: ingestion (this release) | Core done; mock store API, Iceberg and Trino next |
-| 2 | Module B: identity matching and data products | Planned |
+| 1 | Module A: ingestion, including the store API connector | Done |
+| 2 | Module B: identity resolution and person-level deletion | Done; golden person table (dbt) next |
 | 3 | Module C: models | Planned |
 | 4 | Modules D and E: agents | Planned |
 
@@ -144,12 +155,19 @@ python -m pytest -q                                      # use python -m, so the
 export CENSUS_API_KEY=...                                # free: api.census.gov/data/key_signup.html
 python scripts/fetch_reference.py --out data/reference  # once; needs internet; safe to rerun
 python -m plumbline.synth.cli --ref data/reference --out data/synth --n-people 100000 --seed 7
-python -m plumbline.store build                          # store orders from the synthetic customers
-python -m plumbline.store sync                           # pull them through the faulty mock API (~1 min)
+python -m plumbline --score                              # every stage in order, with accuracy receipts
+dagster dev -m plumbline.ingest.orchestration            # optional: the same pipeline, with checks, in a UI
+```
+
+`python -m plumbline` builds the store, syncs it through the faulty mock API, ingests every source,
+resolves persons and applies deletions, then prints one summary. Add `--fresh` to start from an
+empty warehouse. Each stage also has its own command for working on one at a time:
+
+```bash
+python -m plumbline.store build | sync
 python -m plumbline.ingest --run-dir data/synth/seed7_n100000 --warehouse data/warehouse.duckdb
-python -m plumbline.identity --score data/synth/seed7_n100000     # persons; --score prints accuracy
-python -m plumbline.privacy --score data/synth/seed7_n100000      # person-level deletion and its receipts
-dagster dev -m plumbline.ingest.orchestration            # optional: the same load, with checks, in a UI
+python -m plumbline.identity --score data/synth/seed7_n100000
+python -m plumbline.privacy --score data/synth/seed7_n100000
 ```
 
 ## The synthetic world

@@ -22,6 +22,7 @@ dev = ["pytest>=7"]
 orchestration = ["dagster>=1.9", "dagster-webserver>=1.9"]
 
 [project.scripts]
+plumbline = "plumbline.__main__:main"
 plumbline-synth = "plumbline.synth.cli:main"
 plumbline-ingest = "plumbline.ingest.__main__:main"
 plumbline-store = "plumbline.store.__main__:main"

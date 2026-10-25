@@ -11,7 +11,7 @@ VIEWS = {"crm": ("current_crm", "crm_id"), "vendor": ("current_vendor", "vendor_
 
 def _links(run: Path) -> pd.DataFrame:
     a = pd.read_parquet(run / "truth" / "record_links.parquet")
-    b = pd.read_parquet(run / "store" / "record_links.parquet") if (run / "store").exists() else a.iloc[:0]
+    b = pd.read_parquet(run / "store" / "record_links.parquet") if (run / "store" / "record_links.parquet").exists() else a.iloc[:0]
     return pd.concat([a, b], ignore_index=True)
 
 

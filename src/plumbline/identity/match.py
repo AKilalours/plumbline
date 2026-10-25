@@ -76,7 +76,7 @@ def settings() -> SettingsCreator:
 
 def train_and_predict(records: pd.DataFrame, seed: int = 7, threshold: float = MATCH_THRESHOLD):
     """-> (pairs with match_probability, clusters unique_id -> cluster_id, linker)."""
-    linker = Linker(records, settings(), db_api=DuckDBAPI())
+    linker = Linker(records, settings(), db_api=DuckDBAPI(), set_up_basic_logging=False)
     t = linker.training
     t.estimate_probability_two_random_records_match(
         [block_on("email", "last_name"), block_on("phone", "last_name")], recall=0.7)

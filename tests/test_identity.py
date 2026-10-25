@@ -123,3 +123,24 @@ def test_resolution_is_deterministic(warehouse, tmp_path):
         resolve(b)
         q = "SELECT source, record_id, person_key FROM identity_map ORDER BY ALL"
         assert a.execute(q).fetchall() == b.execute(q).fetchall()
+
+
+def test_scoring_works_without_a_store(tmp_path):
+    """Regression: scoring crashed when the optional store was never built."""
+    run = tmp_path / "run"
+    generate(load_reference(ROOT / "tests" / "fixtures" / "reference"), SynthConfig(seed=8, n_people=800), run)
+    wh = tmp_path / "w.duckdb"
+    ingest(run, wh, load_contracts(ROOT / "sources"))
+    with duckdb.connect(str(wh)) as con:
+        resolve(con)
+        s = score_warehouse(con, run)
+    assert s["pairwise"]["f1"] > 0.9
+
+
+def test_store_orders_without_their_answer_key_explain_the_fix(warehouse, tmp_path):
+    run, wh, _ = warehouse
+    r = tmp_path / "run"
+    shutil.copytree(run, r)
+    (r / "store" / "record_links.parquet").unlink()
+    with duckdb.connect(str(wh)) as con, pytest.raises(FileNotFoundError, match="plumbline.store build"):
+        score_warehouse(con, r)

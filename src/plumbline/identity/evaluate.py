@@ -10,7 +10,14 @@ import pandas as pd
 def truth_for(records: pd.DataFrame, profile_orders: pd.DataFrame, run_dir: str | Path) -> pd.Series:
     run = Path(run_dir)
     links = pd.read_parquet(run / "truth" / "record_links.parquet")
-    store = pd.read_parquet(run / "store" / "record_links.parquet").merge(
+    store_links = run / "store" / "record_links.parquet"
+    if not store_links.exists():
+        if len(profile_orders):
+            raise FileNotFoundError(f"the warehouse has store orders but {store_links} is missing; it holds "
+                                    "the store's answer key. Run `python -m plumbline.store build` for this run.")
+        store_links = None   # the store is optional: no orders, nothing to score
+    store = (pd.read_parquet(store_links) if store_links else
+             pd.DataFrame(columns=["source", "record_id", "person_id"]).astype(str)).merge(
         profile_orders, left_on="record_id", right_on="order_id", suffixes=("_order", ""))
     per_profile = store.groupby("record_id")["person_id"].agg(["first", "nunique"])
     assert (per_profile["nunique"] == 1).all(), "a store profile mixes people; profile key is wrong"
@@ -81,8 +88,9 @@ def damage_table(run_dir: str | Path, records: pd.DataFrame, profile_orders: pd.
     run = Path(run_dir)
     d = pd.read_parquet(run / "truth" / "damage_log.parquet")
     d = d[d.source.isin(["crm", "vendor"])].assign(unique_id=lambda x: x.source + ":" + x.record_id)
-    s = pd.read_parquet(run / "store" / "damage_log.parquet").merge(profile_orders, left_on="record_id",
-                                                                     right_on="order_id", suffixes=("_o", ""))
+    sd = run / "store" / "damage_log.parquet"
+    s = (pd.read_parquet(sd) if sd.exists() else pd.DataFrame(columns=["source", "record_id", "field", "kind"]).astype(str)
+         ).merge(profile_orders, left_on="record_id", right_on="order_id", suffixes=("_o", ""))
     s = s.assign(unique_id="store:" + s["record_id"], source="store")
     d = pd.concat([d, s], ignore_index=True)
     field = d["field"].replace({"full_name": "name", "first_name": "name", "last_name": "name",

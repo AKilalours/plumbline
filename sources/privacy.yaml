@@ -1,0 +1,12 @@
+# Deletion requests. Hashes only; these drive suppression rather than landing as data.
+name: privacy
+kind: file
+role: suppression
+files: "sources/privacy/*.csv"
+key: [request_id]
+latest_by: []
+columns:
+  request_id:    {type: string, required: true, pattern: '^R\d{7}$'}
+  email_sha256:  {type: string, pattern: '^[0-9a-f]{64}$'}
+  phone_sha256:  {type: string, pattern: '^[0-9a-f]{64}$'}
+  received_date: {type: date, required: true}

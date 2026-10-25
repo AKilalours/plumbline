@@ -1,0 +1,21 @@
+# Third-party consumer file, weekly. Renamed job_title to occupation from week 5.
+name: vendor
+kind: file
+files: "sources/vendor/*.csv"
+key: [vendor_record_id]
+latest_by: []                     # later deliveries win
+aliases:
+  occupation: job_title
+columns:
+  vendor_record_id: {type: string, required: true, pattern: '^V[0-9a-f]{16}$'}
+  full_name:        {type: name, required: true}
+  dob:              {type: loose_date}
+  address_line:     {type: address}
+  zip:              {type: zip}
+  phone:            {type: phone, privacy: phone}
+  email:            {type: email, privacy: email}
+  employer:         {type: string}
+  job_title:        {type: string}
+  est_income_band:  {type: int, min: 1, max: 6}
+  homeowner_flag:   {type: flag}
+  source_confidence: {type: float, min: 0, max: 1, optional: true}   # only from week 5

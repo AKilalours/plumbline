@@ -1,0 +1,12 @@
+# Email platform engagement events, one file per day; some days are re-sent corrected.
+name: email
+kind: file
+files: "sources/email/*.csv"
+key: [event_id]
+latest_by: []
+columns:
+  event_id:    {type: string, required: true, pattern: '^EM\d{14}$'}
+  email:       {type: email, required: true, privacy: email}
+  event_type:  {type: enum, values: [send, open, click, unsubscribe], required: true}
+  campaign_id: {type: string, required: true}
+  event_ts:    {type: timestamp, required: true}

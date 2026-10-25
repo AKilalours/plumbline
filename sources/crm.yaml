@@ -1,0 +1,16 @@
+# Kestrel CRM: nightly database extract (full) plus daily change files.
+name: crm
+kind: db_extract
+files: "sources/crm/*.csv"
+key: [crm_id]
+latest_by: [updated_at]          # within a key, the newest updated_at wins
+columns:
+  crm_id:         {type: string, required: true, pattern: '^C\d{8}$'}
+  first_name:     {type: name}
+  last_name:      {type: name, required: true}
+  email:          {type: email, privacy: email}
+  phone:          {type: phone, privacy: phone}
+  street_address: {type: address}
+  zip:            {type: zip}
+  created_at:     {type: date, required: true}
+  updated_at:     {type: date, required: true}

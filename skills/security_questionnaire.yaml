@@ -1,0 +1,7 @@
+name: security_questionnaire
+owner: compliance
+description: Drafts security questionnaire answers from docs/security.md with sources; marks what needs a person.
+tools: []
+eval: evals/questionnaire.yaml
+baseline_minutes: 6
+baseline_note: per question, finding the control and writing the answer by hand

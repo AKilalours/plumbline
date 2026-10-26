@@ -2,6 +2,8 @@ name: pipeline_status
 owner: data-platform
 description: Live state of the pipeline, read-only - loads, rejected files, quarantine, data products, model.
 tools: [ingest_status, data_products_status, model_status]
+baseline_minutes: 10
+baseline_note: opening the warehouse and running the checks by hand
 eval: evals/routing.yaml
 intents:
   - tool: model_status

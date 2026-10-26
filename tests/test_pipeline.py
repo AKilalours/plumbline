@@ -21,7 +21,7 @@ def test_one_command_runs_the_whole_pipeline(tmp_path, capsys, monkeypatch):
     assert main(args) == 0
     out = capsys.readouterr().out
     summary = json.loads(out[out.index("{"):])
-    assert list(summary) == ["store_build", "store_sync", "ingest", "identity", "person_deletion", "products", "model"]
+    assert list(summary) == ["store_build", "store_sync", "ingest", "identity", "person_deletion", "products", "model", "more_models"]
     # 1,200 people buy too few homes to train on: the stage says so instead of reporting noise
     assert "fewer than 20 home purchases" in summary["model"]["skipped"]
     assert summary["products"]["tests"] == summary["products"]["tests_passed"] >= 20

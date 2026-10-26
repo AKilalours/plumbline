@@ -3,7 +3,8 @@
 
 Rules, all enforced here and tested:
   - a write is first a proposal; nothing changes until someone decides
-  - the decider must hold the tool's approver role, and must not be the person who asked
+  - the decider must hold the tool's approver role, must not be the person who asked, and must not
+    be the person whose access the change is about
   - a decision is final: a proposal is decided once; executing it twice does nothing the second time
   - every step is in the audit log
 """
@@ -56,6 +57,8 @@ def decide(con, ctx, proposal_id: str, *, decided_by: str, approve: bool, roles:
         why = f"{decided_by} does not hold the {role} role"
     elif decided_by == requested_by:
         why = "the person who asked cannot approve their own request"
+    elif json.loads(args).get("user") == decided_by:
+        why = "nobody can approve a change to their own access"
     if why:
         audit.log(con, actor=decided_by, channel=channel, skill=skill, action="decide", tool=tool,
                   proposal_id=proposal_id, outcome="refused", detail={"why": why})
@@ -70,7 +73,8 @@ def decide(con, ctx, proposal_id: str, *, decided_by: str, approve: bool, roles:
     con.execute("UPDATE ops.proposals SET status = 'approved', decided_by = ?, decided_at = now() WHERE id = ? AND status = 'pending'",
                 [decided_by, proposal_id])
     try:
-        result = TOOLS[tool].run(ctx, json.loads(args))
+        run_args = {**json.loads(args), "_decided_by": decided_by, "_proposal": proposal_id}
+        result = TOOLS[tool].run(ctx, run_args)
         status, outcome = "executed", "executed"
     except Exception as e:                     # recorded, not swallowed: the decider sees it
         result, status, outcome = {"error": str(e)}, "failed", "failed"

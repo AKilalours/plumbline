@@ -26,3 +26,9 @@ items:
   - {q: "How does the deletion review queue get filled?", skill: knowledge_qa, tool: null}
   - {q: "What is our parental leave policy?", skill: knowledge_qa, tool: null}
   - {q: "Why are vendor-only moves low confidence?", skill: knowledge_qa, tool: null}
+  - {q: "give U0NEW0001 the privacy role", skill: access_admin, tool: grant_role}
+  - {q: "add U0NEW0002 to docs", skill: access_admin, tool: grant_role}
+  - {q: "revoke the docs role from U0OPS0001", skill: access_admin, tool: revoke_role}
+  - {q: "offboard U0PRIV001, she left on Friday", skill: access_admin, tool: offboard_person}
+  - {q: "who has the privacy role?", skill: access_admin, tool: access_record}
+  - {q: "what access does U0OPS0001 have", skill: access_admin, tool: access_record}

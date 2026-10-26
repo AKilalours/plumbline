@@ -2,4 +2,6 @@ name: knowledge_qa
 owner: data-platform
 description: Answers questions from the team's documents, citing the section each answer comes from.
 tools: []
+baseline_minutes: 5
+baseline_note: searching the docs and asking around for the answer
 eval: evals/knowledge.yaml

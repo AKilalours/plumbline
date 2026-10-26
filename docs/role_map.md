@@ -36,6 +36,8 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | Home buyer model | `src/plumbline/ml/` | AUC 0.659 vs ceiling 0.806 on an untouched later period; enrichment worth +0.05, an on-time vendor feed +0.08 |
 | Feature pipelines that are reliable in production | snapshots by `as_of`, leak guards, window rule | three leaks found and turned into tests |
 | Validations so agents can act without a human in the loop | `ml/guardrails.py`, `ml.model_runs` | scores published only if every check passes; out-of-population people not scored |
+| Income estimates where the vendor has nothing | `ml/income.py`, `ml.income_estimates` | within one band 83.0% vs 79.2% for ZIP income alone, on people the vendor never covered; vendor columns never features; households kept whole across the split |
+| Home seller model, and knowing when not to ship | `ml/seller.py`, `ml.model_runs_seller` | assessed and refused: validation AUC 0.47, ceiling 0.56; stale scores dropped |
 
 ## Internal AI systems
 
@@ -47,15 +49,16 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | Skill library: owner, eval, permissions per skill | `skills/*.yaml`, `agents/skills.py` | bad skills refused at load |
 | Own the source of truth; the agent proposes the fix, a person approves | `docs/claims.yaml`, `docs_freshness` skill | found and fixed a stale runbook passage |
 | Webhooks and their failure modes | `agents/slack.py` | signature, replay window, retry and double-click dedupe, bot loops |
-| Measure adoption and cost; retire what nobody opens | `agents/usage.py` | per skill: requests, refusals, people, tokens, cost; unused skills |
+| Measure adoption and cost; retire what nobody opens | `agents/usage.py` | per skill: requests, refusals, people, tokens, cost, hours retired (measured uses times an owner's baseline); unused skills |
+| Access provisioning with an access record that writes itself | `agents/access.py`, `skills/access_admin.yaml`, `ops.access` | grant, remove, offboard only by an admin who neither asked nor is the person; last admin cannot be removed; `tests/test_access.py` |
+| Security questionnaires answered from documented controls | `docs/security.md`, `agents/questionnaire.py` | 5 of 7 drafted right on the held-out half, 4 of 4 controls we lack left for a person |
 | Runbooks people follow | `docs/runbooks/agent.md` | |
 
-Not built: the back-office workflows the role automates (onboarding, access provisioning, security
-questionnaires, renewals). The agent runs over this project's own operations instead, and the
-mechanisms are the same ones those workflows need.
+Not built: renewals, and connections to a real identity provider or HR system (offboarding here
+changes the agent's own roles, not accounts in other tools). No real users: hours retired is a
+mechanism with owner-set baselines, not a measured saving.
 
 ## Not covered, by choice so far
 
-Home seller and income models: the same feature pipeline would carry them; not built.
 Snowflake, Spark, Iceberg, Trino and AWS: everything runs on DuckDB on one machine. The design (file
 ledger, contracts, dbt models) carries over; the claim that it scales to terabytes is not made here.

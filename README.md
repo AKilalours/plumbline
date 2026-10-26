@@ -17,8 +17,11 @@ against the answer key, and the tests that hold each one are named.
 | Person-level deletion | deleted people with data left: 23 → **11** of 500; records of people who never asked, removed: 69 → **50** |
 | Golden person (dbt) | current address right for 90.6% of people, against a ceiling of 91.8% (the rest moved and no source saw it); work and personal identities linked 98.9% right |
 | Home-buyer model | AUC 0.659 and 2.3x lift in the top decile on a later, untouched period; the best possible is 0.806; a leaky version scoring 0.838 is caught because it beats the best possible |
+| Income estimate | for people the vendor never covered: within one band of the true income 83.0% of the time, against 79.2% for ZIP income alone; the vendor's own band, where it exists, gets 94.6% |
+| Home-seller model | **not published**: validation AUC 0.47, and even the rule that generated the data reaches only 0.56; the guardrails refused it, as they should |
 | Operations agent | answers from the team's docs with a citation on every claim (16 of 24 right, the right section in the top 3 for 21 of 24) and refuses the 8 questions the docs cannot answer; reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
-| Tests | 132 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
+| Tests | 156 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 | Phase | What | Status |
 | --- | --- | --- |
@@ -27,6 +30,7 @@ against the answer key, and the tests that hold each one are named.
 | 2 | Module B: identity resolution, person-level deletion, data products (dbt) | Done |
 | 3 | Module C: home-buyer model with point-in-time features and publishing guardrails | Done |
 | 4 | Module E: operations agent (knowledge with sources, read-only tools, approvals, audit, Slack) | Done |
+| 5 | Income estimate, home-seller assessment, access provisioning, security questionnaires, hours retired | Done |
 
 ## Receipts
 
@@ -245,6 +249,40 @@ The model and its card are written to `data/models/home_buyer/<version>/`; the v
 the training data and configuration, and two runs from scratch produced the same one.
 [The model card](docs/model_card_home_buyer.md) has the details.
 
+## Income estimate and home-seller model
+
+Two more models on the same point-in-time snapshots, with the same rules: chosen on validation,
+reported on a later or held-out set, compared with a baseline and with the ceiling, and published only
+if their gates pass (`src/plumbline/ml/income.py`, `src/plumbline/ml/seller.py`).
+
+**Income band, for people the vendor never covered.** A brand gets an income band from the vendor
+for some people and nothing for the rest. The model learns from the covered people and estimates the
+uncovered ones from first-party behaviour, place and property data. The vendor's own columns (income,
+age, homeowner) are never features: they are missing for exactly the people being estimated, so a
+model using them would be trained on something it never sees when it runs. Households are kept whole
+on one side of the split, so a person's partner cannot leak their income into the test.
+
+| People without a vendor band, against their true band | Within one band | Mean band error | Rank correlation |
+| --- | --- | --- | --- |
+| Majority band for everyone | | | undefined |
+| ZIP income alone | 79.2% | 0.91 | 0.46 |
+| **Plumbline estimate** | **83.0%** | **0.84** | **0.55** |
+| For comparison: the vendor's band, where it exists | 94.6% | | |
+
+It is a modest gain, and the comparison row says why: what a brand sees about a person says little
+about their income, and a bought band is much better. Estimates go to `ml.income_estimates` only if
+they beat ZIP income alone, land within one band at least 60% of the time, and do not give everyone
+the same band; otherwise nothing is published.
+
+**Home seller: assessed, not published.** The question was who will sell their home in the next 180
+days, among owners on the cutoff date. On validation the best candidate scored AUC 0.47, below chance;
+on the test date 0.54, with a top-decile lift of 0.78. Even the rule that generated the moves reaches
+only 0.56: in this world selling is close to random among owners, so there is almost nothing to learn.
+All three gates failed (beats chance on validation, lift of at least 1.2, a ceiling that leaves
+room), so no scores were written, and a stale `ml.home_seller_scores` table from an earlier run is
+dropped rather than left looking current. Every assessment is logged in `ml.model_runs_seller`. I did
+not change the world to make selling predictable: a model that should not ship is a result.
+
 ## Operations agent (Module E)
 
 `src/plumbline/agents/` is the agent the team that runs Plumbline talks to, in Slack or from the
@@ -264,8 +302,11 @@ message ─▶ route to a skill ─┬─ question about how or why ─▶ docs 
 | `pipeline_status` | data-platform | `ingest_status`, `data_products_status`, `model_status` | "Did last night's load reject anything?", "Is the model published?" |
 | `privacy_review` | privacy | `deletion_review_queue`, `resolve_deletion_review` | Lists open deletion-review cases; proposes closing one |
 | `docs_freshness` | docs | `check_doc_claims`, `update_doc` | Checks documented facts against the warehouse; proposes the exact edit |
+| `access_admin` | operations | `access_record`, `grant_role`, `revoke_role`, `offboard_person` | Who holds which role; proposes grants, removals and offboarding for an admin to approve |
+| `security_questionnaire` | compliance | none | Drafts a questionnaire from `docs/security.md` and the runbooks, one source per answer |
 
-Each skill is one YAML file in `skills/` with an owner, the tools it may use and its eval. A skill
+Each skill is one YAML file in `skills/` with an owner, the tools it may use, its eval, and how many
+minutes the job takes by hand (with a note saying what that manual job is). A skill
 that names an unknown tool, has no owner, or no eval file is refused at load.
 
 **Measured** (`python -m plumbline.agents eval`):
@@ -275,7 +316,9 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | Right section in the top 3 results | 21 of 24 answerable questions |
 | Answered right, with the right source | 8 of 12 (dev half), **8 of 12 (test half)**; the refusal threshold was chosen on the dev half only |
 | Refused when the documents have no answer | **8 of 8** (HR, office and on-call questions the documents do not cover) |
-| Routed to the right skill and tool | 26 of 26 |
+| Routed to the right skill and tool | 32 of 32 |
+| Security questionnaire, drafted right with the right source | 7 of 7 (dev half), **5 of 7 (test half)** |
+| Security questionnaire, left for a person when the controls page does not settle it | **4 of 4** (certifications, insurance, a data protection officer, penetration tests) |
 
 These numbers are for the offline mode, which quotes the best-matching bullets and table rows with
 their source. What it misses: different words for the same thing ("runs the whole pipeline" vs "every
@@ -306,6 +349,31 @@ retrieval: more text competes for the top spot. The table above is measured on t
   inside the repository can be edited
 - model and Slack credentials come from the environment and never appear in a log or repr
 
+**Access provisioning.** Roles live in `ops.access`, not in a file: `ops/roles.yaml` only seeds the
+first holders of an empty record. Granting a role, removing one, or offboarding a person (every role
+removed, their open requests closed) is a proposal that an admin approves. The admin may not be the
+person who asked, and nobody may approve a change to their own access. Removing the last admin is
+refused, because nobody could approve anything again. The access record writes itself: each grant
+and removal is a row with who approved it, when, and through which request, so an access review is a
+query, not a spreadsheet someone keeps.
+
+**Security questionnaires.** `python -m plumbline.agents questionnaire in.csv out.csv` reads a
+`question` column and writes a draft answer, its source section and a status per question.
+`docs/security.md` states the controls as they are, including the ones Plumbline lacks (no
+encryption at rest, no user accounts, no automated backups), because a questionnaire is signed as
+fact. A question the documents do not settle is marked "needs a person", not guessed. Questionnaire
+items are long and use words the controls page does not, so they have their own refusal threshold,
+chosen on the dev half by the same rule as the knowledge eval (0.25). A test re-runs that choice
+on the current documents and fails if the constant no longer matches: an earlier draft of the runbook
+moved the tie, which is how I found out the choice depends on the documents. The dev half has only 9
+questions, so this threshold is barely determined. A
+bigger eval set is the real fix. Suffix stemming ("encrypted", "encryption") helped a little.
+
+**Hours retired.** `python -m plumbline.agents usage` now multiplies each skill's successful uses
+(an answer that was not a refusal, a read that worked, an approved change that ran) by the minutes
+its owner says the job takes by hand. The count is measured; the minutes are an owner's estimate and
+should be re-timed. There are no real users yet, so there is no real number to report.
+
 **It found a real problem.** The docs freshness check found that runbook section 3 still said deletion
 was exact-match only, written before person-level deletion existed. The agent proposed the edit, the
 person who asked could not approve it, a second person with the docs role did, and it ran once. The
@@ -315,7 +383,7 @@ Building it also found a pipeline bug: each nightly run appended the same deleti
 again (7, 14, 21 rows for 7 persons). Cases are now queued once; a test plants a case and reruns.
 
 Adoption and cost: `python -m plumbline.agents usage` reports requests, refusals, people, latency,
-model tokens and cost per skill, decision times for proposals, and skills nobody used.
+model tokens and cost per skill, decision times for proposals, hours retired, and skills nobody used.
 Setting up Slack, secrets and roles: [the agent runbook](docs/runbooks/agent.md).
 
 ## How ingestion works

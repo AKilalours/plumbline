@@ -1,0 +1,53 @@
+# Typical customer security questionnaire items. terms: words a correct draft must contain.
+# refuse: the documents do not settle it, so the draft must say it needs a person.
+items:
+  - q: How do you handle a consumer's request to delete their data?
+    source: [docs/security.md#deletion-requests]
+    terms: [purged]
+  - q: Can deleted records come back if an old file is loaded again?
+    source: [docs/security.md#deletion-requests]
+    terms: [replays]
+  - q: Is data encrypted at rest?
+    source: [docs/security.md#encryption]
+    terms: [does not encrypt]
+  - q: Is traffic to third-party services encrypted in transit?
+    source: [docs/security.md#encryption]
+    terms: [https]
+  - q: Who can change production data, and is approval required?
+    source: [docs/security.md#who-can-change-data]
+    terms: [second person]
+  - q: Do you keep an audit trail of changes and approvals?
+    source: [docs/security.md#audit-trail]
+    terms: [ops.audit]
+  - q: How are API keys and other secrets stored?
+    source: [docs/security.md#secrets]
+    terms: [environment variables]
+  - q: Do your logs contain personal data?
+    source: [docs/security.md#personal-data-in-logs-and-agent-answers, docs/security.md#audit-trail]
+    terms: [hash]
+  - q: Do you support single sign-on for user accounts?
+    source: [docs/security.md#access-to-the-machine]
+    terms: [single sign-on]
+  - q: How do you honour marketing unsubscribes?
+    source: [docs/security.md#unsubscribes-and-contact-suppression]
+    terms: [blocks]
+  - q: Do you share or resell customer data with third parties?
+    source: [docs/security.md#third-party-data]
+    terms: [does not resell]
+  - q: How would you recover the warehouse after data loss?
+    source: [docs/security.md#recovery]
+    terms: [rebuilt]
+  - q: Are there automated backups?
+    source: [docs/security.md#recovery]
+    terms: [no automated backups]
+  - q: How are changes tested before release?
+    source: [docs/security.md#change-control]
+    terms: [test]
+  - q: What is your cyber insurance coverage amount?
+    refuse: true
+  - q: Who is your designated data protection officer?
+    refuse: true
+  - q: Do you hold an ISO 27001 certificate?
+    refuse: true
+  - q: How often is an external penetration test performed?
+    refuse: true

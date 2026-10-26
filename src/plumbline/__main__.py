@@ -136,6 +136,13 @@ def main(argv=None) -> int:
             except NotEnoughOutcomes as e:   # a small world: say so, and keep everything else
                 return {"skipped": str(e)}
         step("model", do_model)
+
+        def do_more_models():
+            from .ml.pipeline import other_models
+            if "skipped" in summary.get("model", {}):
+                return {"skipped": "no feature snapshots (the buyer model was skipped)"}
+            return other_models(wh, run)
+        step("more_models", do_more_models)
     print(json.dumps(summary, indent=2))
     return 0
 

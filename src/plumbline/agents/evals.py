@@ -50,7 +50,7 @@ def run(index: Index, items: list[dict], model=None, min_coverage: float | None 
 
 
 def choose_threshold(index: Index, items: list[dict], grid=(0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7)) -> tuple[float, dict]:
-    """Pick the refusal threshold on the dev half only."""
+    """Pick the refusal threshold on the dev half only; among equal scores, the one closest to 0.5."""
     scores = {t: run(index, items, min_coverage=t, split="dev")["accuracy"] for t in grid}
     best = max(scores, key=lambda t: (scores[t], -abs(t - 0.5)))
     return best, scores

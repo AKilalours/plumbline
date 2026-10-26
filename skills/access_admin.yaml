@@ -1,0 +1,29 @@
+name: access_admin
+owner: operations
+description: Who holds which role, and granting, removing and offboarding, each approved by an admin who did not ask.
+tools: [access_record, grant_role, revoke_role, offboard_person]
+eval: evals/routing.yaml
+baseline_minutes: 10
+baseline_note: finding the person in each tool, changing access by hand, and noting it for the next audit
+intents:
+  - tool: offboard_person
+    when: ['\b(offboard|deprovision)\b.*\bU[A-Z0-9]{6,}\b', '\bremove all (access|roles)\b.*\bU[A-Z0-9]{6,}\b']
+    args:
+      user: '\b(U[A-Z0-9]{6,})\b'
+  - tool: revoke_role
+    when: ['\b(revoke|remove|take away)\b.*\b(data-platform|docs|privacy|admin)\b.*\bU[A-Z0-9]{6,}\b',
+           '\b(revoke|remove|take away)\b.*\bU[A-Z0-9]{6,}\b.*\b(data-platform|docs|privacy|admin)\b']
+    args:
+      user: '\b(U[A-Z0-9]{6,})\b'
+      role: '\b(data-platform|docs|privacy|admin)\b'
+  - tool: grant_role
+    when: ['\b(give|grant|add)\b.*\bU[A-Z0-9]{6,}\b.*\b(data-platform|docs|privacy|admin)\b',
+           '\b(give|grant|add)\b.*\b(data-platform|docs|privacy|admin)\b.*\bU[A-Z0-9]{6,}\b']
+    args:
+      user: '\b(U[A-Z0-9]{6,})\b'
+      role: '\b(data-platform|docs|privacy|admin)\b'
+  - tool: access_record
+    when: ['\bwho (has|holds)\b.*\b(role|access|data-platform|docs|privacy|admin)\b', '\baccess (record|list|review)\b',
+           '\bwhat (roles?|access)\b.*\bU[A-Z0-9]{6,}\b']
+    args:
+      user: '\b(U[A-Z0-9]{6,})\b'

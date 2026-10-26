@@ -2,6 +2,8 @@ name: docs_freshness
 owner: docs
 description: Checks documented numbers and statements against the warehouse; proposes fixes the docs owner approves.
 tools: [check_doc_claims, update_doc]
+baseline_minutes: 30
+baseline_note: rechecking the documented numbers against the data by hand
 eval: evals/routing.yaml
 intents:
   - tool: update_doc

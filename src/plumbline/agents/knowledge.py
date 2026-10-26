@@ -21,14 +21,32 @@ will with you your not no yes did done get got than also only any each more most
 _TOKEN = re.compile(r"[a-z0-9_]+(?:\.[a-z0-9_]+)*")
 
 
+# A small suffix stemmer: "deleted", "deletion" and "delete" all become "delet", "encrypted" and
+# "encryption" become "encrypt". Without it a questionnaire asking whether data is "encrypted at rest"
+# missed the section titled "Encryption". Identifiers with dots or underscores are left whole.
+_SUFFIXES = [("ational", "ate"), ("ations", "ate"), ("ation", "ate"), ("ions", ""), ("ion", ""),
+             ("ments", ""), ("ment", ""), ("ings", ""), ("ing", ""), ("ies", "y"), ("ied", "y"),
+             ("ery", "er"), ("ers", "er"), ("ed", ""), ("es", "e"), ("s", "")]
+
+
+def stem(t: str) -> str:
+    if "_" in t or "." in t or t.isdigit() or len(t) <= 4:
+        return t
+    for suf, rep in _SUFFIXES:
+        if t.endswith(suf) and len(t) - len(suf) >= 3:
+            t = t[: len(t) - len(suf)] + rep
+            break
+    if t.endswith("e") and len(t) > 4:
+        t = t[:-1]
+    return t
+
+
 def tokens(text: str) -> list[str]:
     out = []
     for t in _TOKEN.findall(text.lower()):
         if t in STOP or len(t) < 2:
             continue
-        if len(t) > 4 and t.endswith("s") and not t.endswith("ss"):
-            t = t[:-1]          # a light plural fold: "files" and "file" match
-        out.append(t)
+        out.append(stem(t))
     return out
 
 

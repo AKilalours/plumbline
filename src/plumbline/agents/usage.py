@@ -20,7 +20,23 @@ def report(con, skills: dict, days: int = 30) -> dict:
         SELECT status, count(*) AS n, median(date_diff('second', created_at, decided_at)) AS median_seconds_to_decide
         FROM ops.proposals WHERE created_at >= {since} GROUP BY 1""").df()
     used = set(per_skill.skill.dropna())
+    # Hours retired: each successful use counts the minutes the skill's owner says the job takes by
+    # hand (baseline_minutes in its YAML). The baseline is an estimate to re-measure, not a fact; the
+    # count of successful uses is measured. Refusals and failed actions retire nothing.
+    ok = con.execute(f"""SELECT skill, count(*) FROM ops.audit WHERE logged_at >= {since}
+                         AND ((action = 'answer' AND outcome <> 'refused') OR (action = 'tool' AND outcome = 'ok')
+                              OR (action = 'execute' AND outcome = 'executed'))
+                         GROUP BY 1""").fetchall()
+    hours = []
+    for skill, n in ok:
+        s = skills.get(skill)
+        mins = getattr(s, "baseline_minutes", None) if s else None
+        if mins:
+            hours.append({"skill": skill, "successful_uses": int(n), "baseline_minutes": mins,
+                          "hours_retired": round(n * mins / 60, 2), "baseline": getattr(s, "baseline_note", "")})
     return {"days": days, "by_skill": per_skill.to_dict("records"),
+            "hours_retired": {"total": round(sum(h["hours_retired"] for h in hours), 2), "by_skill": hours,
+                              "note": "successful uses are measured; minutes per use are each skill owner's baseline"},
             "proposals": props.to_dict("records"),
             "unused_skills": sorted(set(skills) - used),
             "people": int(con.execute(f"SELECT count(DISTINCT actor) FROM ops.audit WHERE logged_at >= {since}").fetchone()[0])}

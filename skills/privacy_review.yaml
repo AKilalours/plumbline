@@ -2,6 +2,8 @@ name: privacy_review
 owner: privacy
 description: The deletion review queue. Lists open cases; proposes closing one, which the privacy role must approve.
 tools: [deletion_review_queue, resolve_deletion_review]
+baseline_minutes: 15
+baseline_note: assembling the evidence for one review case
 eval: evals/routing.yaml
 intents:
   - tool: resolve_deletion_review

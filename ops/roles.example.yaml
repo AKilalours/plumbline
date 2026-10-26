@@ -1,6 +1,10 @@
-# Who may approve which write. Copy to ops/roles.yaml (gitignored) and use real Slack user ids.
+# The first holders of each role. Copy to ops/roles.yaml (gitignored) and use real Slack user ids.
+# This only seeds an empty access record; after that, roles change through approved requests
+# ("give U... the privacy role"), and the record of every grant lives in the agent database.
 # A person can never approve their own request, whatever roles they hold.
 users:
+  U0ADM0001: [admin]
+  U0ADM0002: [admin]                 # keep two: nobody approves their own request, and the last admin stays
   U0OPS0001: [data-platform, docs]
   U0PRIV001: [privacy]
   U0PRIV002: [privacy, docs]

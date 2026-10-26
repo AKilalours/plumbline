@@ -36,3 +36,25 @@ def train_and_score(warehouse: str | Path, run_dir: str | Path, models_dir: str 
                                                          r.ablations_test["with_an_on_time_vendor_feed_what_if"]["seed_spread"]["member_auc_max"]],
             "published": scored["published"], "scored": scored["scored"], "not_scored": scored["not_scored"],
             "max_input_drift_psi": scored["checks"]["input_drift_psi"]}
+
+
+def other_models(warehouse: str | Path, run_dir: str | Path) -> dict:
+    """Income estimates for people the vendor does not cover, and the home-seller assessment. Both
+    reuse the snapshots the buyer model built."""
+    from .income import IncomeGateFailed, publish as publish_income, run as run_income
+    from .seller import assess_and_record
+    out = {}
+    try:
+        inc = run_income(warehouse, run_dir)
+        res = publish_income(warehouse, inc)
+        out["income"] = {"published": True, "people_estimated": res["people_estimated"], "algorithm": inc["algorithm"],
+                         "uncovered_within_one_band": inc["uncovered_people_vs_true_band"]["model"]["within_one_band"],
+                         "zip_only_within_one_band": inc["uncovered_people_vs_true_band"]["zip_income_only"]["within_one_band"],
+                         "vendor_label_within_one_band": inc["test_vs_true_band"]["vendor_label_itself"]["within_one_band"]}
+    except IncomeGateFailed as e:
+        out["income"] = {"published": False, "reason": str(e)}
+    with duckdb.connect(str(warehouse), read_only=True) as con:
+        snaps = con.execute("SELECT * FROM ml.feature_snapshots").df()
+        owner = person_owner(con, Path(run_dir))
+    out["home_seller"] = assess_and_record(warehouse, snaps, owner, run_dir)
+    return out

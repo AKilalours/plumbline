@@ -2,7 +2,8 @@
 
   ask     one message, as a user (roles from ops/roles.yaml, or PLUMBLINE_ROLES)
   eval    knowledge and routing evals; with PLUMBLINE_LLM_MODEL set, also through the model
-  usage   adoption and cost from the audit log
+  usage   adoption, hours retired and cost from the audit log
+  questionnaire IN.csv OUT.csv   draft a security questionnaire (a `question` column) with sources
   serve   Slack endpoint (needs SLACK_SIGNING_SECRET and SLACK_BOT_TOKEN)
 """
 from __future__ import annotations
@@ -23,6 +24,8 @@ def main(argv=None) -> int:
     sub.add_parser("eval")
     u = sub.add_parser("usage"); u.add_argument("--days", type=int, default=30)
     s = sub.add_parser("serve"); s.add_argument("--port", type=int, default=3000)
+    qn = sub.add_parser("questionnaire"); qn.add_argument("src"); qn.add_argument("dst")
+    qn.add_argument("--as", dest="user", default=os.environ.get("USER", "cli"))
     args = ap.parse_args(argv)
     ctx = Context.from_env(".", args.warehouse, args.agent_db)
     if args.cmd == "ask":
@@ -32,11 +35,19 @@ def main(argv=None) -> int:
     if args.cmd == "eval":
         from . import evals
         items = evals.load("evals/knowledge.yaml")
+        from .questionnaire import MIN_COVERAGE as QMC, index as qindex
+        qitems = evals.load("evals/questionnaire.yaml")
         out = {"routing": evals.run_routing(ctx.skills, "evals/routing.yaml")["routed_correctly"],
-               "knowledge_quoted": {k: v for k, v in evals.run(ctx.index, items, split="test").items() if k != "failures"}}
+               "knowledge_quoted": {k: v for k, v in evals.run(ctx.index, items, split="test").items() if k != "failures"},
+               "questionnaire_quoted": {k: v for k, v in evals.run(qindex("."), qitems, min_coverage=QMC, split="test").items() if k != "failures"}}
         if ctx.model:
             out["knowledge_with_model"] = {k: v for k, v in evals.run(ctx.index, items, model=ctx.model, split="test").items()}
+            out["questionnaire_with_model"] = {k: v for k, v in evals.run(qindex("."), qitems, model=ctx.model, min_coverage=QMC, split="test").items()}
         print(json.dumps(out, indent=2, default=str))
+        return 0
+    if args.cmd == "questionnaire":
+        from .questionnaire import run_file
+        print(json.dumps(run_file(ctx, args.src, args.dst, args.user), indent=2))
         return 0
     if args.cmd == "usage":
         from .usage import report

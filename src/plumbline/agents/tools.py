@@ -128,6 +128,43 @@ def update_doc(ctx, args) -> dict:
     return {"path": args["path"], "replaced_chars": len(args["old"]), "new_chars": len(args["new"])}
 
 
+def access_record(ctx, args) -> dict:
+    from . import access
+    con = ctx.agent_con
+    access.ensure(con, ctx.roles)
+    q = "SELECT user_id, role, granted_by, granted_at, revoked_by, revoked_at FROM ops.access"
+    rows = con.execute(q + (" WHERE user_id = ?" if args.get("user") else "") + " ORDER BY granted_at",
+                       [args["user"]] if args.get("user") else []).df()
+    active = rows[rows.revoked_at.isna()]
+    return {"active": active[["user_id", "role", "granted_by", "granted_at"]].to_dict("records"),
+            "history_rows": int(len(rows)), "runbook": "docs/runbooks/agent.md"}
+
+
+def _decider(args) -> str:
+    return args.get("_decided_by", "unknown")
+
+
+def grant_role(ctx, args) -> dict:
+    from . import access
+    return access.grant(ctx.agent_con, args["user"], args["role"], _decider(args), args.get("_proposal"))
+
+
+def revoke_role(ctx, args) -> dict:
+    from . import access
+    return access.revoke(ctx.agent_con, args["user"], [args["role"]], _decider(args), args.get("_proposal"))
+
+
+def offboard_person(ctx, args) -> dict:
+    """Remove every role a person holds and reject their open requests, in one approved step."""
+    from . import access
+    held = sorted(access.current(ctx.agent_con).get(args["user"], set()))
+    out = access.revoke(ctx.agent_con, args["user"], held, _decider(args), args.get("_proposal"))
+    n = ctx.agent_con.execute("""UPDATE ops.proposals SET status = 'rejected', decided_by = ?, decided_at = now(),
+                                 result = '{"reason": "requester offboarded"}' WHERE requested_by = ? AND status = 'pending'
+                                 RETURNING id""", [_decider(args), args["user"]]).fetchall()
+    return {**out, "open_requests_closed": len(n)}
+
+
 TOOLS = {t.name: t for t in [
     Tool("ingest_status", "read", "Loads per source, rejected files, quarantine reasons, invariant violations.", ingest_status),
     Tool("deletion_review_queue", "read", "Open deletion-review cases (person keys and reasons only).", deletion_review_queue),
@@ -138,6 +175,11 @@ TOOLS = {t.name: t for t in [
          resolve_deletion_review, approver_role="privacy", args=("person_key", "decision")),
     Tool("update_doc", "write", "Replace one exact passage in a Markdown document.", update_doc,
          approver_role="docs", args=("path", "old", "new")),
+    Tool("access_record", "read", "Who holds which role now, and how many grants and removals are on record.", access_record),
+    Tool("grant_role", "write", "Give a person a role.", grant_role, approver_role="admin", args=("user", "role")),
+    Tool("revoke_role", "write", "Remove a role from a person.", revoke_role, approver_role="admin", args=("user", "role")),
+    Tool("offboard_person", "write", "Remove every role a person holds and close their open requests.", offboard_person,
+         approver_role="admin", args=("user",)),
 ]}
 
 PERSON_KEY = re.compile(r"\bPK[0-9a-f]{12}\b")

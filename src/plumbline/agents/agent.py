@@ -46,10 +46,16 @@ class Context:
 
     def open(self) -> "Context":
         if self.agent_con is None:
+            from . import access
             self.agent_db.parent.mkdir(parents=True, exist_ok=True)
             self.agent_con = duckdb.connect(str(self.agent_db))
             audit.ensure(self.agent_con)
+            access.ensure(self.agent_con, self.roles)      # the yaml only seeds an empty access record
         return self
+
+    def current_roles(self) -> dict[str, set[str]]:
+        from . import access
+        return access.current(self.open().agent_con)
 
     @property
     def index(self) -> Index:
@@ -82,7 +88,7 @@ def handle(ctx: Context, user: str, text: str, channel: str = "cli") -> Reply:
     if m:
         verb, pid = m.group(1).lower(), m.group(2)
         try:
-            r = approvals.decide(con, ctx, pid, decided_by=user, approve=verb == "approve", roles=ctx.roles, channel=channel)
+            r = approvals.decide(con, ctx, pid, decided_by=user, approve=verb == "approve", roles=ctx.current_roles(), channel=channel)
         except approvals.NotAllowed as e:
             return Reply(f"Not done: {e}.", "approvals", refused=True)
         except ValueError as e:
@@ -173,6 +179,14 @@ def _fmt_read(tool: str, o: dict) -> str:
             level = "above the warning level" if d["max"] > d.get("warn_above", 1) else "within limits"
             s += f" Largest input drift: {d['feature']} at PSI {d['max']} ({level}, warn above {d.get('warn_above')})."
         return s + f" Model card: {o['card']}."
+    if tool == "access_record":
+        if not o["active"]:
+            return "Nobody holds a role yet."
+        by = {}
+        for r in o["active"]:
+            by.setdefault(r["role"], []).append(r["user_id"])
+        return "Roles now: " + "; ".join(f"{k}: {', '.join(sorted(v))}" for k, v in sorted(by.items())) + \
+            f". {o['history_rows']} grants and removals on record."
     if tool == "data_products_status":
         return "; ".join(f"{k}: {v}" for k, v in o.items()) + "."
     if tool == "check_doc_claims":

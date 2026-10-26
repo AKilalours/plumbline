@@ -7,7 +7,7 @@ import pytest
 
 dg = pytest.importorskip("dagster")
 
-from plumbline.ingest.orchestration import PlumblineConfig, _violations, checks, data_products, defs, person_level_deletion, persons, warehouse  # noqa: E402
+from plumbline.ingest.orchestration import PlumblineConfig, _violations, checks, data_products, defs, home_buyer_scores, person_level_deletion, persons, warehouse  # noqa: E402
 from plumbline.synth.config import SynthConfig  # noqa: E402
 from plumbline.synth.generate import generate  # noqa: E402
 from plumbline.synth.reference import load_reference  # noqa: E402
@@ -22,8 +22,13 @@ def test_definitions_load():
 def test_materialize_runs_checks_and_they_pass(tmp_path):
     run = tmp_path / "run"
     generate(load_reference(ROOT / "tests/fixtures/reference"), SynthConfig(seed=4, n_people=800), run)
-    cfg = PlumblineConfig(run_dir=str(run), warehouse=str(tmp_path / "wh.duckdb"), contracts_dir=str(ROOT / "sources"))
-    result = dg.materialize([warehouse, persons, person_level_deletion, data_products, *checks], resources={"plumbline": cfg})
+    cfg = PlumblineConfig(run_dir=str(run), warehouse=str(tmp_path / "wh.duckdb"), contracts_dir=str(ROOT / "sources"),
+                          reference_dir=str(ROOT / "tests/fixtures/reference"), models_dir=str(tmp_path / "models"))
+    # the model asset needs a world large enough to train on; test_ml covers it, this covers wiring
+    result = dg.materialize([warehouse, persons, person_level_deletion, data_products, *checks],
+                            resources={"plumbline": cfg})
+    job = defs.resolve_job_def("ingest_job")
+    assert "home_buyer_scores" in {n.name for n in job.graph.node_defs}
     assert result.success
     evals = result.get_asset_check_evaluations()
     assert len(evals) == 4 and all(e.passed for e in evals)

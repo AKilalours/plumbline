@@ -17,6 +17,7 @@ dependencies = [
   "splink>=4.0.6,<5",
   "dbt-core>=1.9,<2",
   "dbt-duckdb>=1.9,<2",
+  "scikit-learn>=1.4,<2",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +31,7 @@ plumbline-ingest = "plumbline.ingest.__main__:main"
 plumbline-store = "plumbline.store.__main__:main"
 plumbline-identity = "plumbline.identity.__main__:main"
 plumbline-privacy = "plumbline.privacy.__main__:main"
+plumbline-ml = "plumbline.ml.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

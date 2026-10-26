@@ -32,9 +32,10 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 
 | The work | Where | Status |
 | --- | --- | --- |
-| Features from raw signal | `dim_person` (orders, revenue, engagement, tenure, moves) | done |
-| Home buyer, income and propensity models | Phase 3 | not started; the synthetic world plants a home-purchase rule so the model can be checked against it |
-| Validations so agents can act without a human | dbt tests, ceilings next to every score | done for data; models next |
+| Features from raw signal, including property data | `dbt/models/marts/fct_person_features.sql` (PLUTO, Census, store, life events) | point in time per cutoff |
+| Home buyer model | `src/plumbline/ml/` | AUC 0.659 vs ceiling 0.806 on an untouched later period; enrichment worth +0.05, an on-time vendor feed +0.08 |
+| Feature pipelines that are reliable in production | snapshots by `as_of`, leak guards, window rule | three leaks found and turned into tests |
+| Validations so agents can act without a human in the loop | `ml/guardrails.py`, `ml.model_runs` | scores published only if every check passes; out-of-population people not scored |
 
 ## Internal AI systems
 
@@ -44,5 +45,6 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 
 ## Not covered, by choice so far
 
+Home seller and income models: the same feature pipeline would carry them; not built.
 Snowflake, Spark, Iceberg, Trino and AWS: everything runs on DuckDB on one machine. The design (file
 ledger, contracts, dbt models) carries over; the claim that it scales to terabytes is not made here.

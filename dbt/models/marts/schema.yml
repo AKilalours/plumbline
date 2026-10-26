@@ -50,3 +50,14 @@ models:
               arguments: {to: ref('dim_person'), field: person_key}
       - name: email_ok
         data_tests: [not_null]
+  - name: fct_person_features
+    description: Point-in-time model features, one row per person with a known address, as of var('as_of').
+    columns:
+      - name: person_key
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_person'), field: person_key}
+      - name: as_of
+        data_tests: [not_null]

@@ -14,3 +14,7 @@ sources:
       - name: suppression
       - name: delivery_rows
       - name: ingest_ledger
+      - name: ref_property
+        description: NYC PLUTO tax lots by standardized address (loaded by plumbline.ml.reference)
+      - name: ref_zip_income
+        description: Census ACS 5-year median household income by ZIP

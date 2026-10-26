@@ -22,6 +22,8 @@ from .engine import ingest
 
 class PlumblineConfig(dg.ConfigurableResource):
     run_dir: str = "data/synth/seed7_n100000"
+    reference_dir: str = "data/reference"
+    models_dir: str = "data/models/home_buyer"
     warehouse: str = "data/warehouse.duckdb"
     contracts_dir: str = "sources"
 
@@ -91,21 +93,35 @@ def person_level_deletion(plumbline: PlumblineConfig) -> dg.MaterializeResult:
 @dg.asset(group_name="products", deps=[person_level_deletion],
           description="dbt build: golden person, address history, life events, households, activation audience, and their tests.")
 def data_products(plumbline: PlumblineConfig) -> dg.MaterializeResult:
+    from ..ml.reference import load_reference_tables
     from ..products.build import build
+    with duckdb.connect(plumbline.warehouse) as con:
+        load_reference_tables(con, plumbline.reference_dir)
     out = build(plumbline.warehouse)
     return dg.MaterializeResult(metadata={k: dg.MetadataValue.int(v) for k, v in out.items()})
 
 
-ingest_job = dg.define_asset_job("ingest_job", selection=[warehouse, persons, person_level_deletion, data_products])
+@dg.asset(group_name="models", deps=[data_products],
+          description="Home-buyer model: point-in-time snapshots, training, model card; scores published only if guardrails pass.")
+def home_buyer_scores(plumbline: PlumblineConfig) -> dg.MaterializeResult:
+    from ..ml.pipeline import train_and_score
+    out = train_and_score(plumbline.warehouse, plumbline.run_dir, plumbline.models_dir)
+    return dg.MaterializeResult(metadata={k: (dg.MetadataValue.float(float(v)) if isinstance(v, float) else dg.MetadataValue.text(str(v)))
+                                          for k, v in out.items()})
+
+
+ingest_job = dg.define_asset_job("ingest_job", selection=[warehouse, persons, person_level_deletion, data_products, home_buyer_scores])
 nightly = dg.ScheduleDefinition(job=ingest_job, cron_schedule="0 2 * * *", execution_timezone="America/New_York")
 
 defs = dg.Definitions(
-    assets=[warehouse, persons, person_level_deletion, data_products],
+    assets=[warehouse, persons, person_level_deletion, data_products, home_buyer_scores],
     asset_checks=checks,
     jobs=[ingest_job],
     schedules=[nightly],
     resources={"plumbline": PlumblineConfig(
         run_dir=os.environ.get("PLUMBLINE_RUN_DIR", "data/synth/seed7_n100000"),
         warehouse=os.environ.get("PLUMBLINE_WAREHOUSE", "data/warehouse.duckdb"),
-        contracts_dir=os.environ.get("PLUMBLINE_CONTRACTS", "sources"))},
+        contracts_dir=os.environ.get("PLUMBLINE_CONTRACTS", "sources"),
+        reference_dir=os.environ.get("PLUMBLINE_REFERENCE", "data/reference"),
+        models_dir=os.environ.get("PLUMBLINE_MODELS", "data/models/home_buyer"))},
 )

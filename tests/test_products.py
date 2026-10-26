@@ -37,6 +37,8 @@ def world(tmp_path_factory):
     with duckdb.connect(str(wh)) as con:
         resolve(con)
         expand_deletions(con, CONTRACTS)
+        from plumbline.ml.reference import load_reference_tables
+        load_reference_tables(con, ROOT / "tests" / "fixtures" / "reference")
     stats = build(wh)
     with duckdb.connect(str(wh), read_only=True) as con:
         score = score_products(con, run)

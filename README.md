@@ -16,14 +16,15 @@ against the answer key, and the tests that hold each one are named.
 | Identity resolution | F1 **0.981** (precision 97.4%, recall 98.8%) vs 0.927 for exact email-or-phone matching |
 | Person-level deletion | deleted people with data left: 23 → **11** of 500; records of people who never asked, removed: 69 → **50** |
 | Golden person (dbt) | current address right for 90.6% of people, against a ceiling of 91.8% (the rest moved and no source saw it); work and personal identities linked 98.9% right |
-| Tests | 84 Python tests and 23 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Home-buyer model | AUC 0.659 and 2.3x lift in the top decile on a later, untouched period; the best possible is 0.806; a leaky version scoring 0.838 is caught because it beats the best possible |
+| Tests | 95 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 | Phase | What | Status |
 | --- | --- | --- |
 | 0 | Synthetic world and answer key | Done |
 | 1 | Module A: ingestion, including the store API connector | Done |
 | 2 | Module B: identity resolution, person-level deletion, data products (dbt) | Done |
-| 3 | Module C: models | Planned |
+| 3 | Module C: home-buyer model with point-in-time features and publishing guardrails | Done |
 | 4 | Modules D and E: agents | Planned |
 
 ## Receipts
@@ -172,6 +173,68 @@ The gap between what is true and what a brand's own sources can see (only 26% of
 6,931 of 49,918 people ever show both a work and a personal email) is the size of the problem
 third-party enrichment exists to close.
 
+## Home-buyer model (Module C)
+
+Who will buy a home in the next 180 days. Features come from `dbt/models/marts/fct_person_features.sql`,
+built once per cutoff date with dbt's `as_of`, so each snapshot holds only what was known that day.
+Property data (building size and class, from NYC PLUTO) joins to 96.8% of golden addresses on an exact
+standardized key; Census median income joins by ZIP.
+
+**The split cannot see the future.** Models are chosen on 2025-03-31 after training on 2024 cutoffs,
+refit on all 2024 cutoffs, and reported once on 2025-06-30. A snapshot is used for training only if its
+whole outcome window closed before the date it is evaluated on (`check_no_label_leak`). That guard
+caught my own first schedule: a 182-day horizon let the last training snapshot see one day past the
+test date, so the horizon is 180.
+
+On 2025-06-30 (30,145 people, 655 bought within 180 days):
+
+| | AUC | Top-decile lift |
+| --- | --- | --- |
+| Random | 0.49 | 0.9x |
+| Census ZIP income alone | 0.63 | 2.0x |
+| **Plumbline model** (logistic regression, chosen on validation over gradient boosting) | **0.659** | **2.3x** |
+| Same model without property and Census enrichment | 0.610 | 1.8x |
+| What-if: plus an on-time vendor feed (age, renter, job change, income band as of each cutoff) | 0.735 | 3.0x |
+| Ceiling: the rule that generated the purchases | 0.806 | 4.4x |
+| Same model with vendor data pasted back from December | 0.838 | 4.0x |
+
+How to read it:
+
+- **The leak beats the ceiling, which is how you know it is a leak.** Vendor attributes delivered in
+  November and December say who owns a home after buying it. Pasted onto earlier snapshots they score
+  above the best possible model, which only a model reading the future can do. `check_not_above_ceiling`
+  refuses any backtest that does.
+- **First-party data alone gets half the way.** The model captures 52% of the AUC above chance that the
+  ceiling allows, and 39% of the lift. What drives buying here is household income, age, renting and a
+  recent job change, which a brand's own systems barely see. An on-time vendor feed moves AUC from 0.66 to
+  0.73: that difference is the price of enrichment, measured. The rest of the gap is exact household
+  income, which nobody sells.
+- **Calibration runs low.** Buying rose through 2025, so scores under-predict by about 1.5x in the top
+  deciles. Use scores to rank; the model card says so.
+
+Leaks found and fixed on the way, each now a test or a rule:
+
+1. `records` (how many records a person has) was the top feature. It counted today's identity graph,
+   and a buyer who moves gets a new store profile at the new address: the feature knew the outcome.
+   It is now counted from what was known by the cutoff, and is no longer a feature.
+2. Orders refunded after the cutoff were counted as refunded on the cutoff.
+3. 365-day windows at a cutoff 90 days after the data starts are 90-day windows in disguise, so the
+   same feature meant different things at different cutoffs. The drift check caught it at scoring time
+   (index 0.49). Windows are now 90 days, which every snapshot has; a test enforces it.
+
+**Scores are published only if the guardrails pass** (`src/plumbline/ml/guardrails.py`): the inputs
+are the training inputs, scores are probabilities that vary, the mean is plausible, missing-value rates
+are stable, and no feature drifts past a population stability index of 0.25. Every run is logged in
+`ml.model_runs` with its checks; a failed run publishes nothing. People known only from the vendor feed
+are not scored (33,287 on 2025-12-31): the model was trained before any vendor data existed, and they
+are listed in `ml.home_buyer_not_scored` with that reason. Removing that rule makes the drift check
+block publication, so the two protect each other. My first drift check had a bug of its own (it mixed
+two pandas indexes and reported a drift of 18 on flags that had not moved); it has a regression test.
+
+The model and its card are written to `data/models/home_buyer/<version>/`; the version is a hash of
+the training data and configuration, and two runs from scratch produced the same one.
+[The model card](docs/model_card_home_buyer.md) has the details.
+
 ## How ingestion works
 
 Each source is one YAML contract in `sources/`: its files, key, column types and which columns
@@ -211,8 +274,8 @@ dagster dev -m plumbline.ingest.orchestration            # optional: the same pi
 ```
 
 `python -m plumbline` builds the store, syncs it through the faulty mock API, ingests every source,
-resolves persons, applies deletions and builds the dbt data products with their tests, then prints
-one summary. Add `--fresh` to start from an
+resolves persons, applies deletions, builds the dbt data products with their tests, trains the
+home-buyer model and publishes its scores if the guardrails pass, then prints one summary. Add `--fresh` to start from an
 empty warehouse. Each stage also has its own command for working on one at a time:
 
 ```bash
@@ -220,6 +283,7 @@ python -m plumbline.store build | sync
 python -m plumbline.ingest --run-dir data/synth/seed7_n100000 --warehouse data/warehouse.duckdb
 python -m plumbline.identity --score data/synth/seed7_n100000
 python -m plumbline.privacy --score data/synth/seed7_n100000
+python -m plumbline.ml          # snapshots, training, model card, guarded scoring
 ```
 
 ## The synthetic world

@@ -21,16 +21,20 @@ p as (
     from w group by person_key
 ),
 recs as (
-    select person_key, count(*) as records, list(distinct source order by source) as sources
-    from {{ source('wh', 'identity_map') }}
-    where person_key is not null and source in ('crm', 'vendor', 'store')
+    -- counted from what was known by as_of, not from today's identity graph: a buyer who moves
+    -- gets a new store profile at the new address, so an all-time count leaks the outcome
+    select person_key, count(distinct source || ':' || record_id) as records,
+           list(distinct source order by source) as sources
+    from {{ ref('int_observations_typed') }}
+    where source in ('crm', 'vendor', 'store')
     group by 1
 ),
 orders as (
     select m.person_key,
            count(*) as orders,
-           sum(o.total_price) filter (where o.financial_status = 'paid') as revenue,
-           count(*) filter (where o.financial_status = 'refunded') as refunds,
+           -- an order refunded after as_of was still paid on as_of
+           sum(o.total_price) filter (where o.financial_status = 'paid' or o.updated_at >= {{ as_of_end() }}) as revenue,
+           count(*) filter (where o.financial_status = 'refunded' and o.updated_at < {{ as_of_end() }}) as refunds,
            min(o.created_at) as first_order_at,
            max(o.created_at) as last_order_at
     from {{ source('wh', 'current_store') }} o

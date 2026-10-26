@@ -27,6 +27,9 @@ def main(argv=None) -> int:
     ap.add_argument("--score", action="store_true", help="score identity and deletion against the answer key")
     ap.add_argument("--fresh", action="store_true", help="delete the warehouse first")
     ap.add_argument("--no-store", action="store_true", help="skip the store API step")
+    ap.add_argument("--ref", default="data/reference", help="reference data (PLUTO, Census) for enrichment")
+    ap.add_argument("--no-model", action="store_true", help="skip training and scoring the home-buyer model")
+    ap.add_argument("--models", default="data/models/home_buyer")
     a = ap.parse_args(argv)
     run, wh = Path(a.run_dir), Path(a.warehouse)
     if not (run / "deliveries.json").exists():
@@ -105,7 +108,10 @@ def main(argv=None) -> int:
     step("person_deletion", do_privacy)
 
     def do_products():
+        from .ml.reference import load_reference_tables
         from .products.build import build
+        with duckdb.connect(str(wh)) as con:
+            load_reference_tables(con, a.ref)
         out = build(wh)
         if a.score:
             from .products.evaluate import score_products
@@ -119,6 +125,17 @@ def main(argv=None) -> int:
             out["household_f1"] = sc["households"]["f1"]
         return out
     step("products", do_products)
+
+    if not a.no_model:
+        from .ml.pipeline import train_and_score
+        from .ml.train import NotEnoughOutcomes
+
+        def do_model():
+            try:
+                return train_and_score(wh, run, a.models)
+            except NotEnoughOutcomes as e:   # a small world: say so, and keep everything else
+                return {"skipped": str(e)}
+        step("model", do_model)
     print(json.dumps(summary, indent=2))
     return 0
 

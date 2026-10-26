@@ -14,6 +14,10 @@ vars:
   # "Today" for freshness and segments. The synthetic world ends on 2025-12-31.
   as_of: "2025-12-31"
   stale_after_days: 365
+  # Windowed model features look back this far. It must fit inside the history the earliest
+  # training snapshot has (data starts 2024-01-01, first cutoff 2024-03-31): a window cut short
+  # by the start of the data means something different at each cutoff. test_ml enforces it.
+  feature_window_days: 90
 
 models:
   plumbline:

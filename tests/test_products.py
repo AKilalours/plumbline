@@ -139,3 +139,27 @@ def test_money_is_summed_exactly(world):
         a, b = con.execute("""SELECT sum(cast(total_price AS DECIMAL(14, 2)) ORDER BY order_id),
                                      sum(cast(total_price AS DECIMAL(14, 2)) ORDER BY order_id DESC) FROM current_store""").fetchone()
         assert a == b
+
+
+def _render(sql: str, tables: dict[str, str]) -> str:
+    import re
+    return re.sub(r"\{\{\s*ref\('([a-z_]+)'\)\s*\}\}", lambda m: tables[m.group(1)], sql)
+
+
+def test_a_chain_of_look_alike_spellings_still_gets_one_canonical():
+    """Regression: "alike" is not transitive. A ~ B and B ~ C but not A ~ C made B the canonical of A
+    while B's canonical was C, and the 1,000,000-person build failed every_address_spelling_has_one_canonical."""
+    import duckdb
+    dbt = Path(__file__).resolve().parents[1] / "dbt"
+    model = (dbt / "models" / "intermediate" / "int_address_canonical.sql").read_text()
+    check = (dbt / "tests" / "every_address_spelling_has_one_canonical.sql").read_text()
+    a, b, c = "1901 DORCHESTERROAD APT 26|11226", "1901 DORCHESTER ROAD APT 26|11226", "1901 DORCHESTER AVE|11226"
+    with duckdb.connect() as con:
+        sim = lambda x, y: con.execute("SELECT jaro_winkler_similarity(?, ?)", [x.split("|")[0], y.split("|")[0]]).fetchone()[0]
+        assert sim(a, b) >= 0.9 and sim(b, c) >= 0.9 and sim(a, c) < 0.9          # the chain is real
+        con.execute("CREATE TABLE obs (person_key VARCHAR, attr VARCHAR, value VARCHAR)")
+        con.executemany("INSERT INTO obs VALUES ('PK1', 'address', ?)", [[a]] + [[b]] * 2 + [[c]] * 3)
+        con.execute(f"CREATE TABLE canon AS {_render(model, {'int_observations_typed': 'obs'})}")
+        got = dict(con.execute("SELECT value, canonical FROM canon").fetchall())
+        assert got == {a: c, b: c, c: c}
+        assert con.execute(_render(check, {"int_address_canonical": "canon"})).fetchall() == []

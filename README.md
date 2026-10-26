@@ -532,9 +532,14 @@ What the first scale run found, and what changed:
 3. **Memory is DuckDB's buffer cache more than the data.** Identity jumps to 2.4 GB already at
    20,000 people because DuckDB takes memory it is allowed to; it grows 30% from 20,000 to 300,000.
 
-4. **1,000,000 people found a wrong assumption, not a slow stage.** On a 10-core laptop the run got
-   through identity resolution and crashed in scoring, on two people the store data cannot tell
-   apart (item 6 under identity). On the 2-core, 7 GB machine the same run is killed for memory
+4. **1,000,000 people found two wrong assumptions, not a slow stage.** On a 10-core laptop the run
+   first crashed in scoring, on two people the store data cannot tell apart (item 6 under identity).
+   Then a dbt test failed in a feature snapshot: `every_address_spelling_has_one_canonical`. Address
+   spellings are merged when they look alike, but alike is not transitive ("1901 DORCHESTERROAD APT
+   26" is like "1901 DORCHESTER ROAD APT 26", which is like "1901 DORCHESTER AVE", which the first is
+   not like), so a spelling's canonical could itself point elsewhere. Pointers are now followed to
+   their end; at 100,000 people the canonical table and every score are unchanged, because no chain
+   exists there. The test that caught it was written in Phase 2 for exactly this promise. On the 2-core, 7 GB machine the same run is killed for memory
    during the identity stage, so that machine's ceiling is between 300,000 and 1,000,000 people.
    Generating the 1,000,000-person world and its store took 3.4 GB and 6 minutes.
 

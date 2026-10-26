@@ -33,7 +33,10 @@ orders as (
     select m.person_key,
            count(*) as orders,
            -- an order refunded after as_of was still paid on as_of
-           sum(o.total_price) filter (where o.financial_status = 'paid' or o.updated_at >= {{ as_of_end() }}) as revenue,
+           -- Money is summed as exact cents. Summed as floating point, the result depended on the order
+           -- DuckDB's threads added the prices in, so two machines disagreed in the last bit and the
+           -- model's data fingerprint (its version) differed for identical data.
+           sum(cast(o.total_price as decimal(14, 2))) filter (where o.financial_status = 'paid' or o.updated_at >= {{ as_of_end() }}) as revenue,
            count(*) filter (where o.financial_status = 'refunded' and o.updated_at < {{ as_of_end() }}) as refunds,
            min(o.created_at) as first_order_at,
            max(o.created_at) as last_order_at

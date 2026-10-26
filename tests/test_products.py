@@ -124,3 +124,18 @@ def test_compliance_test_fails_when_the_rule_is_broken(wh_copy, tmp_path):
             build(wh_copy)
     finally:
         b.DBT_DIR = orig
+
+
+def test_money_is_summed_exactly(world):
+    """Regression: revenue summed as floating point differed in the last bit between machines (the
+    order DuckDB's threads add values in depends on the CPU count), which changed the model's data
+    fingerprint for identical data. Summed as exact cents, the order cannot matter."""
+    _, wh, *_ = world
+    with duckdb.connect(str(wh), read_only=True) as con:
+        types = dict(con.execute("""SELECT table_name || '.' || column_name, data_type FROM information_schema.columns
+                                    WHERE table_schema = 'products' AND column_name IN ('revenue', 'revenue_window', 'household_revenue')""").fetchall())
+        assert types and all(t.startswith("DECIMAL") for t in types.values()), types
+        # the same prices added in two different orders give the same sum
+        a, b = con.execute("""SELECT sum(cast(total_price AS DECIMAL(14, 2)) ORDER BY order_id),
+                                     sum(cast(total_price AS DECIMAL(14, 2)) ORDER BY order_id DESC) FROM current_store""").fetchone()
+        assert a == b

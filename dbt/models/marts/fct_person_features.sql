@@ -22,7 +22,10 @@ prop as (
 orders as (
     select m.person_key,
            count(*) as orders_window,
-           coalesce(sum(o.total_price) filter (where o.financial_status = 'paid' or o.updated_at >= {{ as_of_end() }}), 0) as revenue_window,
+           -- Money is summed as exact cents. Summed as floating point, the result depended on the order
+           -- DuckDB's threads added the prices in, so two machines disagreed in the last bit and the
+           -- model's data fingerprint (its version) differed for identical data.
+           coalesce(sum(cast(o.total_price as decimal(14, 2))) filter (where o.financial_status = 'paid' or o.updated_at >= {{ as_of_end() }}), 0) as revenue_window,
            date_diff('day', max(o.created_at), {{ as_of_end() }}) as days_since_last_order_in_window
     from {{ source('wh', 'current_store') }} o
     join {{ source('wh', 'identity_map') }} m on m.source = 'store_order' and m.record_id = o.order_id

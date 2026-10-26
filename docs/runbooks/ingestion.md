@@ -45,8 +45,10 @@ quarantine, and blocks them in all later loads, including replays of old files. 
 duckdb data/warehouse.duckdb "SELECT source, action, sum(rows) FROM suppression_log GROUP BY 1, 2"
 ```
 
-Known limit: matching is on exact email and phone. A record with a typo in its email and no phone is
-not caught (8 of 500 deleted people on the seed-7 run). Phase 2 identity matching closes this.
+Exact email and phone matching is only the first pass. After identity resolution, person-level
+deletion also removes the person's other records (tombstones plus the identity graph), and cases
+with too little evidence go to the review queue (section 6). Seed 7: 23 of 500 deleted people had
+data left after the first pass, 11 after person-level deletion.
 
 ## 4. A load crashed halfway
 

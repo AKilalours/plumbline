@@ -1,0 +1,28 @@
+# Messages and where they must go. tool: null means a question for the documents (knowledge_qa).
+items:
+  - {q: "did last night's load reject anything?", skill: pipeline_status, tool: ingest_status}
+  - {q: "any quarantined rows today?", skill: pipeline_status, tool: ingest_status}
+  - {q: "is the ingest pipeline healthy?", skill: pipeline_status, tool: ingest_status}
+  - {q: "has the vendor feed loaded?", skill: pipeline_status, tool: ingest_status}
+  - {q: "are there invariant violations right now?", skill: pipeline_status, tool: ingest_status}
+  - {q: "is the home buyer model published?", skill: pipeline_status, tool: model_status}
+  - {q: "did the model scores fail any check?", skill: pipeline_status, tool: model_status}
+  - {q: "home-buyer model status", skill: pipeline_status, tool: model_status}
+  - {q: "how many people are in the audience?", skill: pipeline_status, tool: data_products_status}
+  - {q: "how many households do we have?", skill: pipeline_status, tool: data_products_status}
+  - {q: "what's in the deletion review queue?", skill: privacy_review, tool: deletion_review_queue}
+  - {q: "any pending deletions?", skill: privacy_review, tool: deletion_review_queue}
+  - {q: "show me the review queue", skill: privacy_review, tool: deletion_review_queue}
+  - {q: "delete PK0123456789ab, the store order confirms it", skill: privacy_review, tool: resolve_deletion_review}
+  - {q: "keep PKabcdef012345, it is a namesake", skill: privacy_review, tool: resolve_deletion_review}
+  - {q: "are the docs still accurate?", skill: docs_freshness, tool: check_doc_claims}
+  - {q: "is anything in the runbook out of date?", skill: docs_freshness, tool: check_doc_claims}
+  - {q: "fix the stale docs", skill: docs_freshness, tool: update_doc}
+  - {q: "please update the outdated docs", skill: docs_freshness, tool: update_doc}
+  - {q: "A load crashed halfway through. How do I recover?", skill: knowledge_qa, tool: null}
+  - {q: "What does one_key_matches mean?", skill: knowledge_qa, tool: null}
+  - {q: "Why is gradient boosting a five-seed ensemble?", skill: knowledge_qa, tool: null}
+  - {q: "What AUC does the home-buyer model get on the test date?", skill: knowledge_qa, tool: null}
+  - {q: "How does the deletion review queue get filled?", skill: knowledge_qa, tool: null}
+  - {q: "What is our parental leave policy?", skill: knowledge_qa, tool: null}
+  - {q: "Why are vendor-only moves low confidence?", skill: knowledge_qa, tool: null}

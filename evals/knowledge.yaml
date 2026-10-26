@@ -1,0 +1,92 @@
+# Questions the on-call team actually asks, with where the answer lives and words a right answer
+# must contain. "refuse: true" marks questions the documents cannot answer: the agent must say so.
+# Alternate items form the dev half (used to choose the refusal threshold) and the test half.
+items:
+  - q: A vendor file was rejected with missing_columns. What do I do?
+    source: [docs/runbooks/ingestion.md#1-a-file-was-rejected]
+    terms: [aliases]
+  - q: Why does a corrected re-send need a new file name?
+    source: [docs/runbooks/ingestion.md#1-a-file-was-rejected]
+    terms: [identical bytes]
+  - q: Quarantine has many duplicate_in_delivery rows. Is that a problem?
+    source: [docs/runbooks/ingestion.md#2-quarantine-is-growing]
+    terms: [no action]
+  - q: A load crashed halfway through. How do I recover?
+    source: [docs/runbooks/ingestion.md#4-a-load-crashed-halfway]
+    terms: [rerun]
+  - q: The store sync failed with a 401 AuthError. Should I retry it?
+    source: [docs/runbooks/ingestion.md#5-the-store-sync-failed]
+    terms: [do not retry]
+  - q: How do I re-pull every order from the store?
+    source: [docs/runbooks/ingestion.md#5-the-store-sync-failed]
+    terms: [_sync_state.json]
+  - q: What does one_key_matches mean in the deletion review queue?
+    source: [docs/runbooks/ingestion.md#6-the-deletion-review-queue-is-not-empty]
+    terms: [namesake]
+  - q: A tombstone matches several persons. Do I delete both?
+    source: [docs/runbooks/ingestion.md#6-the-deletion-review-queue-is-not-empty]
+    terms: [never delete both]
+  - q: What F1 does identity resolution get compared with the exact email or phone baseline?
+    source: [README.md#identity-resolution-module-b]
+    terms: ["0.981", "0.927"]
+  - q: Why did the first identity model have such low precision?
+    source: [README.md#identity-resolution-module-b]
+    terms: [famil]
+  - q: How accurate is the golden person's current address?
+    source: [README.md#data-products-dbt]
+    terms: ["90.6"]
+  - q: Why are vendor-only moves kept out of segments?
+    source: [README.md#data-products-dbt, README.md#home-buyer-model-module-c]
+    terms: ["45%"]
+  - q: What does "as of a date" mean in the dbt models?
+    source: [README.md#data-products-dbt]
+    terms: [end of that day]
+  - q: Is consent point in time for an audience rebuilt for a past date?
+    source: [README.md#data-products-dbt]
+    terms: [unsubscribe]
+  - q: What test AUC does the home-buyer model get?
+    source: [docs/model_card_home_buyer.md#results-on-2025-06-30, README.md#home-buyer-model-module-c]
+    terms: ["0.659"]
+  - q: What is the ceiling AUC for the home-buyer model?
+    source: [docs/model_card_home_buyer.md#results-on-2025-06-30, README.md#home-buyer-model-module-c]
+    terms: ["0.806"]
+  - q: Which vendor features does the home-buyer model leave out, and why?
+    source: [docs/model_card_home_buyer.md#features, README.md#home-buyer-model-module-c]
+    terms: [november]
+  - q: What checks must home-buyer scores pass before they are published?
+    source: [docs/model_card_home_buyer.md#guardrails-before-publishing]
+    terms: [population stability]
+  - q: How many deleted people still have data left after person-level deletion?
+    source: [README.md#deletion-at-the-person-level, README.md]
+    terms: ["11"]
+  - q: What exactly is kept in a deletion tombstone?
+    source: [README.md#deletion-at-the-person-level]
+    terms: [hmac]
+  - q: What real reference data does the synthetic world use?
+    source: [docs/synthetic_data_card.md#real-inputs]
+    terms: [pluto]
+  - q: What command runs the whole pipeline end to end?
+    source: [README.md#run-it]
+    terms: [python -m plumbline]
+  - q: Why is gradient boosting a five-seed ensemble?
+    source: [README.md#home-buyer-model-module-c, docs/model_card_home_buyer.md#model-card-home-buyer-propensity]
+    terms: [seed]
+  - q: How does the store connector handle a 429 throttle response?
+    source: [README.md#how-ingestion-works, README.md#receipts]
+    terms: [retry-after]
+  - q: What is our parental leave policy?
+    refuse: true
+  - q: Who is on call this weekend?
+    refuse: true
+  - q: How do I reset my laptop password?
+    refuse: true
+  - q: What does the Kestrel four-person tent cost?
+    refuse: true
+  - q: When is the next board meeting?
+    refuse: true
+  - q: What is the AWS account id for production?
+    refuse: true
+  - q: How many vacation days do new hires get?
+    refuse: true
+  - q: Which office has the best coffee in Brooklyn?
+    refuse: true

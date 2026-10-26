@@ -11,6 +11,7 @@ Dagster UI and its counts are attached as metadata.
 # No `from __future__ import annotations` in this file: Dagster inspects type hints at
 # definition time and cannot resolve them when they are stored as strings.
 import os
+from pathlib import Path
 
 import dagster as dg
 import duckdb
@@ -26,6 +27,7 @@ class PlumblineConfig(dg.ConfigurableResource):
     models_dir: str = "data/models/home_buyer"
     warehouse: str = "data/warehouse.duckdb"
     contracts_dir: str = "sources"
+    repo_dir: str = "."
 
 
 def _violations(cfg: PlumblineConfig, needles: tuple[str, ...]) -> dict[str, int]:
@@ -101,6 +103,17 @@ def data_products(plumbline: PlumblineConfig) -> dg.MaterializeResult:
     return dg.MaterializeResult(metadata={k: dg.MetadataValue.int(v) for k, v in out.items()})
 
 
+@dg.asset_check(asset=data_products, name="docs_match_the_warehouse",
+                description="Documented numbers and statements (docs/claims.yaml) still match the warehouse. "
+                            "A stale passage is a warning: ask the agent to `fix the stale docs` and approve the edit.")
+def docs_match_the_warehouse(plumbline: PlumblineConfig) -> dg.AssetCheckResult:
+    from types import SimpleNamespace
+    from ..agents.claims import check
+    stale = check(SimpleNamespace(warehouse=plumbline.warehouse, repo=Path(plumbline.repo_dir), run_dir=Path(plumbline.run_dir)))
+    return dg.AssetCheckResult(passed=not stale, severity=dg.AssetCheckSeverity.WARN,
+                               metadata={"stale": dg.MetadataValue.json([{k: s[k] for k in ("id", "doc", "problem")} for s in stale])})
+
+
 @dg.asset(group_name="models", deps=[data_products],
           description="Home-buyer model: point-in-time snapshots, training, model card; scores published only if guardrails pass.")
 def home_buyer_scores(plumbline: PlumblineConfig) -> dg.MaterializeResult:
@@ -115,7 +128,7 @@ nightly = dg.ScheduleDefinition(job=ingest_job, cron_schedule="0 2 * * *", execu
 
 defs = dg.Definitions(
     assets=[warehouse, persons, person_level_deletion, data_products, home_buyer_scores],
-    asset_checks=checks,
+    asset_checks=[*checks, docs_match_the_warehouse],
     jobs=[ingest_job],
     schedules=[nightly],
     resources={"plumbline": PlumblineConfig(

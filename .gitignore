@@ -10,3 +10,5 @@ dbt/logs/
 dbt/dbt_packages/
 dbt/.user.yml
 logs/
+ops/roles.yaml
+data/agent.duckdb

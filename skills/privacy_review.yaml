@@ -1,0 +1,13 @@
+name: privacy_review
+owner: privacy
+description: The deletion review queue. Lists open cases; proposes closing one, which the privacy role must approve.
+tools: [deletion_review_queue, resolve_deletion_review]
+eval: evals/routing.yaml
+intents:
+  - tool: resolve_deletion_review
+    when: ['\b(delete|keep)\b.*\bPK[0-9a-f]{12}\b']
+    args:
+      person_key: '\b(PK[0-9a-f]{12})\b'
+      decision: '\b(delete|keep)\b'
+  - tool: deletion_review_queue
+    when: ['\b(deletion|delete)\b.*\b(review|queue)\b', '\breview queue\b', '\bpending deletions?\b']

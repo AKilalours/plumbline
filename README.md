@@ -17,7 +17,8 @@ against the answer key, and the tests that hold each one are named.
 | Person-level deletion | deleted people with data left: 23 → **11** of 500; records of people who never asked, removed: 69 → **50** |
 | Golden person (dbt) | current address right for 90.6% of people, against a ceiling of 91.8% (the rest moved and no source saw it); work and personal identities linked 98.9% right |
 | Home-buyer model | AUC 0.659 and 2.3x lift in the top decile on a later, untouched period; the best possible is 0.806; a leaky version scoring 0.838 is caught because it beats the best possible |
-| Tests | 95 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Operations agent | answers from the team's docs with a citation on every claim (16 of 24 right, the right section in the top 3 for 21 of 24) and refuses the 8 questions the docs cannot answer; reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
+| Tests | 132 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 | Phase | What | Status |
 | --- | --- | --- |
@@ -25,7 +26,7 @@ against the answer key, and the tests that hold each one are named.
 | 1 | Module A: ingestion, including the store API connector | Done |
 | 2 | Module B: identity resolution, person-level deletion, data products (dbt) | Done |
 | 3 | Module C: home-buyer model with point-in-time features and publishing guardrails | Done |
-| 4 | Modules D and E: agents | Planned |
+| 4 | Module E: operations agent (knowledge with sources, read-only tools, approvals, audit, Slack) | Done |
 
 ## Receipts
 
@@ -244,6 +245,79 @@ The model and its card are written to `data/models/home_buyer/<version>/`; the v
 the training data and configuration, and two runs from scratch produced the same one.
 [The model card](docs/model_card_home_buyer.md) has the details.
 
+## Operations agent (Module E)
+
+`src/plumbline/agents/` is the agent the team that runs Plumbline talks to, in Slack or from the
+command line. It answers from the team's own documents, reads live state through read-only tools,
+and changes nothing on its own: a write is a proposal until a second person with the right role
+approves it. Every question, tool call, proposal and decision is in an audit log.
+
+```text
+message ─▶ route to a skill ─┬─ question about how or why ─▶ docs (BM25) ─▶ cited answer, or "not in our documents"
+                             ├─ read tool ─▶ warehouse opened read-only ─▶ answer, with the runbook to follow
+                             └─ write tool ─▶ proposal ─▶ second person with the role approves ─▶ runs once ─▶ audit
+```
+
+| Skill | Owner | Tools | What it does |
+| --- | --- | --- | --- |
+| `knowledge_qa` | data-platform | none | Answers from README, runbooks, model and data cards; cites every claim; refuses when they are silent |
+| `pipeline_status` | data-platform | `ingest_status`, `data_products_status`, `model_status` | "Did last night's load reject anything?", "Is the model published?" |
+| `privacy_review` | privacy | `deletion_review_queue`, `resolve_deletion_review` | Lists open deletion-review cases; proposes closing one |
+| `docs_freshness` | docs | `check_doc_claims`, `update_doc` | Checks documented facts against the warehouse; proposes the exact edit |
+
+Each skill is one YAML file in `skills/` with an owner, the tools it may use and its eval. A skill
+that names an unknown tool, has no owner, or no eval file is refused at load.
+
+**Measured** (`python -m plumbline.agents eval`):
+
+| | Result |
+| --- | --- |
+| Right section in the top 3 results | 21 of 24 answerable questions |
+| Answered right, with the right source | 8 of 12 (dev half), **8 of 12 (test half)**; the refusal threshold was chosen on the dev half only |
+| Refused when the documents have no answer | **8 of 8** (HR, office and on-call questions the documents do not cover) |
+| Routed to the right skill and tool | 26 of 26 |
+
+These numbers are for the offline mode, which quotes the best-matching bullets and table rows with
+their source. What it misses: different words for the same thing ("runs the whole pipeline" vs "every
+stage in order"), answers split across two sections, and a plausible but wrong section ranked first.
+A language model reading the retrieved passages is what closes those; it is optional
+(`PLUMBLINE_LLM_MODEL`, `PLUMBLINE_LLM_API_KEY`, any OpenAI-compatible endpoint) and its answers are
+checked before anyone sees them: every sentence must cite a passage it was given, or the quoted
+answer is shown instead. Its accuracy is not reported here because it was not measured without a key.
+
+**What the evals changed.** Coverage first ignored words the documents never use, so an HR question
+looked fully covered by any passage that shared one ordinary word with it; unseen words now count
+against it. (The documents never quote the eval's questions: a first draft of this section did, the
+agent then found them here, and refusals fell from 8 of 8 to 6 of 8.) Quoting single sentences missed answers that share no words with the question (a runbook
+bullet states the symptom, then the remedy): the unit is now the whole bullet, and a table row is
+quoted with its header. Answer accuracy went from 8 to 17 of 24, with the held-out half rising too.
+Adding this section to the README (which the agent also searches) then cost one answer and one
+retrieval: more text competes for the top spot. The table above is measured on the final documents.
+
+**Guardrails, each held by a test, each checked by breaking it on purpose (6 of 6 caught):**
+
+- a write runs only after approval by someone with the tool's role who is not the person who asked;
+  approving twice does nothing the second time
+- read tools open the warehouse read-only; a bug in one cannot change data
+- tool output carries no names, emails or phones, and the audit log keeps arguments as hashes
+- Slack requests must carry a valid signature less than five minutes old (forged and replayed
+  requests get 401); a retried event or a double click runs once; bot messages are ignored
+- a document edit refuses if the passage changed since it was proposed, and only Markdown files
+  inside the repository can be edited
+- model and Slack credentials come from the environment and never appear in a log or repr
+
+**It found a real problem.** The docs freshness check found that runbook section 3 still said deletion
+was exact-match only, written before person-level deletion existed. The agent proposed the edit, the
+person who asked could not approve it, a second person with the docs role did, and it ran once. The
+nightly Dagster run now carries `docs_match_the_warehouse`, which warns when a documented fact drifts.
+
+Building it also found a pipeline bug: each nightly run appended the same deletion-review cases
+again (7, 14, 21 rows for 7 persons). Cases are now queued once; a test plants a case and reruns.
+
+Adoption and cost: `python -m plumbline.agents usage` reports requests, refusals, people, latency,
+model tokens and cost per skill, decision times for proposals, and skills nobody used.
+Setting up Slack, secrets and roles: [the agent runbook](docs/runbooks/agent.md).
+
 ## How ingestion works
 
 Each source is one YAML contract in `sources/`: its files, key, column types and which columns
@@ -279,6 +353,8 @@ export CENSUS_API_KEY=...                                # free: api.census.gov/
 python scripts/fetch_reference.py --out data/reference  # once; needs internet; safe to rerun
 python -m plumbline.synth.cli --ref data/reference --out data/synth --n-people 100000 --seed 7
 python -m plumbline --score                              # every stage in order, with accuracy receipts
+python -m plumbline.agents ask "did last night's load reject anything?"
+python -m plumbline.agents eval                          # knowledge, routing (and the model, if configured)
 dagster dev -m plumbline.ingest.orchestration            # optional: the same pipeline, with checks, in a UI
 ```
 

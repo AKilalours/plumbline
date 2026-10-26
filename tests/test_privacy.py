@@ -135,3 +135,22 @@ def test_same_name_same_address_different_birthday_is_not_deleted():
     s = expand_deletions(con, CONTRACTS)
     left = {r for (r,) in con.execute("SELECT record_id FROM identity_map").fetchall()}
     assert left == {"VDAD"} and s["persons_deleted"] == 1, (left, s)
+
+
+def test_rerunning_does_not_queue_the_same_review_case_twice(copy):
+    """Regression: each nightly run appended the same review cases again (7, 14, 21 rows for the
+    same 7 persons), so the queue reviewers worked from never shrank. The case is planted: a deleted
+    row that matches one current person on name and zip only, which must go to review, once."""
+    _, wh = copy
+    with duckdb.connect(str(wh)) as con:
+        f, l, z = con.execute("""SELECT first_name, last_name, zip FROM identity_records
+                                 WHERE first_name IS NOT NULL AND last_name IS NOT NULL AND zip IS NOT NULL
+                                 ORDER BY unique_id LIMIT 1""").fetchone()
+        key = tombstones.keys_from_parts(f, l, None, None, z, None)
+        assert len(key) == 1 and key[0].startswith("fz:")
+        con.execute("INSERT INTO deletion_tombstones VALUES ('planted', ?, 'test', 'R9999999', 'strong', now())", key)
+        q = "SELECT count(*), count(DISTINCT (tombstone_id, person_key, reason)) FROM deletion_review WHERE tombstone_id = 'planted'"
+        for _ in range(3):
+            expand_deletions(con, CONTRACTS)
+        n, distinct = con.execute(q).fetchone()
+    assert n == distinct >= 1, (n, distinct)

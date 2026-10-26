@@ -1,0 +1,5 @@
+name: knowledge_qa
+owner: data-platform
+description: Answers questions from the team's documents, citing the section each answer comes from.
+tools: []
+eval: evals/knowledge.yaml

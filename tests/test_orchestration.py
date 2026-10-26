@@ -7,7 +7,9 @@ import pytest
 
 dg = pytest.importorskip("dagster")
 
-from plumbline.ingest.orchestration import PlumblineConfig, _violations, checks, data_products, defs, home_buyer_scores, person_level_deletion, persons, warehouse  # noqa: E402
+from plumbline.ingest.orchestration import (PlumblineConfig, _violations, checks, data_products, defs,  # noqa: E402
+                                              docs_match_the_warehouse, home_buyer_scores, person_level_deletion,
+                                              persons, warehouse)
 from plumbline.synth.config import SynthConfig  # noqa: E402
 from plumbline.synth.generate import generate  # noqa: E402
 from plumbline.synth.reference import load_reference  # noqa: E402
@@ -23,15 +25,16 @@ def test_materialize_runs_checks_and_they_pass(tmp_path):
     run = tmp_path / "run"
     generate(load_reference(ROOT / "tests/fixtures/reference"), SynthConfig(seed=4, n_people=800), run)
     cfg = PlumblineConfig(run_dir=str(run), warehouse=str(tmp_path / "wh.duckdb"), contracts_dir=str(ROOT / "sources"),
-                          reference_dir=str(ROOT / "tests/fixtures/reference"), models_dir=str(tmp_path / "models"))
+                          reference_dir=str(ROOT / "tests/fixtures/reference"), models_dir=str(tmp_path / "models"),
+                          repo_dir=str(ROOT))
     # the model asset needs a world large enough to train on; test_ml covers it, this covers wiring
-    result = dg.materialize([warehouse, persons, person_level_deletion, data_products, *checks],
+    result = dg.materialize([warehouse, persons, person_level_deletion, data_products, *checks, docs_match_the_warehouse],
                             resources={"plumbline": cfg})
     job = defs.resolve_job_def("ingest_job")
     assert "home_buyer_scores" in {n.name for n in job.graph.node_defs}
     assert result.success
     evals = result.get_asset_check_evaluations()
-    assert len(evals) == 4 and all(e.passed for e in evals)
+    assert len(evals) == 5 and all(e.passed for e in evals), [(e.check_name, e.metadata) for e in evals if not e.passed]
     mat = result.asset_materializations_for_node("warehouse")[0]
     assert mat.metadata["deliveries_loaded"].value == 29
 

@@ -1,0 +1,16 @@
+name: pipeline_status
+owner: data-platform
+description: Live state of the pipeline, read-only - loads, rejected files, quarantine, data products, model.
+tools: [ingest_status, data_products_status, model_status]
+eval: evals/routing.yaml
+intents:
+  - tool: model_status
+    when: ['\b(model|scores?|home.?buyer|published|drift)\b.*\b(status|published|run|today|latest|ok|healthy|fail\w*)\b',
+           '\b(is|was|did)\b.*\b(model|scores?)\b.*\b(publish\w*|fail\w*|ok)\b']
+  - tool: data_products_status
+    when: ['\b(how many|count|size)\b.*\b(person|persons|people|households?|audience|contactable)\b',
+           '\b(data products?|golden person|audience)\b.*\b(status|size|built|ok)\b']
+  - tool: ingest_status
+    when: ['\b(reject\w*|quarantin\w*|violations?)\b.*\b(today|now|last night|yesterday|currently|any|latest)\b',
+           '\b(did|has|is)\b.*\b(load|ingest\w*|delivery|deliveries|feed)\b',
+           '\b(load|ingest\w*|pipeline)\b.*\b(status|ok|healthy|broken|fail\w*)\b']

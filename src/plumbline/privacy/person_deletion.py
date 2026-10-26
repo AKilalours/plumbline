@@ -89,56 +89,81 @@ def expand_deletions(con, contracts) -> dict:
 
     con.execute("BEGIN")
     try:
-        if len(review):
-            con.executemany("INSERT INTO deletion_review VALUES (?, ?, 'tombstone_matches_several_persons', now())",
-                            review[["tombstone_id", "person_key"]].values.tolist())
-        if len(maybe):
-            con.executemany("INSERT INTO deletion_review VALUES (?, ?, 'one_key_matches', now())",
-                            maybe[["tombstone_id", "person_key"]].values.tolist())
-        targets = con.execute("SELECT source, record_id FROM identity_map WHERE list_contains(?, person_key)",
-                              [sorted(persons)]).df() if persons else pd.DataFrame(columns=["source", "record_id"])
-        removed, new_suppression = {}, 0
-        for src, cname in MAP_SOURCE.items():
-            c = contracts[cname]
-            table, key = c.table, c.key[0]
-            ids = targets.loc[targets.source == src, "record_id"].tolist()
-            if not ids:
-                continue
-            con.register("ids", pd.DataFrame({"id": ids}))
-            email_c = next((n for n, col in c.columns.items() if col.privacy == "email"), None)
-            phone_c = next((n for n, col in c.columns.items() if col.privacy == "phone"), None)
-            sel = ", ".join(x for x in (email_c, phone_c) if x) or "NULL"
-            ident = con.execute(f"SELECT {sel} FROM {table} WHERE {key} IN (SELECT id FROM ids)").df()
-            for _, r in ident.iterrows():
-                e = r.get(email_c) if email_c else None
-                p = r.get(phone_c) if phone_c else None
-                eh = email_hash(e) if isinstance(e, str) and e else None
-                ph = phone_hash(p) if isinstance(p, str) and p else None
-                if (eh or ph) and not con.execute(
-                        "SELECT 1 FROM suppression WHERE email_sha256 IS NOT DISTINCT FROM ? AND phone_sha256 IS NOT DISTINCT FROM ?",
-                        [eh, ph]).fetchone():
-                    con.execute("INSERT INTO suppression VALUES (?, ?, ?, current_date, 'person_level')",
-                                ["PL" + hashlib.sha256(f"{eh}|{ph}".encode()).hexdigest()[:24], eh, ph])
-                    new_suppression += 1
-            idc = c.identity_cols
-            if idc:
-                gone = con.execute(f"SELECT {', '.join(idc.values())} FROM {table} WHERE {key} IN (SELECT id FROM ids)").df().astype(object)
-                tombstones.record(con, [(r, None, "strong") for r in gone.where(gone.notna(), None).to_dict("records")],
-                                  idc, f"person_level:{src}")
-            n = con.execute(f"SELECT count(*) FROM {table} WHERE {key} IN (SELECT id FROM ids)").fetchone()[0]
-            con.execute(f"DELETE FROM {table} WHERE {key} IN (SELECT id FROM ids)")
-            con.unregister("ids")
-            removed[src] = n
-            con.execute("INSERT INTO suppression_log VALUES (?, 'person_level', 'purged', ?, now())", [src, n])
-        q = con.execute(f"DELETE FROM quarantine WHERE {QUARANTINE_ERASE} RETURNING 1").fetchall()
-        if persons:
-            con.execute("DELETE FROM identity_map WHERE list_contains(?, person_key)", [sorted(persons)])
-            con.execute("DELETE FROM identity_records WHERE list_contains(?, person_key)", [sorted(persons)])
+        # Queue each case once. Without the NOT EXISTS, every nightly run appended the same cases
+        # again (7, 14, 21 rows for the same 7 persons), and reviewers saw a queue that never shrank.
+        for df, reason in ((review, "tombstone_matches_several_persons"), (maybe, "one_key_matches")):
+            for t, pk in df[["tombstone_id", "person_key"]].values.tolist():
+                con.execute("""INSERT INTO deletion_review SELECT ?, ?, ?, now()
+                               WHERE NOT EXISTS (SELECT 1 FROM deletion_review
+                                                 WHERE tombstone_id = ? AND person_key = ? AND reason = ?)""",
+                            [t, pk, reason, t, pk, reason])
+        removed, new_suppression, q = _delete_persons(con, contracts, persons)
         con.execute("COMMIT")
     except Exception:
         con.execute("ROLLBACK")
         raise
-    return {"persons_deleted": len(persons), "rows_removed": removed, "quarantine_rows_removed": len(q),
+    return {"persons_deleted": len(persons), "rows_removed": removed, "quarantine_rows_removed": q,
             "suppression_entries_added": new_suppression, "held_for_review": len(ambiguous) + len(maybe),
             "weak_tombstones_not_used": len(unusable)}
 
+
+
+def _delete_persons(con, contracts, persons: set[str]) -> tuple[dict, int, int]:
+    """Delete every record of the given persons, inside the caller's transaction: storage, quarantine
+    and the identity tables; their emails and phones join suppression and their rows leave tombstones,
+    so a replay cannot bring them back. Shared by the automatic step and by approved review decisions."""
+    targets = con.execute("SELECT source, record_id FROM identity_map WHERE list_contains(?, person_key)",
+                          [sorted(persons)]).df() if persons else pd.DataFrame(columns=["source", "record_id"])
+    removed, new_suppression = {}, 0
+    for src, cname in MAP_SOURCE.items():
+        c = contracts[cname]
+        table, key = c.table, c.key[0]
+        ids = targets.loc[targets.source == src, "record_id"].tolist()
+        if not ids:
+            continue
+        con.register("ids", pd.DataFrame({"id": ids}))
+        email_c = next((n for n, col in c.columns.items() if col.privacy == "email"), None)
+        phone_c = next((n for n, col in c.columns.items() if col.privacy == "phone"), None)
+        sel = ", ".join(x for x in (email_c, phone_c) if x) or "NULL"
+        ident = con.execute(f"SELECT {sel} FROM {table} WHERE {key} IN (SELECT id FROM ids)").df()
+        for _, r in ident.iterrows():
+            e = r.get(email_c) if email_c else None
+            p = r.get(phone_c) if phone_c else None
+            eh = email_hash(e) if isinstance(e, str) and e else None
+            ph = phone_hash(p) if isinstance(p, str) and p else None
+            if (eh or ph) and not con.execute(
+                    "SELECT 1 FROM suppression WHERE email_sha256 IS NOT DISTINCT FROM ? AND phone_sha256 IS NOT DISTINCT FROM ?",
+                    [eh, ph]).fetchone():
+                con.execute("INSERT INTO suppression VALUES (?, ?, ?, current_date, 'person_level')",
+                            ["PL" + hashlib.sha256(f"{eh}|{ph}".encode()).hexdigest()[:24], eh, ph])
+                new_suppression += 1
+        idc = c.identity_cols
+        if idc:
+            gone = con.execute(f"SELECT {', '.join(idc.values())} FROM {table} WHERE {key} IN (SELECT id FROM ids)").df().astype(object)
+            tombstones.record(con, [(r, None, "strong") for r in gone.where(gone.notna(), None).to_dict("records")],
+                              idc, f"person_level:{src}")
+        n = con.execute(f"SELECT count(*) FROM {table} WHERE {key} IN (SELECT id FROM ids)").fetchone()[0]
+        con.execute(f"DELETE FROM {table} WHERE {key} IN (SELECT id FROM ids)")
+        con.unregister("ids")
+        removed[src] = n
+        con.execute("INSERT INTO suppression_log VALUES (?, 'person_level', 'purged', ?, now())", [src, n])
+    q = con.execute(f"DELETE FROM quarantine WHERE {QUARANTINE_ERASE} RETURNING 1").fetchall()
+    if persons:
+        con.execute("DELETE FROM identity_map WHERE list_contains(?, person_key)", [sorted(persons)])
+        con.execute("DELETE FROM identity_records WHERE list_contains(?, person_key)", [sorted(persons)])
+    return removed, new_suppression, len(q)
+
+
+def delete_persons(con, contracts, person_keys: list[str], reason: str) -> dict:
+    """Delete whole persons in one transaction (used by an approved deletion-review decision)."""
+    con.execute("BEGIN")
+    try:
+        removed, sup, q = _delete_persons(con, contracts, set(person_keys))
+        con.execute("INSERT INTO suppression_log VALUES ('review', ?, 'person_level_approved', ?, now())",
+                    [reason, sum(removed.values())])
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    return {"persons_deleted": len(person_keys), "rows_removed": removed, "suppression_entries_added": sup,
+            "quarantine_rows_removed": q}

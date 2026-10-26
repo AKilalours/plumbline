@@ -39,9 +39,20 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 
 ## Internal AI systems
 
-| The work | Status |
-| --- | --- |
-| Agents with sources, approvals before writes, audit trails | Phase 4, not started |
+| The work | Where | Evidence |
+| --- | --- | --- |
+| A knowledge agent that answers with sources and that people trust | `agents/knowledge.py`, `agents/answer.py` | cites every claim; refuses 8 of 8 unanswerable questions; 8 of 12 right on the held-out half |
+| A human approval before any agent writes to a system of record | `agents/approvals.py` | second person with the role; runs once; `test_a_write_needs_a_second_person_with_the_role` |
+| Audit trails that double as compliance evidence | `agents/audit.py` | every step logged, arguments hashed |
+| Skill library: owner, eval, permissions per skill | `skills/*.yaml`, `agents/skills.py` | bad skills refused at load |
+| Own the source of truth; the agent proposes the fix, a person approves | `docs/claims.yaml`, `docs_freshness` skill | found and fixed a stale runbook passage |
+| Webhooks and their failure modes | `agents/slack.py` | signature, replay window, retry and double-click dedupe, bot loops |
+| Measure adoption and cost; retire what nobody opens | `agents/usage.py` | per skill: requests, refusals, people, tokens, cost; unused skills |
+| Runbooks people follow | `docs/runbooks/agent.md` | |
+
+Not built: the back-office workflows the role automates (onboarding, access provisioning, security
+questionnaires, renewals). The agent runs over this project's own operations instead, and the
+mechanisms are the same ones those workflows need.
 
 ## Not covered, by choice so far
 

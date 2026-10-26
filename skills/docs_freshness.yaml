@@ -1,0 +1,11 @@
+name: docs_freshness
+owner: docs
+description: Checks documented numbers and statements against the warehouse; proposes fixes the docs owner approves.
+tools: [check_doc_claims, update_doc]
+eval: evals/routing.yaml
+intents:
+  - tool: update_doc
+    when: ['\b(fix|update|correct)\b.*\b(stale|out.of.date|outdated)\b.*\bdocs?\b', '\b(fix|update|correct)\b.*\bdocs?\b.*\b(stale|out.of.date|outdated)\b',
+           '\bfix (the )?stale\b']
+  - tool: check_doc_claims
+    when: ['\b(stale|out.of.date|outdated)\b', '\bdocs? (still )?(true|correct|current|accurate)\b']

@@ -1,0 +1,6 @@
+# Who may approve which write. Copy to ops/roles.yaml (gitignored) and use real Slack user ids.
+# A person can never approve their own request, whatever roles they hold.
+users:
+  U0OPS0001: [data-platform, docs]
+  U0PRIV001: [privacy]
+  U0PRIV002: [privacy, docs]

@@ -1,0 +1,27 @@
+# Sentences in the documents that the warehouse can confirm or contradict. The docs_freshness skill
+# checks them; a contradicted one becomes a proposed edit that the docs owner must approve.
+#   run:      optional; the claim is only checked against this synthetic run
+#   number:   regex whose first group is a number in the text; sql returns what it should be
+#   true_if:  sql returning true while the text is still correct; replacement is the text to use when
+#             it is not, and replacement_true_if keeps checking the replacement once it is in place
+claims:
+  - id: review_queue_baseline
+    run: seed7_n100000              # a fact about this run only; skipped when checking any other
+    doc: docs/runbooks/ingestion.md
+    text: "Seed 7 baseline: 7 persons queued, 1 of them a real leftover."
+    number: "(\\d+) persons queued"
+    sql: "SELECT count(DISTINCT person_key) FROM deletion_review WHERE reason = 'one_key_matches'"
+  - id: deletion_is_exact_match_only
+    doc: docs/runbooks/ingestion.md
+    text: |-
+      Known limit: matching is on exact email and phone. A record with a typo in its email and no phone is
+      not caught (8 of 500 deleted people on the seed-7 run). Phase 2 identity matching closes this.
+    # true while person-level deletion does not exist; checking whether it deleted anyone was wrong:
+    # in a world where nobody needed it, the stale sentence looked true
+    true_if: "SELECT count(*) = 0 FROM information_schema.tables WHERE table_name = 'deletion_tombstones'"
+    replacement: |-
+      Exact email and phone matching is only the first pass. After identity resolution, person-level
+      deletion also removes the person's other records (tombstones plus the identity graph), and cases
+      with too little evidence go to the review queue (section 6). Seed 7: 23 of 500 deleted people had
+      data left after the first pass, 11 after person-level deletion.
+    replacement_true_if: "SELECT count(*) > 0 FROM information_schema.tables WHERE table_name = 'deletion_tombstones'"

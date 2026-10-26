@@ -19,6 +19,9 @@ from .skills import load as load_skills, route
 from .tools import TOOLS
 
 APPROVE = re.compile(r"^\s*(approve|reject)\s+(P[0-9a-f]{10})\s*$", re.I)
+# Anything else that starts with approve or reject is a decision with a bad id, never a question
+# for the docs: answering it from the runbook leaves the person thinking they approved something.
+LOOKS_LIKE_A_DECISION = re.compile(r"^\s*(approve|reject)\b", re.I)
 
 
 @dataclass
@@ -94,6 +97,11 @@ def handle(ctx: Context, user: str, text: str, channel: str = "cli") -> Reply:
         except ValueError as e:
             return Reply(f"Not done: {e}.", "approvals", refused=True)
         return Reply(_fmt_decision(r), "approvals", proposals=[pid])
+    if LOOKS_LIKE_A_DECISION.match(text):
+        audit.log(con, actor=user, channel=channel, skill="approvals", action="decide", outcome="bad_id")
+        return Reply("Not done: that is not a proposal id. Proposal ids look like P followed by 10 characters, "
+                     "for example `approve P1a2b3c4d5e`; the proposal message shows the exact one. Nothing changed.",
+                     "approvals", refused=True)
 
     skill, intent, args = route(ctx.skills, text)
     if intent is None:

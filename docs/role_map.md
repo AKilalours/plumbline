@@ -36,7 +36,7 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | Home buyer model | `src/plumbline/ml/` | AUC 0.659 vs ceiling 0.806 on an untouched later period; enrichment worth +0.05, an on-time vendor feed +0.08 |
 | Feature pipelines that are reliable in production | snapshots by `as_of`, leak guards, window rule | three leaks found and turned into tests |
 | Validations so agents can act without a human in the loop | `ml/guardrails.py`, `ml.model_runs` | scores published only if every check passes; out-of-population people not scored |
-| Income estimates where the vendor has nothing | `ml/income.py`, `ml.income_estimates` | within one band 83.0% vs 79.2% for ZIP income alone, on people the vendor never covered; vendor columns never features; households kept whole across the split |
+| Income estimates where the vendor has nothing | `ml/income.py`, `ml.income_estimates` | within one band 83% vs 79.2% for ZIP income alone, on people the vendor never covered; vendor columns never features; households kept whole across the split |
 | Home seller model, and knowing when not to ship | `ml/seller.py`, `ml.model_runs_seller` | assessed and refused: validation AUC 0.47, ceiling 0.56; stale scores dropped |
 
 ## Internal AI systems

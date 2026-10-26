@@ -171,3 +171,20 @@ def test_every_skill_states_what_its_baseline_measures():
     for p in (ROOT / "skills").glob("*.yaml"):
         d = yaml.safe_load(p.read_text())
         assert d.get("baseline_minutes") and d.get("baseline_note"), p.name
+
+
+def test_a_decision_with_a_bad_id_is_refused_not_answered_from_the_docs(ctx):
+    """Regression: `approve P<id from above>` was routed to the docs and answered with the runbook's
+    approval bullets, which reads like it worked."""
+    pid = _pid(handle(ctx, "U0OPS0001", "give U0NEW0001 the privacy role"))
+    r = handle(ctx, "U0ADM0001", "approve P<id from above>")
+    assert r.refused and r.skill == "approvals" and "not a proposal id" in r.text and not r.sources
+    status = ctx.agent_con.execute("SELECT status FROM ops.proposals WHERE id = ?", [pid]).fetchone()[0]
+    assert status == "pending"
+
+
+def test_the_usage_report_is_valid_json_with_pending_proposals(ctx):
+    """Regression: a proposal nobody has decided gave a median of NaN, printed as NaN, which is not JSON."""
+    import json
+    handle(ctx, "U0OPS0001", "give U0NEW0001 the privacy role")
+    json.dumps(usage.report(ctx.agent_con, ctx.skills), allow_nan=False, default=str)

@@ -2,7 +2,14 @@
 refused, how long approvals take, what the model costs, and which skills nobody opens."""
 from __future__ import annotations
 
+import math
 from datetime import timedelta
+
+
+def _clean(rows: list[dict]) -> list[dict]:
+    """NaN (a median over no rows) becomes None: json.dumps would otherwise write NaN, which is not
+    JSON, and anything reading the report would fail on it."""
+    return [{k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in r.items()} for r in rows]
 
 
 def report(con, skills: dict, days: int = 30) -> dict:
@@ -34,9 +41,9 @@ def report(con, skills: dict, days: int = 30) -> dict:
         if mins:
             hours.append({"skill": skill, "successful_uses": int(n), "baseline_minutes": mins,
                           "hours_retired": round(n * mins / 60, 2), "baseline": getattr(s, "baseline_note", "")})
-    return {"days": days, "by_skill": per_skill.to_dict("records"),
+    return {"days": days, "by_skill": _clean(per_skill.to_dict("records")),
             "hours_retired": {"total": round(sum(h["hours_retired"] for h in hours), 2), "by_skill": hours,
                               "note": "successful uses are measured; minutes per use are each skill owner's baseline"},
-            "proposals": props.to_dict("records"),
+            "proposals": _clean(props.to_dict("records")),
             "unused_skills": sorted(set(skills) - used),
             "people": int(con.execute(f"SELECT count(DISTINCT actor) FROM ops.audit WHERE logged_at >= {since}").fetchone()[0])}

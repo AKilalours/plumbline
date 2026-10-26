@@ -17,11 +17,11 @@ against the answer key, and the tests that hold each one are named.
 | Person-level deletion | deleted people with data left: 23 → **11** of 500; records of people who never asked, removed: 69 → **50** |
 | Golden person (dbt) | current address right for 90.6% of people, against a ceiling of 91.8% (the rest moved and no source saw it); work and personal identities linked 98.9% right |
 | Home-buyer model | AUC 0.659 and 2.3x lift in the top decile on a later, untouched period; the best possible is 0.806; a leaky version scoring 0.838 is caught because it beats the best possible |
-| Income estimate | for people the vendor never covered: within one band of the true income 83.0% of the time, against 79.2% for ZIP income alone; the vendor's own band, where it exists, gets 94.6% |
+| Income estimate | for people the vendor never covered: within one band of the true income 83% of the time (82.9% on a laptop, 83.0% in the cloud), against 79.2% for ZIP income alone; the vendor's own band, where it exists, gets 94.6% |
 | Home-seller model | **not published**: validation AUC 0.47, and even the rule that generated the data reaches only 0.56; the guardrails refused it, as they should |
 | Operations agent | answers from the team's docs with a citation on every claim (16 of 24 right, the right section in the top 3 for 21 of 24) and refuses the 8 questions the docs cannot answer; reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 156 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 158 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 | Phase | What | Status |
 | --- | --- | --- |
@@ -205,12 +205,13 @@ On 2025-06-30 (30,145 people, 655 bought within 180 days):
 
 How to read it:
 
-- **Gradient-boosting numbers are ranges.** One fit is not reproducible across machines: it sums
-  histograms over CPU threads, so rounding differs with the thread count. On identical data (same
-  data fingerprint on both machines) one fit gave 0.7179 on a laptop and 0.7249 in the cloud; five
-  seeds range from 0.717 to 0.728. Gradient boosting is therefore always a 5-seed ensemble, and the
-  card records the spread. The ensemble narrowed the gap between the two machines from 0.007 to
-  0.0025 (0.7259 and 0.7284); it shrinks the wobble, it does not remove it. The model choice is safe from it: logistic regression wins on validation
+- **Gradient-boosting numbers are ranges.** One fit is not reproducible: it adds up floating-point
+  numbers in parallel, and the order of those additions is not fixed. On identical data (same data
+  fingerprint) one fit gave 0.7179 on a laptop and 0.7249 in the cloud, and two runs on the same
+  laptop gave different single-fit ranges (0.7188 to 0.7236, then 0.7178 to 0.7295). Gradient
+  boosting is therefore always a 5-seed ensemble, and the card records the spread. The ensemble has
+  stayed within 0.726 to 0.728 on every run so far (0.7259 and 0.7270 on the laptop, 0.7284 in the
+  cloud); it shrinks the wobble, it does not remove it. The model choice is safe from it: logistic regression wins on validation
   average precision by 0.0043, more than three times gradient boosting's own seed spread (0.0013).
   Logistic regression is deterministic and gives the same 0.6588 on every machine.
 
@@ -266,7 +267,7 @@ on one side of the split, so a person's partner cannot leak their income into th
 | --- | --- | --- | --- |
 | Majority band for everyone | | | undefined |
 | ZIP income alone | 79.2% | 0.91 | 0.46 |
-| **Plumbline estimate** | **83.0%** | **0.84** | **0.55** |
+| **Plumbline estimate** (5-seed gradient boosting) | **82.9 to 83.0%** | **0.84** | **0.55** |
 | For comparison: the vendor's band, where it exists | 94.6% | | |
 
 It is a modest gain, and the comparison row says why: what a brand sees about a person says little

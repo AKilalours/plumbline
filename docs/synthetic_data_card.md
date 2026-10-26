@@ -69,5 +69,7 @@ Every damaged field is recorded in `truth/damage_log`.
 - A shared household inbox (5% of non-head members) means a deletion request for that
   email hash also matches the other household member. Real systems face this too.
 - Moves and purchases are household-wide; only one move or purchase per household.
-- Generation held 1.2 GB at 300,000 people, so 1 million should need about 4 GB; that size is
-  not measured, and chunked generation is not built.
+- Generation held 1.2 GB at 300,000 people and 3.4 GB at 1,000,000 (with the store). Chunked
+  generation is not built.
+- At 1,000,000 people, 10 pairs share a name, a home and an inbox, and order from the store; nothing
+  the store sees tells them apart. Scoring charges the matcher for one of each pair.

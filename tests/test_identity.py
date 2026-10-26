@@ -170,3 +170,30 @@ def test_the_match_model_uses_the_narrow_typo_rule_and_no_wider_one():
     kinds = [type(lv).__name__ for lv in email._comparison_levels]
     assert "LevenshteinLevel" not in kinds and "JaroWinklerLevel" not in kinds
     assert [lv.sql_condition for lv in email._comparison_levels if type(lv).__name__ == "CustomLevel"] == [EMAIL_TYPO_SQL]
+
+
+def _people(tmp_path, rows):
+    (tmp_path / "truth").mkdir(exist_ok=True)
+    pd.DataFrame(rows, columns=["person_id", "household_id", "first_name", "last_name"]).to_parquet(
+        tmp_path / "truth" / "people.parquet")
+
+
+def test_a_store_profile_two_identical_people_share_is_scored_not_a_crash(tmp_path):
+    """Regression: scoring asserted every store profile is one person. At 1,000,000 people, 10 profiles
+    belong to two people who share a name, a home and an inbox (two Bryan Daltons, one address), and
+    the 1M scale run crashed. They cannot be told apart, so the profile goes to its main buyer."""
+    from plumbline.identity.evaluate import profile_owners
+    _people(tmp_path, [("P1", "H1", "Bryan", "Dalton"), ("P2", "H1", "Bryan", "Dalton"), ("P3", "H2", "Amy", "Stewart")])
+    store = pd.DataFrame({"record_id": ["S1", "S1", "S1", "S2"], "person_id": ["P2", "P1", "P2", "P3"]})
+    owners = profile_owners(store, tmp_path)
+    assert owners.to_dict() == {"S1": "P2", "S2": "P3"}            # P2 placed two of the three orders
+
+
+@pytest.mark.parametrize("second", [("P2", "H1", "Brian", "Dalton"),     # another name: the key is wrong
+                                    ("P2", "H9", "Bryan", "Dalton")])    # another home: the key is wrong
+def test_a_store_profile_mixing_people_who_differ_still_fails(tmp_path, second):
+    from plumbline.identity.evaluate import profile_owners
+    _people(tmp_path, [("P1", "H1", "Bryan", "Dalton"), second])
+    store = pd.DataFrame({"record_id": ["S1", "S1"], "person_id": ["P1", "P2"]})
+    with pytest.raises(AssertionError, match="profile key is wrong"):
+        profile_owners(store, tmp_path)

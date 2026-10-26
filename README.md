@@ -22,7 +22,7 @@ against the answer key, and the tests that hold each one are named.
 | Income estimate | for people the vendor never covered: within one band of the true income 83% of the time, against 79.2% for ZIP income alone; the vendor's own band, where it exists, gets 94.7% |
 | Campaign experiment | a holdout test of a reactivation email: +1.31 points of 30-day buyers measured, +1.47 (95% CI +1.16 to +1.77) after correcting for orders nobody can attribute, and the answer key's true +1.61 falls inside only the corrected interval; an uplift model sends the next email to the 30% it changes most, for 38 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (best possible: 43) |
 | Home-seller model | **not published**: validation AUC 0.47, and even the rule that generated the data reaches only 0.56; the guardrails refused it, as they should |
-| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 18 of 24 right on the held-out half, the right section in the top 3 for 44 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
+| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 44 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
 | Tests | 188 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
@@ -104,6 +104,14 @@ showed it missing, because that would be tuning to the answer key.
    typo now has to be one edit, at the same provider, that changes a letter. Precision went to 99.4%
    at 100,000 and 99.3% at 300,000, recall unchanged; email-typo recall fell from 98.2% to 97.9%.
    Mixed-up clusters went from 556 to 144 at 100,000 and from 3,589 to 418 at 300,000.
+
+6. **Some people cannot be told apart at all.** Scoring asserted that every store profile (one email,
+   name and ship-to address) is one person. It held up to 300,000 people and crashed the 1,000,000
+   run: 10 of 280,271 profiles belong to two people with one name, one home and one inbox (two Bryan
+   Daltons at one address). No data the store has separates them, so the scorer now gives such a
+   profile to its main buyer and charges the matcher for the other, and reports the count. The guard
+   still fails if people who share a profile differ in name or household, which is what a wrong
+   profile key would look like.
 
 Remaining error class: family members (137 of the 144 mixed-up clusters are one household).
 
@@ -410,7 +418,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | | Result |
 | --- | --- |
 | Right section in the top 3 results | 44 of 49 answerable questions |
-| Answered right, with the right source | 18 of 25 (dev half), **18 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only |
+| Answered right, with the right source | 18 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only |
 | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
 | Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **17 of 20 (test half)** |
@@ -524,9 +532,15 @@ What the first scale run found, and what changed:
 3. **Memory is DuckDB's buffer cache more than the data.** Identity jumps to 2.4 GB already at
    20,000 people because DuckDB takes memory it is allowed to; it grows 30% from 20,000 to 300,000.
 
-Not measured: 1,000,000 people. From these numbers it should take under an hour on two cores; run it
-on a bigger machine with `python scripts/scale_run.py --n-people 1000000` and the result lands in
-`data/scale/n1000000.json`. Nothing here claims terabytes: everything runs on one machine.
+4. **1,000,000 people found a wrong assumption, not a slow stage.** On a 10-core laptop the run got
+   through identity resolution and crashed in scoring, on two people the store data cannot tell
+   apart (item 6 under identity). On the 2-core, 7 GB machine the same run is killed for memory
+   during the identity stage, so that machine's ceiling is between 300,000 and 1,000,000 people.
+   Generating the 1,000,000-person world and its store took 3.4 GB and 6 minutes.
+
+The full 1,000,000 numbers come from `python scripts/scale_run.py --n-people 1000000` on a machine
+with more memory and land in `data/scale/n1000000.json`. Nothing here claims terabytes: everything
+runs on one machine.
 
 ## How ingestion works
 

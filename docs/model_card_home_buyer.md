@@ -24,8 +24,9 @@ A model that never saw them cannot use them, so they are left out instead of imp
 
 AUC 0.659, average precision 0.038 (base rate 0.022), lift 2.3x in the top decile, Brier 0.0212.
 Ceiling from the generating rule: AUC 0.806, lift 4.4x. Census ZIP income alone: AUC 0.627.
-Without property and Census enrichment: AUC 0.610. With an on-time vendor feed (what-if, 5-seed gradient-boosting ensemble): AUC 0.728; single fits
-range 0.717 to 0.728, so read it as about 0.72 to 0.73, not to the third decimal.
+Without property and Census enrichment: AUC 0.610. With an on-time vendor feed (what-if, 5-seed gradient-boosting ensemble): AUC 0.726 on a laptop and
+0.728 in the cloud on identical data; single fits range 0.717 to 0.728. Read it as about 0.73, not to
+the third decimal.
 
 Most useful features (drop in average precision when shuffled): ZIP income, small building, average
 order value, building size.

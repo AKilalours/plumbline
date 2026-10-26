@@ -194,11 +194,19 @@ On 2025-06-30 (30,145 people, 655 bought within 180 days):
 | Census ZIP income alone | 0.63 | 2.0x |
 | **Plumbline model** (logistic regression, chosen on validation over gradient boosting) | **0.659** | **2.3x** |
 | Same model without property and Census enrichment | 0.610 | 1.8x |
-| What-if: plus an on-time vendor feed (age, renter, job change, income band as of each cutoff) | 0.735 | 3.0x |
+| What-if: plus an on-time vendor feed (age, renter, job change, income band as of each cutoff), 5-seed gradient-boosting ensemble | 0.728 | 2.8x |
 | Ceiling: the rule that generated the purchases | 0.806 | 4.4x |
 | Same model with vendor data pasted back from December | 0.838 | 4.0x |
 
 How to read it:
+
+- **Gradient-boosting numbers are ranges.** One fit is not reproducible across machines: it sums
+  histograms over CPU threads, so rounding differs with the thread count. On identical data (same
+  data fingerprint on both machines) one fit gave 0.7179 on a laptop and 0.7249 in the cloud; five
+  seeds range from 0.717 to 0.728. Gradient boosting is therefore always a 5-seed ensemble, and the
+  card records the spread. The model choice is safe from it: logistic regression wins on validation
+  average precision by 0.0043, more than three times gradient boosting's own seed spread (0.0013).
+  Logistic regression is deterministic and gives the same 0.6588 on every machine.
 
 - **The leak beats the ceiling, which is how you know it is a leak.** Vendor attributes delivered in
   November and December say who owns a home after buying it. Pasted onto earlier snapshots they score

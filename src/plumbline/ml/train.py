@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.inspection import permutation_importance
@@ -70,12 +71,58 @@ def check_not_above_ceiling(model_metrics: dict, ceiling: dict, tolerance: float
         raise LeakError(f"backtest AUC {model_metrics['auc']} beats the best possible {ceiling['auc']}: features see the future")
 
 
+SEEDS = (7, 11, 13, 17, 19)
+
+
+class SeedEnsemble(BaseEstimator, ClassifierMixin):
+    """Gradient boosting fitted once per seed, predictions averaged.
+
+    One gradient-boosting fit is not reproducible across machines: it sums histograms over CPU
+    threads, so rounding differs with the thread count and a near-tie split can go the other way.
+    Identical data gave a what-if AUC of 0.7179 on one machine and 0.7249 on another. Averaging
+    five seeds shrinks that wobble, and the spread between members measures what is left.
+    Logistic regression (lbfgs) is deterministic and needs none of this."""
+
+    def __init__(self, seeds=SEEDS, **params):
+        self.seeds = seeds
+        self.params = params
+
+    def get_params(self, deep=True):
+        return {"seeds": self.seeds, **self.params}
+
+    def set_params(self, **p):
+        self.seeds = p.pop("seeds", self.seeds)
+        self.params.update(p)
+        return self
+
+    def fit(self, X, y):
+        self.members_ = [HistGradientBoostingClassifier(random_state=s, **self.params).fit(X, y) for s in self.seeds]
+        self.classes_ = self.members_[0].classes_
+        return self
+
+    def predict_proba(self, X):
+        return np.mean([m.predict_proba(X) for m in self.members_], axis=0)
+
+    def predict(self, X):
+        return self.classes_[(self.predict_proba(X)[:, 1] >= 0.5).astype(int)]
+
+    def member_spread(self, X, y) -> dict:
+        """AUC and average precision of each member alone: how much one fit can move the number."""
+        aucs = [roc_auc_score(y, m.predict_proba(X)[:, 1]) for m in self.members_]
+        aps = [average_precision_score(y, m.predict_proba(X)[:, 1]) for m in self.members_]
+        return {"seeds": list(self.seeds), "member_auc_mean": round(float(np.mean(aucs)), 4),
+                "member_auc_std": round(float(np.std(aucs)), 4), "member_auc_min": round(float(np.min(aucs)), 4),
+                "member_auc_max": round(float(np.max(aucs)), 4),
+                "member_average_precision_mean": round(float(np.mean(aps)), 4),
+                "member_average_precision_std": round(float(np.std(aps)), 4)}
+
+
 def candidates() -> dict:
     return {
         "logistic": make_pipeline(SimpleImputer(strategy="median", add_indicator=True), StandardScaler(),
                                   LogisticRegression(C=1.0, max_iter=3000)),
-        "gradient_boosting": HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05, max_leaf_nodes=15,
-                                                            l2_regularization=1.0, min_samples_leaf=50, random_state=SEED),
+        "gradient_boosting": SeedEnsemble(max_iter=300, learning_rate=0.05, max_leaf_nodes=15,
+                                          l2_regularization=1.0, min_samples_leaf=50),
     }
 
 
@@ -143,6 +190,8 @@ def run(snaps: pd.DataFrame, owner: pd.Series, run_dir: str | Path) -> Result:
     for name, m in candidates().items():
         m.fit(X(tr_sel), tr_sel.label)
         sel[name] = metrics(part[SELECT_VAL].label, m.predict_proba(X(part[SELECT_VAL]))[:, 1])
+        if isinstance(m, SeedEnsemble):
+            sel[name]["seed_spread"] = m.member_spread(X(part[SELECT_VAL]), part[SELECT_VAL].label)
     chosen = max(sel, key=lambda k: sel[k]["average_precision"])
 
     # 2. refit on all training snapshots whose outcomes closed before the test date; report once
@@ -200,8 +249,9 @@ def run(snaps: pd.DataFrame, owner: pd.Series, run_dir: str | Path) -> Result:
     # gradient boosting here, not the chosen model: buying peaks in a middle age band, and a linear
     # model cannot draw that without being told where the band is
     me = candidates()["gradient_boosting"].fit(pd.concat([X(tr_e), tr_e[ecols[len(cols):]]], axis=1), tr_e.label)
-    what_if = {k: v for k, v in metrics(te_e.label, me.predict_proba(pd.concat([X(te_e), te_e[ecols[len(cols):]]], axis=1))[:, 1]).items()
-               if k != "calibration_by_decile"}
+    Xte_e = pd.concat([X(te_e), te_e[ecols[len(cols):]]], axis=1)
+    what_if = {k: v for k, v in metrics(te_e.label, me.predict_proba(Xte_e)[:, 1]).items() if k != "calibration_by_decile"}
+    what_if["seed_spread"] = me.member_spread(Xte_e, te_e.label)
 
     imp = permutation_importance(model, X(te), te.label, scoring="average_precision", n_repeats=3, random_state=SEED)
     importance = sorted(({"feature": c, "drop_in_average_precision": round(float(v), 5)}
@@ -232,7 +282,8 @@ def point_in_time_vendor(df: pd.DataFrame, run_dir: str | Path) -> pd.DataFrame:
 def save(result: Result, snaps: pd.DataFrame, out_dir: str | Path) -> dict:
     """Write the model and its card. The version is a hash of what went into it."""
     fp = hashlib.sha256(pd.util.hash_pandas_object(snaps.sort_values(["as_of", "person_key"]), index=False).values.tobytes()).hexdigest()[:12]
-    cfg = {"chosen": result.chosen, "columns": result.columns, "final_train": FINAL_TRAIN, "horizon_days": HORIZON_DAYS, "seed": SEED}
+    cfg = {"chosen": result.chosen, "columns": result.columns, "final_train": FINAL_TRAIN, "horizon_days": HORIZON_DAYS,
+           "seed": SEED, "ensemble_seeds": list(SEEDS)}
     version = "hb-" + hashlib.sha256((json.dumps(cfg, sort_keys=True) + fp).encode()).hexdigest()[:10]
     d = Path(out_dir) / version
     d.mkdir(parents=True, exist_ok=True)

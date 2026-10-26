@@ -32,5 +32,7 @@ def train_and_score(warehouse: str | Path, run_dir: str | Path, models_dir: str 
             "leaky_backtest_auc": r.leakage_demo["backtest_with_leak"]["auc"],
             "leak_caught": r.leakage_demo["caught_by_ceiling_check"],
             "on_time_vendor_feed_auc": r.ablations_test["with_an_on_time_vendor_feed_what_if"]["auc"],
+            "on_time_vendor_feed_single_fit_auc_range": [r.ablations_test["with_an_on_time_vendor_feed_what_if"]["seed_spread"]["member_auc_min"],
+                                                         r.ablations_test["with_an_on_time_vendor_feed_what_if"]["seed_spread"]["member_auc_max"]],
             "published": scored["published"], "scored": scored["scored"], "not_scored": scored["not_scored"],
             "max_input_drift_psi": scored["checks"]["input_drift_psi"]}

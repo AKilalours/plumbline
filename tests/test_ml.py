@@ -172,3 +172,29 @@ def test_a_failed_snapshot_leaves_the_live_products_untouched(world, tmp_path, m
         F.build_snapshots(wh, SELECT_TRAIN)
     with duckdb.connect(str(wh), read_only=True) as con:
         assert con.execute(q).fetchone() == before
+
+
+def test_gradient_boosting_is_a_seed_ensemble_that_repeats_exactly():
+    """One gradient-boosting fit moved a reported AUC by 0.01 between machines on identical data.
+    The ensemble averages its members, and two fits on the same data give the same scores."""
+    from plumbline.ml.train import SeedEnsemble
+    rng = np.random.default_rng(0)
+    X = pd.DataFrame(rng.normal(size=(3000, 4)), columns=list("abcd"))
+    y = (X.a + 0.5 * X.b + rng.normal(size=3000) > 1.2).astype(int)
+    e1 = SeedEnsemble(seeds=(1, 2, 3), max_iter=50).fit(X, y)
+    e2 = SeedEnsemble(seeds=(1, 2, 3), max_iter=50).fit(X, y)
+    p = e1.predict_proba(X)[:, 1]
+    assert np.array_equal(p, e2.predict_proba(X)[:, 1])
+    assert np.allclose(p, np.mean([m.predict_proba(X)[:, 1] for m in e1.members_], axis=0))
+    s = e1.member_spread(X, y)
+    assert s["member_auc_min"] <= s["member_auc_mean"] <= s["member_auc_max"] and s["seeds"] == [1, 2, 3]
+
+
+def test_every_gradient_boosting_number_reports_its_seed_spread(world):
+    """A gradient-boosting score is a range, not a point: the card must say how wide."""
+    _, wh, _ = world
+    with duckdb.connect(str(wh), read_only=True) as con:
+        card = __import__("json").loads(con.execute("SELECT card FROM ml.training_summary").fetchone()[0])
+    assert "seed_spread" in card["selection"]["results"]["gradient_boosting"]
+    assert "seed_spread" in card["test"]["ablations"]["with_an_on_time_vendor_feed_what_if"]
+    assert card["selection"]["results"]["logistic"].get("seed_spread") is None   # deterministic, no spread to report

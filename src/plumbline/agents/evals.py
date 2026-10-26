@@ -12,6 +12,10 @@ from .knowledge import Index
 
 def load(path: str | Path) -> list[dict]:
     items = yaml.safe_load(Path(path).read_text())["items"]
+    for it in items:   # YAML reads `off` as false and `[33,287]` as two numbers; a term must be text
+        bad = [t for t in it.get("terms", []) if not isinstance(t, str)]
+        if bad:
+            raise ValueError(f"{path}: quote the terms {bad} in {it['q']!r}")
     for i, it in enumerate(items):
         it["split"] = "dev" if i % 2 == 0 else "test"
     return items
@@ -23,8 +27,9 @@ def grade(it: dict, a) -> dict:
     if a.refused:
         return {"ok": False, "kind": "answerable", "why": "refused"}
     src_ok = any(s.startswith(e) for s in a.sources for e in it["source"])
-    text = a.text.lower()
-    missing = [t for t in it["terms"] if t.lower() not in text]
+    # whitespace collapsed on both sides: a right answer whose phrase wraps across a line still counts
+    text = " ".join(a.text.lower().split())
+    missing = [t for t in it["terms"] if " ".join(str(t).lower().split()) not in text]
     why = None if src_ok and not missing else ("wrong source" if not src_ok else f"missing {missing}")
     return {"ok": src_ok and not missing, "kind": "answerable", "why": why}
 

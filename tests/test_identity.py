@@ -144,3 +144,29 @@ def test_store_orders_without_their_answer_key_explain_the_fix(warehouse, tmp_pa
     (r / "store" / "record_links.parquet").unlink()
     with duckdb.connect(str(wh)) as con, pytest.raises(FileNotFoundError, match="plumbline.store build"):
         score_warehouse(con, r)
+
+
+@pytest.mark.parametrize("a,b,typo", [
+    ("john.smith@inbox.test", "jonn.smith@inbox.test", True),            # one letter changed
+    ("john.smith@inbox.test", "jhn.smith@inbox.test", True),             # one letter dropped
+    ("scott.williams@inbox.test", "scott_williams@inbox.test", False),   # namesakes: separator
+    ("ryan.green36@inbox.test", "ryan.green32@inbox.test", False),       # namesakes: digit
+    ("linda.evans@inbox.test", "linda.evans88@inbox.test", False),       # namesakes: two digits
+    ("john.smith@inbox.test", "john.smith@inbox.tesx", False),           # another provider
+])
+def test_only_a_letter_typo_counts_as_a_mistyped_email(a, b, typo):
+    """Regression: "within 2 edits" joined namesakes, whose addresses are built from their names,
+    and precision fell from 97.4% to 93.5% as the world grew from 100,000 to 300,000 people."""
+    import duckdb
+    from plumbline.identity.match import EMAIL_TYPO_SQL
+    with duckdb.connect() as con:
+        got = con.execute(f"SELECT {EMAIL_TYPO_SQL} FROM (SELECT ? AS email_l, ? AS email_r)", [a, b]).fetchone()[0]
+    assert got is typo
+
+
+def test_the_match_model_uses_the_narrow_typo_rule_and_no_wider_one():
+    from plumbline.identity.match import EMAIL_TYPO_SQL, settings
+    email = next(c for c in settings().comparisons if getattr(c, "_output_column_name", None) == "email")
+    kinds = [type(lv).__name__ for lv in email._comparison_levels]
+    assert "LevenshteinLevel" not in kinds and "JaroWinklerLevel" not in kinds
+    assert [lv.sql_condition for lv in email._comparison_levels if type(lv).__name__ == "CustomLevel"] == [EMAIL_TYPO_SQL]

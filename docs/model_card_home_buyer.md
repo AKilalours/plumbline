@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | Predicts | the person's household buys a home within 180 days of the scoring date |
-| Algorithm | logistic regression with median imputation and missing-value indicators (chosen over a 5-seed gradient-boosting ensemble on validation: average precision 0.0302 vs 0.0259, a margin over three times gradient boosting's seed spread of 0.0013) |
+| Algorithm | logistic regression with median imputation and missing-value indicators (chosen over a 5-seed gradient-boosting ensemble on validation: average precision 0.0305 vs 0.0253, a margin over eight times gradient boosting's seed spread of 0.0006) |
 | Unit | person; people in one household share the outcome |
 | Training cutoffs | 2024-03-31, 2024-06-30, 2024-09-30, 2024-12-31 |
 | Test cutoff | 2025-06-30, reported once |
@@ -22,14 +22,14 @@ A model that never saw them cannot use them, so they are left out instead of imp
 
 ## Results on 2025-06-30
 
-AUC 0.659, average precision 0.038 (base rate 0.022), lift 2.3x in the top decile, Brier 0.0212.
+AUC 0.661, average precision 0.038 (base rate 0.022), lift 2.3x in the top decile, Brier 0.0212.
 Ceiling from the generating rule: AUC 0.806, lift 4.4x. Census ZIP income alone: AUC 0.627.
-Without property and Census enrichment: AUC 0.610. With an on-time vendor feed (what-if, 5-seed gradient-boosting ensemble): AUC 0.726 to 0.727 on a laptop and
-0.728 in the cloud on identical data; single fits range 0.717 to 0.730. Read it as about 0.73, not to
+Without property and Census enrichment: AUC 0.611. With an on-time vendor feed (what-if, 5-seed gradient-boosting ensemble): AUC 0.726 to 0.727 on a laptop and
+0.726 to 0.728 in the cloud on identical data; single fits range 0.717 to 0.730. Read it as about 0.73, not to
 the third decimal.
 
-Most useful features (drop in average precision when shuffled): ZIP income, small building, average
-order value, building size.
+Most useful features (drop in average precision when shuffled): ZIP income, average order value,
+small building, building size.
 
 ## Use and limits
 

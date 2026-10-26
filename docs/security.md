@@ -68,6 +68,13 @@ test checks that a rebuild is identical. There are no automated backups of the r
 Every change runs the full test suite and the dbt tests. The guardrails in this page are each held by
 a test, and each test was checked by breaking the guardrail on purpose to see that the test fails.
 
+## Copies in the data lake
+
+When bronze is published to the Iceberg lake, a deletion in the warehouse is carried into the lake
+on the next publish: the rows are deleted, older snapshots are expired, and data files and manifests
+no snapshot needs are removed from the bucket. Lake tables store counts in their statistics, never
+column values. The lake is only as current as the last publish.
+
 ## Third-party data
 
 Vendor data is used as delivered. Plumbline does not resell or share data with other parties; it

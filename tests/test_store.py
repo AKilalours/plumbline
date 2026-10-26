@@ -132,8 +132,8 @@ def test_second_sync_only_fetches_changes(run, tmp_path):
         first = sync_orders(_client(s), _landing(run), page_size=250)
         k = sorted(s.state.orders)[0]
         latest = max(v["updated_at"] for v in s.state.orders.values())
-        s.state.orders[k] = {**s.state.orders[k], "financial_status": "refunded",
-                             "updated_at": (pd.Timestamp(latest) + pd.Timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S")}
+        s.state.update(k, financial_status="refunded",
+                       updated_at=(pd.Timestamp(latest) + pd.Timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S"))
         second = sync_orders(_client(s), _landing(run), page_size=250, overlap=timedelta(minutes=5))
         expected = _expected(s.state.orders, run)
     assert second.orders < 50 < first.orders, "incremental sync must not re-pull the whole store"
@@ -189,8 +189,44 @@ def test_change_in_the_same_second_as_the_watermark_is_not_lost(run, tmp_path):
         wm = json.loads((_landing(run) / "_sync_state.json").read_text())["watermark"]
         k = next(k for k, v in sorted(s.state.orders.items()) if v["updated_at"] < wm and v["financial_status"] == "paid"
                  and _h(v["customer_email"]) not in _deleted_hashes(run))
-        s.state.orders[k] = {**s.state.orders[k], "financial_status": "refunded", "updated_at": wm}
+        s.state.update(k, financial_status="refunded", updated_at=wm)
         sync_orders(_client(s), _landing(run), page_size=250)
         expected = _expected(s.state.orders, run)
     cur = _current(run, tmp_path / "w.duckdb")
     assert cur[k] == f"refunded|{wm}" and cur == expected
+
+
+def test_indexed_paging_returns_exactly_what_the_slow_version_did():
+    """Regression for speed, checked for sameness: pages used to re-sort every order, so a sync of
+    186,000 orders spent 537 s in the mock store. The index must change nothing but the time."""
+    import random
+    import time
+
+    from plumbline.store.server import Faults, StoreState
+    rnd = random.Random(3)
+    base = pd.Timestamp("2025-01-01")
+    rows = [{"order_id": f"KO{i:08d}", "updated_at": (base + pd.Timedelta(seconds=rnd.randrange(0, 86_400 * 30))).strftime("%Y-%m-%dT%H:%M:%S"),
+             "financial_status": "paid", "total_price": 1.0} for i in range(3000)]
+    for r in rows[::7]:
+        r["updated_at"] = rows[0]["updated_at"]                       # many ties on the timestamp
+    st = StoreState(pd.DataFrame(rows), "t", Faults(refund_every=3, seed=1))
+    for since in ("", "2025-01-10T00:00:00", "2025-02-15T00:00:00"):
+        cur, seen = None, 0
+        while True:
+            st.requests += 1
+            st._maybe_mutate()                                         # refunds move orders to the end, mid-sync
+            fast, slow = st.page(since, 97, cur), st.page_reference(since, 97, cur)
+            assert fast == slow
+            seen += len(fast[0])
+            cur = fast[1]
+            if cur is None:
+                break
+    big = StoreState(pd.DataFrame([{**rows[0], "order_id": f"KO{i:08d}",
+                                    "updated_at": (base + pd.Timedelta(seconds=i)).strftime("%Y-%m-%dT%H:%M:%S")}
+                                   for i in range(60_000)]), "t", Faults())
+    t, cur = time.time(), None
+    while True:
+        _, cur = big.page("", 250, cur)
+        if cur is None:
+            break
+    assert time.time() - t < 5, "paging 60,000 orders should take well under a second"

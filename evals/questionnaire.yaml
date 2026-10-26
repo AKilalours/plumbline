@@ -51,3 +51,100 @@ items:
     refuse: true
   - q: How often is an external penetration test performed?
     refuse: true
+  # added with the second round; written before any of them was run
+  - q: What personal data do you store about consumers?
+    source: [docs/security.md#personal-data-held]
+    terms: [dates of birth]
+  - q: Is any of the consumer data real?
+    source: [docs/security.md#personal-data-held]
+    terms: [synthetic]
+  - q: Do you load property owner names from public records?
+    source: [docs/security.md#personal-data-held]
+    terms: [owner]
+  - q: When someone asks to be deleted, are their other records removed as well?
+    source: [docs/security.md#deletion-requests]
+    terms: [identity resolution]
+  - q: Who decides deletion cases where the evidence is unclear?
+    source: [docs/security.md#deletion-requests]
+    terms: [privacy role]
+  - q: How many deleted people still have some data left?
+    source: [docs/security.md#deletion-requests]
+    terms: ["11 of 500"]
+  - q: Can an unsubscribed address still be emailed from an audience rebuilt for an earlier date?
+    source: [docs/security.md#unsubscribes-and-contact-suppression]
+    terms: [past dates]
+  - q: What stops an audience from including an unsubscribed address?
+    source: [docs/security.md#unsubscribes-and-contact-suppression]
+    terms: [dbt test]
+  - q: Can the person who requested a change also approve it?
+    source: [docs/security.md#who-can-change-data]
+    terms: [cannot approve]
+  - q: How are roles granted to people?
+    source: [docs/security.md#who-can-change-data]
+    terms: [admin]
+  - q: Can the reporting tools write to the warehouse?
+    source: [docs/security.md#who-can-change-data]
+    terms: [read-only]
+  - q: Are arguments in the audit log stored in plain text?
+    source: [docs/security.md#audit-trail]
+    terms: [SHA-256]
+  - q: Where is the audit log kept?
+    source: [docs/security.md#audit-trail]
+    terms: [ops.audit]
+  - q: Are tokens or keys ever written to log files?
+    source: [docs/security.md#secrets]
+    terms: [never written]
+  - q: Are .env files committed to the repository?
+    source: [docs/security.md#secrets]
+    terms: [git-ignored]
+  - q: Do assistant answers ever include customer emails or phone numbers?
+    source: [docs/security.md#personal-data-in-logs-and-agent-answers]
+    terms: [person keys]
+  - q: Is request logging enabled for the Slack integration?
+    source: [docs/security.md#personal-data-in-logs-and-agent-answers]
+    terms: ["off"]
+  - q: Is the warehouse file itself encrypted?
+    source: [docs/security.md#encryption]
+    terms: [does not encrypt]
+  - q: Does the local store API use TLS?
+    source: [docs/security.md#encryption]
+    terms: [plain HTTP]
+  - q: What controls which people can read the warehouse files?
+    source: [docs/security.md#access-to-the-machine]
+    terms: [operating system]
+  - q: Can anyone with access to the server read the data?
+    source: [docs/security.md#access-to-the-machine]
+    terms: [anyone with access]
+  - q: Can every table be rebuilt from the delivered source files?
+    source: [docs/security.md#recovery]
+    terms: [rebuilt]
+  - q: Is a rebuild checked to match the original?
+    source: [docs/security.md#recovery]
+    terms: [identical]
+  - q: How do you know each security guardrail actually works?
+    source: [docs/security.md#change-control]
+    terms: [breaking the guardrail]
+  - q: Do prompts sent to a language model contain consumer records?
+    source: [docs/security.md#third-party-data]
+    terms: [not consumer records]
+  - q: Do you modify vendor data before using it?
+    source: [docs/security.md#third-party-data]
+    terms: [as delivered]
+  - q: What are your RTO and RPO commitments?
+    refuse: true
+  - q: Are employees background-checked before they get access?
+    refuse: true
+  - q: Do you have a SOC 2 Type II report?
+    refuse: true
+  - q: How quickly do you notify customers after a security incident?
+    refuse: true
+  - q: Which cloud regions host the data?
+    refuse: true
+  - q: Do staff complete annual security awareness training?
+    refuse: true
+  - q: How long are consumer records retained before disposal?
+    refuse: true
+  - q: Do you run a vulnerability disclosure program or bug bounty?
+    refuse: true
+  - q: Do you publish a list of subprocessors and their locations?
+    refuse: true

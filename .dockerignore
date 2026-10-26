@@ -1,0 +1,14 @@
+# Never in the image: data (mounted instead), secrets, local environments, build leftovers.
+data/
+.env
+.env.*
+ops/roles.yaml
+.git/
+.github/
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+*.egg-info/
+dbt/target/
+dbt/logs/

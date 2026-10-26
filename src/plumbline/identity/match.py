@@ -18,6 +18,15 @@ logging.getLogger("splink").setLevel(logging.ERROR)
 
 MATCH_THRESHOLD = 0.9   # fixed before scoring; the evaluation reports how results move around it
 
+# What counts as a mistyped email. The first version used "within 2 edits", and precision fell as the
+# world grew: 97.4% at 100,000 people, 93.5% at 300,000. Of the pairs it wrongly joined, 89% were
+# linked by that level, against 3% of right pairs. Addresses here are built from names, so two
+# namesakes differ by a separator or a digit (scott.williams / scott_williams, ryan.green36 /
+# ryan.green32), and Fellegi-Sunter, which treats fields as independent, counted the name twice.
+# A typo changes a letter: one edit, same provider, and the letters themselves differ.
+EMAIL_TYPO_SQL = ("levenshtein(email_l, email_r) <= 1 AND split_part(email_l, '@', 2) = split_part(email_r, '@', 2) "
+                  "AND regexp_replace(email_l, '[^a-z]', '', 'g') <> regexp_replace(email_r, '[^a-z]', '', 'g')")
+
 BLOCKING = [
     block_on("email"),
     block_on("phone"),
@@ -57,11 +66,11 @@ def settings() -> SettingsCreator:
             cl.NameComparison("last_name").configure(term_frequency_adjustments=True),
             # No "same username" level: usernames are built from names (brandonanderson@...), so
             # rewarding them counts the name twice. Two people with one name at two providers
-            # would look like one person.
+            # would look like one person. The typo level is narrow for the same reason (EMAIL_TYPO_SQL).
             cl.CustomComparison(output_column_name="email", comparison_levels=[
                 cll.NullLevel("email"),
                 cll.ExactMatchLevel("email"),
-                cll.LevenshteinLevel("email", 2).configure(label_for_charts="Email within 2 edits"),
+                cll.CustomLevel(EMAIL_TYPO_SQL, label_for_charts="One-letter typo, same provider"),
                 cll.ElseLevel()]),
             cl.ExactMatch("phone"),
             address,

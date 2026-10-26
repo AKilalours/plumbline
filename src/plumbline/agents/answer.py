@@ -14,7 +14,10 @@ from dataclasses import dataclass, field
 from .knowledge import Index, best_sentences
 from .llm import ChatModel, Completion, LLMError
 
-MIN_COVERAGE = 0.5          # chosen on the dev half of evals/knowledge.yaml; reported on the test half
+# Chosen on the dev half of evals/knowledge.yaml (evals.choose_threshold) and reported on the test
+# half; a test re-runs the choice and fails if this no longer matches it. With 34 dev questions it was
+# 0.5; with 67 it is 0.45, which answers more but let one HR question through on the held-out half.
+MIN_COVERAGE = 0.45
 REFUSAL = "I could not find this in our documents."
 
 SYSTEM = ("You answer questions for the team that runs a data platform, using only the numbered "

@@ -28,13 +28,13 @@ items:
     terms: [never delete both]
   - q: What F1 does identity resolution get compared with the exact email or phone baseline?
     source: [README.md#identity-resolution-module-b]
-    terms: ["0.981", "0.927"]
+    terms: ["0.991", "0.927"]
   - q: Why did the first identity model have such low precision?
     source: [README.md#identity-resolution-module-b]
     terms: [famil]
   - q: How accurate is the golden person's current address?
     source: [README.md#data-products-dbt]
-    terms: ["90.6"]
+    terms: ["90.9"]
   - q: Why are vendor-only moves kept out of segments?
     source: [README.md#data-products-dbt, README.md#home-buyer-model-module-c]
     terms: ["45%"]
@@ -46,7 +46,7 @@ items:
     terms: [unsubscribe]
   - q: What test AUC does the home-buyer model get?
     source: [docs/model_card_home_buyer.md#results-on-2025-06-30, README.md#home-buyer-model-module-c]
-    terms: ["0.659"]
+    terms: ["0.661"]
   - q: What is the ceiling AUC for the home-buyer model?
     source: [docs/model_card_home_buyer.md#results-on-2025-06-30, README.md#home-buyer-model-module-c]
     terms: ["0.806"]
@@ -89,4 +89,100 @@ items:
   - q: How many vacation days do new hires get?
     refuse: true
   - q: Which office has the best coffee in Brooklyn?
+    refuse: true
+  # added with the second round; written before any of them was run
+  - q: What does bad_field_count in quarantine usually mean?
+    source: [docs/runbooks/ingestion.md#2-quarantine-is-growing]
+    terms: [truncated]
+  - q: A sender changed their date format and rows are quarantined. Should I change the contract?
+    source: [docs/runbooks/ingestion.md#2-quarantine-is-growing]
+    terms: [legitimate]
+  - q: After a fix, do I have to clean up quarantine by hand?
+    source: [docs/runbooks/ingestion.md#2-quarantine-is-growing]
+    terms: [corrected re-send]
+  - q: How do I confirm that a deletion request was applied?
+    source: [docs/runbooks/ingestion.md#3-a-deletion-request-arrives]
+    terms: [suppression_log]
+  - q: The store was down and the sync gave up. Did we lose orders?
+    source: [docs/runbooks/ingestion.md#5-the-store-sync-failed]
+    terms: [watermark]
+  - q: How many persons does the seed 7 run normally queue for deletion review?
+    source: [docs/runbooks/ingestion.md#6-the-deletion-review-queue-is-not-empty]
+    terms: ["7 persons"]
+  - q: The deletion review queue suddenly jumped. What should I check first?
+    source: [docs/runbooks/ingestion.md#6-the-deletion-review-queue-is-not-empty]
+    terms: [identity_pairs]
+  - q: What should I do with the broken warehouse file after rebuilding?
+    source: [docs/runbooks/ingestion.md#7-last-resort-rebuild-from-scratch]
+    terms: [keep the broken file]
+  - q: Slack shows dispatch_failed. What causes that?
+    source: [docs/runbooks/agent.md#when-something-goes-wrong]
+    terms: [three seconds]
+  - q: Every Slack request is coming back 401. What is wrong?
+    source: [docs/runbooks/agent.md#when-something-goes-wrong]
+    terms: [signing secret]
+  - q: How do I see which proposals were approved and by whom?
+    source: [docs/runbooks/agent.md#who-did-what]
+    terms: [ops.proposals]
+  - q: How do I rotate the Slack bot token?
+    source: [docs/runbooks/agent.md#rotate-a-secret]
+    terms: [reinstall]
+  - q: Which bot token scopes does the Slack app need?
+    source: [docs/runbooks/agent.md#connect-slack]
+    terms: [chat:write]
+  - q: I edited ops/roles.yaml and nothing changed. Why?
+    source: [docs/runbooks/agent.md#roles-and-access]
+    terms: [seed]
+  - q: How many admins should we keep, and why?
+    source: [docs/runbooks/agent.md#roles-and-access]
+    terms: [two admins]
+  - q: What columns does the questionnaire command expect in its input?
+    source: [docs/runbooks/agent.md#draft-a-security-questionnaire]
+    terms: [question]
+  - q: Which environment variables connect a language model?
+    source: [docs/runbooks/agent.md#connect-a-language-model-optional]
+    terms: [PLUMBLINE_LLM_API_KEY]
+  - q: What happens when the model's answer cites a passage it was not given?
+    source: [docs/runbooks/agent.md#connect-a-language-model-optional]
+    terms: [quoted answer]
+  - q: Why does the campaign experiment randomize inboxes rather than people?
+    source: [README.md#campaign-experiment]
+    terms: [516 inboxes]
+  - q: Which customers responded most to the reactivation email?
+    source: [README.md#campaign-experiment, docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]
+    terms: [lapsed]
+  - q: Why did CUPED hardly narrow the interval for the campaign?
+    source: [README.md#campaign-experiment]
+    terms: [squared correlation]
+  - q: Why are the vendor's income columns never used as features for the income estimate?
+    source: [README.md#income-estimate-and-home-seller-model]
+    terms: [missing for exactly]
+  - q: Why was the home seller model not published?
+    source: [README.md#income-estimate-and-home-seller-model]
+    terms: ["0.56"]
+  - q: How many people does the home-buyer model leave unscored?
+    source: [README.md#home-buyer-model-module-c, docs/model_card_home_buyer.md]
+    terms: ["33,432"]
+  - q: How is the home-buyer model version decided?
+    source: [README.md#home-buyer-model-module-c]
+    terms: [hash]
+  - q: What is the Wi-Fi password for the Brooklyn office?
+    refuse: true
+  - q: Which vendor contract renews next quarter, and at what price?
+    refuse: true
+  - q: How much budget does marketing have for the third quarter?
+    refuse: true
+  - q: Who approved the 2027 product roadmap?
+    refuse: true
+  - q: What is the phone number for the on-call manager?
+    refuse: true
+  - q: How do I book a conference room?
+    refuse: true
+  - q: What is the company's 401(k) match?
+    refuse: true
+  - q: Which Slack channel do we use for incidents?
+    refuse: true
+  - q: What was our customer churn rate last month?
+    refuse: true
+  - q: Can I expense a new monitor for home?
     refuse: true

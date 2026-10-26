@@ -19,6 +19,13 @@ from pathlib import Path
 import duckdb
 
 
+def peak_memory_mb() -> int:
+    """Largest resident memory this process has used so far (macOS reports bytes, Linux kilobytes)."""
+    import resource
+    r = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return int(r / 2 ** 20) if sys.platform == "darwin" else int(r / 2 ** 10)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m plumbline")
     ap.add_argument("--run-dir", default="data/synth/seed7_n100000")
@@ -30,6 +37,7 @@ def main(argv=None) -> int:
     ap.add_argument("--ref", default="data/reference", help="reference data (PLUTO, Census) for enrichment")
     ap.add_argument("--no-model", action="store_true", help="skip training and scoring the home-buyer model")
     ap.add_argument("--models", default="data/models/home_buyer")
+    ap.add_argument("--lake", action="store_true", help="also sync bronze to the Iceberg lake (PLUMBLINE_LAKE_URI)")
     a = ap.parse_args(argv)
     run, wh = Path(a.run_dir), Path(a.warehouse)
     if not (run / "deliveries.json").exists():
@@ -45,7 +53,7 @@ def main(argv=None) -> int:
         t = time.time()
         print(f"[{name}] ...", flush=True)
         out = fn()
-        summary[name] = {"seconds": round(time.time() - t, 1), **(out or {})}
+        summary[name] = {"seconds": round(time.time() - t, 1), "peak_memory_mb": peak_memory_mb(), **(out or {})}
         print(f"[{name}] done in {summary[name]['seconds']} s", flush=True)
 
     if not a.no_store:
@@ -143,6 +151,16 @@ def main(argv=None) -> int:
                 return {"skipped": "no feature snapshots (the buyer model was skipped)"}
             return other_models(wh, run)
         step("more_models", do_more_models)
+
+        def do_experiment():
+            from .experiments.run import run_experiment, summary as exp_summary
+            if "skipped" in summary.get("model", {}):
+                return {"skipped": "no feature snapshots (the buyer model was skipped)"}
+            return exp_summary(run_experiment(wh, run))
+        step("experiment", do_experiment)
+    if a.lake:
+        from .lake.iceberg import Lake, publish as publish_lake
+        step("lake", lambda: {"tables": publish_lake(wh, Lake.from_env(str(wh.parent / "lake" / "catalog.db")))})
     print(json.dumps(summary, indent=2))
     return 0
 

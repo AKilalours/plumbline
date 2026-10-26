@@ -121,7 +121,7 @@ def test_questionnaire_on_the_held_out_half():
     refuse = sum(1 for i in QITEMS if i["split"] == "test" and i.get("refuse"))
     assert r["refused_when_it_should"] == f"{refuse}/{refuse}"
     n, d = map(int, r["answered_correctly"].split("/"))
-    assert n / d >= 0.7, r
+    assert d >= 20 and n / d >= 0.8, r
 
 
 def test_the_controls_page_never_quotes_the_questionnaire_eval():

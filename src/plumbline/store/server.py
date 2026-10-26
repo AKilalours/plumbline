@@ -13,6 +13,7 @@ never skips or repeats an unchanged order. Faults, each with its own probability
 from __future__ import annotations
 
 import base64
+import bisect
 import json
 import threading
 from dataclasses import dataclass
@@ -53,23 +54,44 @@ class StoreState:
         self.requests = 0
         self.served_ok = 0
         self.mutations: list[str] = []
+        # Sorted (updated_at, order_id) index, like the database index a real store pages on. Without
+        # it every page re-sorted every order: a 300,000-person run spent 537 s of its sync there.
+        self.index = sorted((v["updated_at"], k) for k, v in self.orders.items())
+        self.paid = sorted(k for k, v in self.orders.items() if v["financial_status"] == "paid")
+
+    def update(self, order_id: str, **fields) -> None:
+        """The store's own write path: changes an order and keeps the paging index in step."""
+        old = self.orders[order_id]
+        new = {**old, **fields}
+        del self.index[bisect.bisect_left(self.index, (old["updated_at"], order_id))]
+        bisect.insort(self.index, (new["updated_at"], order_id))
+        if old["financial_status"] == "paid" and new["financial_status"] != "paid":
+            del self.paid[bisect.bisect_left(self.paid, order_id)]
+        self.orders[order_id] = new
 
     def _maybe_mutate(self) -> None:
         f = self.faults
-        if f.refund_every and self.requests % f.refund_every == 0:
-            paid = sorted(k for k, v in self.orders.items() if v["financial_status"] == "paid")
-            if paid:
-                k = paid[int(self.rng.integers(0, len(paid)))]
-                latest = max(v["updated_at"] for v in self.orders.values())
-                self.orders[k] = {**self.orders[k], "financial_status": "refunded",
-                                  "updated_at": (pd.Timestamp(latest) + pd.Timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%S")}
-                self.mutations.append(k)
+        if f.refund_every and self.requests % f.refund_every == 0 and self.paid:
+            k = self.paid[int(self.rng.integers(0, len(self.paid)))]
+            new_u = (pd.Timestamp(self.index[-1][0]) + pd.Timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%S")
+            self.update(k, financial_status="refunded", updated_at=new_u)
+            self.mutations.append(k)
 
     def page(self, since: str, limit: int, cursor: str | None) -> tuple[list[dict], str | None]:
+        after_u, after_id = "", ""
         if cursor:
             after_u, after_id, since = _uncursor(cursor)
-        else:
-            after_u, after_id = "", ""
+        start = max(bisect.bisect_left(self.index, (since, "")), bisect.bisect_right(self.index, (after_u, after_id)))
+        page = [self.orders[k] for _, k in self.index[start:start + limit]]
+        more = start + limit < len(self.index)
+        nxt = _cursor(page[-1]["updated_at"], page[-1]["order_id"], since) if page and more else None
+        return page, nxt
+
+    def page_reference(self, since: str, limit: int, cursor: str | None) -> tuple[list[dict], str | None]:
+        """The first version, obviously right and quadratic: kept so a test can prove page() equal to it."""
+        after_u, after_id = "", ""
+        if cursor:
+            after_u, after_id, since = _uncursor(cursor)
         rows = sorted((v for v in self.orders.values() if v["updated_at"] >= since),
                       key=lambda v: (v["updated_at"], v["order_id"]))
         rows = [v for v in rows if (v["updated_at"], v["order_id"]) > (after_u, after_id)]

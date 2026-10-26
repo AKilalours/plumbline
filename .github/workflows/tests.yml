@@ -1,0 +1,51 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 resolves to pandas 2, 3.12 to pandas 3: the two lines that disagreed on dates
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev,orchestration,lake]"
+      - name: Versions
+        run: python -c "import sys, pandas, numpy, duckdb, sklearn; print(sys.version, pandas.__version__, numpy.__version__, duckdb.__version__, sklearn.__version__)"
+      - name: No credentials in the repository
+        run: |
+          if git grep -nIE '(sk-[A-Za-z0-9_-]{20,}|xox[abp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' -- . ':!.github/workflows/tests.yml'; then
+            echo "Something that looks like a credential is committed." && exit 1
+          fi
+      - name: Tests
+        run: python -m pytest -q -p no:cacheprovider
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t plumbline:ci .
+      - name: No secrets or data inside the image
+        run: |
+          docker run --rm --entrypoint sh plumbline:ci -c 'test ! -e /app/.env && test ! -e /app/ops/roles.yaml && test -z "$(ls -A /app/data)" && test "$(id -u)" = 10001'
+      - name: Tests inside the image
+        run: |
+          docker run --rm --entrypoint sh plumbline:ci -c 'pip install --user --quiet pytest "moto[server]" boto3 fastavro && python -m pytest -q -p no:cacheprovider tests/test_synth.py tests/test_ingest.py tests/test_access.py tests/test_lake.py'
+      - name: Compose file is valid
+        run: docker compose config -q && docker compose --profile lake config -q

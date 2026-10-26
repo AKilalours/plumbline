@@ -32,6 +32,23 @@ households, moves, job changes, home purchases.
 A model that "discovers" income, age, renting and a recent job change as purchase drivers
 is rediscovering these rules. Report it that way.
 
+## Planted campaign response (`synth/campaign.py`)
+
+The winter reactivation email of 2026-01-06, by each person's true order history on 2025-12-31.
+Chance of buying in the next 30 days without the email, and what the email adds:
+
+| Segment | Without the email | Added by the email |
+| --- | --- | --- |
+| Never ordered | 0.6% | +0.2 x income band points |
+| Lapsed (last order 180+ days before) | 2% | +4.5 points |
+| Cooling (90 to 180 days) | 4% | +3 points |
+| Active (last 90 days) | 8%, +2 points per order in the past year beyond the first, up to +6 | 0, or -1 point for 4+ orders in the past year |
+
+Each person's effect is multiplied by a hidden lognormal factor (mean 1, sigma 0.6). An email reaches
+everyone who reads the inbox. 15% of buyers order twice; 10% of orders use the buyer's other address
+and 3% a mistyped one. An uplift model that finds "lapsed customers respond" is rediscovering these
+rules. Report it that way.
+
 ## Damage
 
 | Kind | CRM | Vendor | Email |
@@ -52,5 +69,5 @@ Every damaged field is recorded in `truth/damage_log`.
 - A shared household inbox (5% of non-head members) means a deletion request for that
   email hash also matches the other household member. Real systems face this too.
 - Moves and purchases are household-wide; only one move or purchase per household.
-- Above about 1 million people, memory grows past what a laptop holds; chunked generation
-  is not built yet.
+- Generation held 1.2 GB at 300,000 people, so 1 million should need about 4 GB; that size is
+  not measured, and chunked generation is not built.

@@ -9,7 +9,7 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | The work | Where | Evidence |
 | --- | --- | --- |
 | Establish grain, keys, coverage and failure modes of messy multi-source data | `sources/*.yaml`, `docs/synthetic_data_card.md` | contracts per source; damage measured per kind |
-| Identity resolution and entity relationships | `src/plumbline/identity/` | F1 0.981 vs 0.927 baseline; recall by damage type |
+| Identity resolution and entity relationships | `src/plumbline/identity/` | F1 0.991 vs 0.927 baseline, holding at 0.990 at 3x the population; recall by damage type; a scale-dependent namesake bug found and fixed |
 | Durable domain models and derived attributes | `dbt/models/marts/` | golden person, address history, households, life events |
 | Quality checks, provenance and guardrails that tell reliable signal from misleading data | `dbt/models/marts/fct_life_events.sql`, `int_attribute_winners.sql` | vendor-only moves measured at 45% precision and kept out of segments |
 | Point-in-time attributes | `dim_person_address_history`, `as_of` var | 97.0% right on 2024-06-30; test that a past build uses nothing later |
@@ -27,16 +27,18 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | Origin of every value | `_first_delivery_id`, `delivery_rows`, provenance columns in `dim_person` | each golden value names its source and date |
 | Restricted data cannot return through a new load or a replay | `ingest/erasure.py`, `privacy/` | replay tests at row and person level |
 | Recovery runbooks | `docs/runbooks/ingestion.md` | |
+| Open table formats on object storage | `lake/iceberg.py` (Iceberg on any S3 API) | sync with snapshots and time travel; deletion expires history and removes files; no column values in manifest statistics; tested against an S3 API |
 
 ## Data science: features and models agents can rely on
 
 | The work | Where | Status |
 | --- | --- | --- |
 | Features from raw signal, including property data | `dbt/models/marts/fct_person_features.sql` (PLUTO, Census, store, life events) | point in time per cutoff |
-| Home buyer model | `src/plumbline/ml/` | AUC 0.659 vs ceiling 0.806 on an untouched later period; enrichment worth +0.05, an on-time vendor feed +0.08 |
+| Home buyer model | `src/plumbline/ml/` | AUC 0.661 vs ceiling 0.806 on an untouched later period; enrichment worth +0.05, an on-time vendor feed +0.07 |
 | Feature pipelines that are reliable in production | snapshots by `as_of`, leak guards, window rule | three leaks found and turned into tests |
 | Validations so agents can act without a human in the loop | `ml/guardrails.py`, `ml.model_runs` | scores published only if every check passes; out-of-population people not scored |
 | Income estimates where the vendor has nothing | `ml/income.py`, `ml.income_estimates` | within one band 83% vs 79.2% for ZIP income alone, on people the vendor never covered; vendor columns never features; households kept whole across the split |
+| Measure what a campaign caused, and whom to target | `experiments/`, `exp.plan`, `exp.readouts` | inbox-level holdout, sample-ratio check, CUPED, Holm; true effect inside the corrected interval; uplift targeting 38 extra buyers per 1,000 emails vs 24 for likeliest buyers |
 | Home seller model, and knowing when not to ship | `ml/seller.py`, `ml.model_runs_seller` | assessed and refused: validation AUC 0.47, ceiling 0.56; stale scores dropped |
 
 ## Internal AI systems

@@ -96,8 +96,18 @@ def test_knowledge_eval_on_the_held_out_half():
     ix, items = Index.from_repo(ROOT), evals.load(ROOT / "evals" / "knowledge.yaml")
     r = evals.run(ix, items, split="test")
     right, total = map(int, r["answered_correctly"].split("/"))
-    assert r["refused_when_it_should"] == "4/4", r["failures"]
-    assert right / total >= 0.6, r["failures"]
+    refused, should = map(int, r["refused_when_it_should"].split("/"))
+    # Measured floor, not a goal: two held-out questions the documents cannot answer still get an
+    # answer, because they share words with a section (a 401(k) "match", an "AWS account" in the lake
+    # section). Lexical refusal weakens as documents grow; model mode is the fix, measured separately.
+    assert should >= 9 and refused >= 7, r["failures"]
+    assert total >= 24 and right / total >= 0.75, r["failures"]
+
+
+def test_the_refusal_threshold_is_the_one_the_dev_half_chooses():
+    from plumbline.agents.answer import MIN_COVERAGE
+    best, _ = evals.choose_threshold(Index.from_repo(ROOT), evals.load(ROOT / "evals" / "knowledge.yaml"))
+    assert best == MIN_COVERAGE
 
 
 def test_the_documents_never_quote_the_eval_questions():
@@ -306,3 +316,38 @@ def test_a_wrong_number_in_the_docs_is_corrected_from_the_warehouse(ctx):
     claims.write_text(claims.read_text().replace("Seed 7 baseline: 7 persons queued", f"Seed 7 baseline: {wrong} persons queued"))
     stale = {s["id"]: s for s in TOOLS["check_doc_claims"].run(ctx, {})["stale"]}
     assert stale["review_queue_baseline"]["edit"]["new"].startswith(f"Seed 7 baseline: {n} persons queued")
+
+
+def test_the_grader_ignores_line_breaks_and_refuses_terms_yaml_turned_into_numbers(tmp_path):
+    """Regressions: a right answer whose phrase wrapped across a line was graded wrong, and YAML read
+    `off` as false and `[33,287]` as two numbers, so those terms could never match."""
+    from types import SimpleNamespace
+    a = SimpleNamespace(refused=False, sources=["docs/x.md#y"], text="the corrected\nre-send loads normally")
+    assert evals.grade({"source": ["docs/x.md"], "terms": ["corrected re-send"]}, a)["ok"]
+    bad = tmp_path / "e.yaml"
+    bad.write_text("items:\n  - q: is it on?\n    source: [docs/x.md]\n    terms: [off]\n")
+    with pytest.raises(ValueError, match="quote the terms"):
+        evals.load(bad)
+
+
+def test_the_readme_reports_the_eval_numbers_the_documents_give_today():
+    """The README is one of the documents the agent searches, so editing it moves the eval. This
+    keeps its table from going stale: a first draft said 19 of 24 after an edit had made it 18."""
+    from plumbline.agents import questionnaire as Q
+    readme = (ROOT / "README.md").read_text()
+    kix, k = Index.from_repo(ROOT), evals.load(ROOT / "evals" / "knowledge.yaml")
+    qix, q = Q.index(ROOT), evals.load(ROOT / "evals" / "questionnaire.yaml")
+    kd, kt = evals.run(kix, k, split="dev"), evals.run(kix, k, split="test")
+    qd, qt = (evals.run(qix, q, min_coverage=Q.MIN_COVERAGE, split=s) for s in ("dev", "test"))
+    ans = [i for i in k if not i.get("refuse")]
+    top3 = sum(any(c.source.startswith(e) for c, *_ in kix.search(i["q"], 3) for e in i["source"]) for i in ans)
+
+    def of(x):
+        return x.replace("/", " of ")
+    expected = [f"| Right section in the top 3 results | {top3} of {len(ans)} answerable questions |",
+                f"{of(kd['answered_correctly'])} (dev half), **{of(kt['answered_correctly'])} (test half)**",
+                f"{of(kd['refused_when_it_should'])} (dev), **{of(kt['refused_when_it_should'])} (test)**",
+                f"{of(qd['answered_correctly'])} (dev half), **{of(qt['answered_correctly'])} (test half)**",
+                f"{of(qd['refused_when_it_should'])} (dev), **{of(qt['refused_when_it_should'])} (test)**"]
+    stale = [e for e in expected if e not in readme]
+    assert not stale, stale

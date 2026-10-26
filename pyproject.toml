@@ -18,10 +18,12 @@ dependencies = [
   "dbt-core>=1.9,<2",
   "dbt-duckdb>=1.9,<2",
   "scikit-learn>=1.4,<2",
+  "scipy>=1.10",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "moto[server]>=5", "boto3>=1.28", "fastavro>=1.8"]
+lake = ["pyiceberg[sql-sqlite,pyarrow]>=0.9"]
 orchestration = ["dagster>=1.9", "dagster-webserver>=1.9"]
 
 [project.scripts]

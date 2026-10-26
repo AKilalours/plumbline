@@ -23,6 +23,10 @@ import numpy as np
 import pandas as pd
 
 from .config import SynthConfig
+
+# Raised whenever the world itself changes, so nothing built from an older world is used with a newer
+# one. 2: each home holds one household (version 1 could put two families in one flat).
+GENERATOR_VERSION = 2
 from .emit import Emitted, emit_crm, emit_deletions, emit_email, emit_vendor
 from .reference import Reference
 from .rng import component_rngs
@@ -88,6 +92,7 @@ def generate(ref: Reference, cfg: SynthConfig, run_dir: str | Path) -> dict:
     fingerprint = _sha("\n".join(f"{k}:{hashes[k]}" for k in sorted(hashes)).encode())[:16]
     events = world.events["event_type"].value_counts().sort_index().to_dict()
     manifest = {
+        "generator_version": GENERATOR_VERSION,
         "fingerprint": fingerprint,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "reference_source": ref.source,

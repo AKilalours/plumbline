@@ -229,3 +229,30 @@ def test_works_with_pandas3_string_columns(tmp_path):
     with ctx:
         m = generate(load_reference(FIXTURE), SynthConfig(seed=3, n_people=500), tmp_path / "r")
     assert m["counts"]["people"] == 500
+
+
+def test_no_home_is_ever_given_to_two_households(run):
+    """Regression: units were drawn at random with no record of who lived where, so two households
+    could share one flat or one house, more often the larger the world. At 300,000 people 2,182
+    addresses held two households and household precision fell to 93.6%: the score measured the
+    generator, not the matching."""
+    h = _truth(run[0], "address_history")
+    if "household_id" not in h:
+        h = h.merge(_truth(run[0], "people")[["person_id", "household_id"]], on="person_id")
+    per_home = h.groupby(["street", "zipcode"]).household_id.nunique()
+    assert per_home.max() == 1, per_home[per_home > 1].head()
+    houses = h[h.unitsres <= 1]
+    assert not houses.street.str.contains(" APT ").any()
+
+
+def test_placement_redraws_when_a_building_is_full():
+    import numpy as np
+    from plumbline.synth.world import _place
+    rng = np.random.default_rng(0)
+    units = np.array([1, 3])                       # a house, and a three-flat building
+    taken: dict = {}
+    lots, apts = _place(rng, np.array([0, 0, 1, 1]), units, taken, redraw=lambda: 1)
+    assert list(lots) == [0, 1, 1, 1] and apts[0] == 0         # the second household cannot share the house
+    assert sorted(apts[1:]) == [1, 2, 3]                       # and the flats are all different
+    with pytest.raises(RuntimeError):                          # 1 house + 3 flats are now all taken
+        _place(rng, np.array([1]), units, taken, redraw=lambda: 1)

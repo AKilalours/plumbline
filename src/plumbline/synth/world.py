@@ -35,9 +35,33 @@ def income_band(x) -> np.ndarray:
     return np.searchsorted(INCOME_BANDS, np.asarray(x), side="right") + 1
 
 
-def _apt(rng: np.random.Generator, units: np.ndarray) -> np.ndarray:
-    r = rng.integers(0, 1 << 30, size=len(units))
-    return np.where(units > 1, r % np.clip(units, 1, 400) + 1, 0)
+def _place(rng: np.random.Generator, lots: np.ndarray, units_all: np.ndarray, taken: dict, redraw) -> tuple[np.ndarray, np.ndarray]:
+    """Give each household a home nobody else has: a free unit in its building, or the building itself
+    if it is a one-unit house. A full building sends the household to another one, drawn as before.
+
+    The first version drew each unit at random with no record of who lived where. That is the birthday
+    problem: as households crowd into the same buildings, two of them draw the same flat. At 300,000
+    people, 2,182 address strings held two households, and household precision fell from 97.8% (100,000)
+    to 93.6%. No method can split two families at one address, so the score measured the generator.
+    A unit is never reused after a move; New York has far more units than this world has households."""
+    lots = np.asarray(lots).copy()
+    apts = np.zeros(len(lots), dtype=int)
+    for i in range(len(lots)):
+        lot = int(lots[i])
+        for _ in range(10_000):
+            cap = int(min(units_all[lot], 400)) if units_all[lot] > 1 else 1
+            used = taken.setdefault(lot, set())
+            if len(used) < cap:
+                u = 0 if cap == 1 else int(rng.integers(1, cap + 1))
+                while u in used:                       # the next free unit in this building
+                    u = u % cap + 1
+                used.add(u)
+                lots[i], apts[i] = lot, u
+                break
+            lot = int(redraw())
+        else:
+            raise RuntimeError("no free home found; the reference has too few residential units for this world")
+    return lots, apts
 
 
 def work_email(first: str, last: str, employer: str) -> str:
@@ -68,8 +92,11 @@ def build_world(ref: Reference, cfg: SynthConfig, rngs: dict) -> World:
     k = int(np.searchsorted(cs, n)) + 1
     sizes = draws[:k].copy()
     sizes[-1] = n - (cs[k - 2] if k >= 2 else 0)
+    lot_cum = np.cumsum(lot_p)
+    pick_lot = lambda r: int(min(np.searchsorted(lot_cum, r.random(), side="right"), len(lot_cum) - 1))
+    taken: dict = {}
     lot0 = rh.choice(len(lots), size=k, p=lot_p)
-    apt0 = _apt(rh, units_all[lot0])
+    lot0, apt0 = _place(rh, lot0, units_all, taken, lambda: pick_lot(rh))
     med = lots["median_income"].to_numpy()[lot0]
     hh_income = np.round(rh.lognormal(np.log(med), 0.55), -2)
     owner0 = (units_all[lot0] <= 2) & (rh.random(k) < 0.6)
@@ -165,7 +192,11 @@ def build_world(ref: Reference, cfg: SynthConfig, rngs: dict) -> World:
     lot_buy = small[re_.integers(0, len(small), k)] if len(small) else lot0
     lot_rent = re_.choice(len(lots), size=k, p=lot_p)
     lot1 = np.where(purchase, lot_buy, lot_rent)
-    apt1 = _apt(re_, units_all[lot1])
+    apt1 = np.zeros(k, dtype=int)
+    for idx, buy in ((np.flatnonzero(moved & purchase), True), (np.flatnonzero(moved & ~purchase), False)):
+        redraw = (lambda: small[re_.integers(0, len(small))]) if buy and len(small) else (lambda: pick_lot(re_))
+        placed, apt = _place(re_, lot1[idx], units_all, taken, redraw)
+        lot1[idx], apt1[idx] = placed, apt
     owner1 = np.where(purchase, True, (units_all[lot1] <= 2) & (re_.random(k) < 0.3))
 
     def lot_rows(hids, valid_from, lot, apt, owner):

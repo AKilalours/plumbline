@@ -19,6 +19,36 @@ from pathlib import Path
 import duckdb
 
 
+def stale_world(run: Path) -> str | None:
+    """A world made by another version of the generator is refused, not quietly measured."""
+    from .synth.generate import GENERATOR_VERSION
+    v = json.loads((run / "manifest.json").read_text()).get("generator_version", 1)
+    if v != GENERATOR_VERSION:
+        return (f"{run} was made by generator version {v}; this code is version {GENERATOR_VERSION}, and its "
+                f"answer key differs. Regenerate it (this replaces the folder):\n"
+                f"  python -m plumbline.synth.cli --ref data/reference --out {run.parent} "
+                f"--n-people {json.loads((run / 'manifest.json').read_text())['config']['n_people']} --seed "
+                f"{json.loads((run / 'manifest.json').read_text())['config']['seed']} --force")
+    return None
+
+
+def drop_derived_if_stale(run: Path) -> bool:
+    """The store, its synced orders and the campaign are built from one world. If they were built from
+    another (an old folder the world was written into), remove them so they are rebuilt from this one."""
+    import shutil
+    world = json.loads((run / "manifest.json").read_text())["fingerprint"]
+    sm = run / "store" / "store_manifest.json"
+    if sm.exists() and json.loads(sm.read_text()).get("world_fingerprint") == world:
+        return False
+    if not sm.exists() and not (run / "sources" / "store").exists():
+        return False
+    for d in (run / "store", run / "sources" / "store", run / "campaign"):
+        shutil.rmtree(d, ignore_errors=True)
+    for f in ("campaign_truth.parquet", "campaign_inboxes.parquet"):
+        (run / "truth" / f).unlink(missing_ok=True)
+    return True
+
+
 def peak_memory_mb() -> int:
     """Largest resident memory this process has used so far (macOS reports bytes, Linux kilobytes)."""
     import resource
@@ -44,6 +74,10 @@ def main(argv=None) -> int:
         print(f"no synthetic run at {run}. Generate one first:\n"
               f"  python -m plumbline.synth.cli --ref data/reference --out {run.parent} --n-people 100000 --seed 7")
         return 2
+    problem = stale_world(run)
+    if problem:
+        print(problem)
+        return 2
     if a.fresh and wh.exists():
         wh.unlink()
     wh.parent.mkdir(parents=True, exist_ok=True)
@@ -60,6 +94,7 @@ def main(argv=None) -> int:
         from .ingest.connectors.store_api import StoreClient, sync_orders
         from .store.db import build_store
         from .store.server import Faults, MockStore
+        drop_derived_if_stale(run)
         if not (run / "store" / "orders.parquet").exists():
             step("store_build", lambda: {k: v for k, v in build_store(run).items() if k in ("orders", "fingerprint")})
 

@@ -33,6 +33,24 @@ def _record_keys(recs: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["unique_id", "key_hash"])
 
 
+def _has_another_phone(con, pairs: pd.DataFrame) -> list[bool]:
+    """For each (tombstone_id, person_key) candidate: does the person have a phone, none of which is
+    the phone on the tombstone's deletion request? A request without a phone decides nothing."""
+    if pairs.empty:
+        return []
+    keys = list(set(pairs.person_key))
+    ph = con.execute("SELECT person_key, phone FROM identity_records WHERE phone IS NOT NULL AND person_key IN "
+                     "(SELECT unnest(?))", [keys]).df()
+    mine = ph.assign(h=ph.phone.astype(str).map(phone_hash)).groupby("person_key").h.agg(set) if len(ph) else {}
+    req = con.execute("""SELECT DISTINCT t.tombstone_id, s.phone_sha256 FROM deletion_tombstones t
+                         JOIN suppression s USING (request_id)
+                         WHERE s.phone_sha256 IS NOT NULL AND t.tombstone_id IN (SELECT unnest(?))""",
+                      [list(set(pairs.tombstone_id))]).df()
+    theirs = req.groupby("tombstone_id").phone_sha256.agg(set)
+    return [bool(mine.get(pk)) and t in theirs.index and not (mine.get(pk) & theirs[t])
+            for t, pk in zip(pairs.tombstone_id, pairs.person_key)]
+
+
 def expand_deletions(con, contracts) -> dict:
     con.execute("""CREATE TABLE IF NOT EXISTS deletion_review (
         tombstone_id VARCHAR, person_key VARCHAR, reason VARCHAR, logged_at TIMESTAMP)""")
@@ -82,6 +100,20 @@ def expand_deletions(con, contracts) -> dict:
     hits = hits.merge(recs[["unique_id", "person_key"]], on="unique_id")
     maybe = maybe.merge(recs[["unique_id", "person_key"]], on="unique_id")
     maybe = maybe[~maybe.person_key.isin(set(hits.person_key))].drop_duplicates(["tombstone_id", "person_key"])
+    # A phone of their own that is not the request's phone means someone else. Every record carrying
+    # the requester's phone was purged at load, so a person who still has a phone here is either a
+    # different person or the requester under a new number. Without this, deletion got worse as the
+    # world grew: records of people who never asked, deleted, went 0, 1, 45, 85 at 20,000, 100,000,
+    # 300,000 and 1,000,000 people, and the review queue 1, 7, 107, 1,097 persons. Each wrongly deleted
+    # person shared a name and a home with a requester (a father and son) and had no date of birth to
+    # tell them apart. Two keys and another phone go to a person; one key and another phone is a
+    # namesake and is dropped. Measured on the same warehouses: 45 -> 0 wrongly deleted at 300,000,
+    # 1 -> 0 at 100,000, review 54 -> 14 persons, and no deleted person left behind who was not before.
+    hits["other_phone"] = _has_another_phone(con, hits) if len(hits) else []
+    phone_conflict = hits[hits.other_phone.astype(bool)].drop_duplicates(["tombstone_id", "person_key"])
+    hits = hits[~hits.other_phone.astype(bool)]
+    if len(maybe):
+        maybe = maybe[[not v for v in _has_another_phone(con, maybe)]]
     per_tomb = hits.groupby("tombstone_id")["person_key"].nunique()
     ambiguous = set(per_tomb[per_tomb > 1].index)
     review = hits[hits.tombstone_id.isin(ambiguous)].drop_duplicates(["tombstone_id", "person_key"])
@@ -91,7 +123,8 @@ def expand_deletions(con, contracts) -> dict:
     try:
         # Queue each case once. Without the NOT EXISTS, every nightly run appended the same cases
         # again (7, 14, 21 rows for the same 7 persons), and reviewers saw a queue that never shrank.
-        for df, reason in ((review, "tombstone_matches_several_persons"), (maybe, "one_key_matches")):
+        for df, reason in ((review, "tombstone_matches_several_persons"), (maybe, "one_key_matches"),
+                           (phone_conflict, "keys_match_but_phone_differs")):
             for t, pk in df[["tombstone_id", "person_key"]].values.tolist():
                 con.execute("""INSERT INTO deletion_review SELECT ?, ?, ?, now()
                                WHERE NOT EXISTS (SELECT 1 FROM deletion_review
@@ -103,7 +136,7 @@ def expand_deletions(con, contracts) -> dict:
         con.execute("ROLLBACK")
         raise
     return {"persons_deleted": len(persons), "rows_removed": removed, "quarantine_rows_removed": q,
-            "suppression_entries_added": new_suppression, "held_for_review": len(ambiguous) + len(maybe),
+            "suppression_entries_added": new_suppression, "held_for_review": len(ambiguous) + len(maybe) + len(phone_conflict),
             "weak_tombstones_not_used": len(unusable)}
 
 

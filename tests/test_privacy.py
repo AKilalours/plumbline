@@ -127,7 +127,8 @@ def test_same_name_same_address_different_birthday_is_not_deleted():
     recs = pd.DataFrame({
         "unique_id": ["vendor:VDAD", "crm:CNODOB"], "person_key": ["PKdad", "PKnodob"],
         "first_name": ["brian", "brian"], "last_name": ["johnson", "johnson"], "house": ["12", "12"],
-        "street": ["MAIN ST", "MAIN ST"], "zip": ["10025", "10025"], "dob": ["1947-09-04", None]})
+        "street": ["MAIN ST", "MAIN ST"], "zip": ["10025", "10025"], "dob": ["1947-09-04", None],
+        "phone": [None, None]})                       # identity_records always carries a phone column
     con.register("r", recs)
     con.execute("CREATE TABLE identity_records AS SELECT * FROM r")
     con.execute("""CREATE TABLE identity_map AS SELECT * FROM (VALUES
@@ -154,3 +155,56 @@ def test_rerunning_does_not_queue_the_same_review_case_twice(copy):
             expand_deletions(con, CONTRACTS)
         n, distinct = con.execute(q).fetchone()
     assert n == distinct >= 1, (n, distinct)
+
+
+def _phone_case(request_phone: str | None):
+    """The son asked to be deleted (request R1, his phone 5550000001). Nobody has a date of birth.
+    PKdad: same name and address (two keys), his own phone.  PKnophone: same two keys, no phone.
+    PKname: same name and zip only (one key), his own phone.  PKname2: one key, no phone."""
+    from plumbline.ingest.contracts import phone_hash
+    from plumbline.ingest.engine import ensure_schema
+    import pandas as pd
+    con = duckdb.connect()
+    ensure_schema(con, CONTRACTS)
+    con.execute("INSERT INTO suppression VALUES ('R1', NULL, ?, current_date, 'd1')",
+                [phone_hash(request_phone) if request_phone else None])
+    son = tombstones.keys_from_parts("brian", "johnson", "12", "MAIN ST", "10025", None)
+    con.executemany("INSERT INTO deletion_tombstones VALUES ('t1', ?, 'purged:crm', 'R1', 'strong', now())", [[k] for k in son])
+    recs = pd.DataFrame({
+        "unique_id": ["crm:DAD", "crm:NOPHONE", "crm:NAME", "crm:NAME2"],
+        "person_key": ["PKdad", "PKnophone", "PKname", "PKname2"],
+        "first_name": ["brian"] * 4, "last_name": ["johnson"] * 4,
+        "house": ["12", "12", "40", "41"], "street": ["MAIN ST", "MAIN ST", "OAK AVE", "ELM ST"],
+        "zip": ["10025"] * 4, "dob": [None] * 4,
+        "phone": ["5550000002", None, "5550000003", None]})
+    con.register("r", recs)
+    con.execute("CREATE TABLE identity_records AS SELECT * FROM r")
+    con.execute("""CREATE TABLE identity_map AS SELECT * FROM (VALUES ('crm', 'DAD', 'PKdad'), ('crm', 'NOPHONE', 'PKnophone'),
+                   ('crm', 'NAME', 'PKname'), ('crm', 'NAME2', 'PKname2')) t(source, record_id, person_key)""")
+    s = expand_deletions(con, CONTRACTS)
+    left = {r for (r,) in con.execute("SELECT person_key FROM identity_map").fetchall()}
+    queued = dict(con.execute("SELECT person_key, reason FROM deletion_review").fetchall())
+    return s, left, queued
+
+
+def test_a_person_with_their_own_other_phone_is_not_deleted_for_someone_else():
+    """Regression for scale: at 300,000 people, 45 records of people who never asked were deleted, and
+    the review queue grew from 7 persons (100,000) to 1,097 (1,000,000). Each wrongly deleted person
+    shared a name and a home with a requester and had no date of birth to tell them apart. Every record
+    carrying the requester's phone is purged at load, so a person who still has a phone of their own is
+    someone else, or the requester with a new number: a person decides, not the pipeline."""
+    s, left, queued = _phone_case("5550000001")
+    assert "PKdad" in left and queued.get("PKdad") == "keys_match_but_phone_differs"    # two keys, own phone: review
+    assert "PKnophone" not in left                                                        # two keys, nothing to tell apart
+    assert "PKname" in left and "PKname" not in queued                                    # one key, own phone: a namesake
+    assert "PKname2" in left and queued.get("PKname2") == "one_key_matches"               # one key, no phone: review
+    assert s["persons_deleted"] == 1
+
+
+def test_a_request_without_a_phone_decides_nothing_about_phones():
+    """Without a phone on the request the rule cannot apply: two persons match one tombstone on two
+    keys, and the older rule holds them both for a person instead of guessing which one asked."""
+    s, left, queued = _phone_case(None)
+    assert {"PKdad", "PKnophone"} <= left and s["persons_deleted"] == 0
+    assert queued.get("PKdad") == queued.get("PKnophone") == "tombstone_matches_several_persons"
+    assert queued.get("PKname") == "one_key_matches"

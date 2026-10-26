@@ -72,8 +72,11 @@ is not enough to delete automatically:
   Usually a namesake. Delete only if another source confirms it (same work email domain, a store
   order shipped to the deleted person's old address).
 - `tombstone_matches_several_persons`: one deleted row fits two current persons. Never delete both.
+- `keys_match_but_phone_differs`: name and address fit the deleted person, but this person has a phone
+  that is not the one in the request. Usually a family member with the same name (a father and son).
+  Delete only if the requester confirms the other number was theirs.
 
-Seed 7 baseline: 7 persons queued, 1 of them a real leftover. A sudden jump means the identity model
+Seed 7 baseline: 2 persons queued, 1 of them a real leftover. A sudden jump means the identity model
 or a source changed; check `identity_pairs` for the persons involved before acting.
 
 ## 7. Last resort: rebuild from scratch

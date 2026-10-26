@@ -8,9 +8,9 @@ claims:
   - id: review_queue_baseline
     run: seed7_n100000              # a fact about this run only; skipped when checking any other
     doc: docs/runbooks/ingestion.md
-    text: "Seed 7 baseline: 7 persons queued, 1 of them a real leftover."
+    text: "Seed 7 baseline: 2 persons queued, 1 of them a real leftover."
     number: "(\\d+) persons queued"
-    sql: "SELECT count(DISTINCT person_key) FROM deletion_review WHERE reason = 'one_key_matches'"
+    sql: "SELECT count(DISTINCT person_key) FROM deletion_review"
   - id: deletion_is_exact_match_only
     doc: docs/runbooks/ingestion.md
     text: |-

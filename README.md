@@ -10,21 +10,21 @@ throttles, crashes and changes data mid-sync. Plumbline loads them, works out wh
 same person, and deletes people who ask to be deleted, everywhere. Every number below is measured
 against the answer key, and the tests that hold each one are named.
 
-**At a glance** (seed 7, 100,000 people, 314,579 rows, one command; time and memory per stage at 20,000 to 300,000 people are in [Scale](#scale)):
+**At a glance** (seed 7, 100,000 people, 314,839 rows, one command; time and memory per stage at 20,000 to 300,000 people are in [Scale](#scale)):
 
 | | Result |
 | --- | --- |
 | Ingestion | 0 invariant violations; 100 injected faults change nothing; a crashed API sync resumes without loss |
-| Identity resolution | F1 **0.991** (precision 99.4%, recall 98.8%) vs 0.927 for exact email-or-phone matching, and it holds at 3x the population (0.990 at 300,000 people), where the first version fell to 0.960 |
-| Person-level deletion | deleted people with data left: 23 → **11** of 500; records of people who never asked, removed: 69 → **50** |
-| Golden person (dbt) | current address right for 90.9% of people, against a ceiling of 91.8% (the rest moved and no source saw it); work and personal identities linked 99.3% right |
-| Home-buyer model | AUC 0.661 and 2.3x lift in the top decile on a later, untouched period; the best possible is 0.806; a leaky version scoring 0.837 is caught because it beats the best possible |
-| Income estimate | for people the vendor never covered: within one band of the true income 83% of the time, against 79.2% for ZIP income alone; the vendor's own band, where it exists, gets 94.7% |
-| Campaign experiment | a holdout test of a reactivation email: +1.31 points of 30-day buyers measured, +1.47 (95% CI +1.16 to +1.77) after correcting for orders nobody can attribute, and the answer key's true +1.61 falls inside only the corrected interval; an uplift model sends the next email to the 30% it changes most, for 38 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (best possible: 43) |
-| Home-seller model | **not published**: validation AUC 0.47, and even the rule that generated the data reaches only 0.56; the guardrails refused it, as they should |
+| Identity resolution | F1 **0.991** (precision 99.4%, recall 98.8%) vs 0.927 for exact email-or-phone matching, and it holds as the world grows (0.991 at 300,000 people), where the first version fell to 0.960 |
+| Person-level deletion | deleted people with data left after load: 18 → **8** of 500 after person-level deletion, with **0** people deleted who never asked; the first version deleted 8 innocent people at 300,000 |
+| Golden person (dbt) | current address right for 91.1% of people, against a ceiling of 91.9% (the rest moved and no source saw it); households 99.98% precise; work and personal identities linked 99.2% right |
+| Home-buyer model | AUC 0.660 and 2.0x lift in the top decile on a later, untouched period; the best possible is 0.797; a leaky version scoring 0.836 is caught because it beats the best possible |
+| Income estimate | for people the vendor never covered: within one band of the true income 83.6% of the time, against 79.8% for ZIP income alone; the vendor's own band, where it exists, gets 94.9% |
+| Campaign experiment | a holdout test of a reactivation email, checked against the answer key's true effect: inside the attribution-corrected 95% interval in 6 of 7 runs (20,000 to 1,000,000 people); the run that missed is the one whose readout marked itself untrustworthy; from 100,000 people up, an uplift model sends the next email to the 30% it changes most, for 32 to 40 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (at 20,000 it has too little to learn from and does not win) |
+| Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
 | Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 44 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 188 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 199 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 | Phase | What | Status |
 | --- | --- | --- |
@@ -69,9 +69,9 @@ answer key (seed 7, 100,000 people, 122,994 records; the key is used only to sco
 | Exact email or phone (the obvious baseline) | 95.6% | 89.9% | 0.927 | 91.5% |
 | Plumbline: Splink + cannot-link clustering | **99.4%** | **98.8%** | **0.991** | **98.9%** |
 
-Recall by damage type (share of a record's true partners it was joined with): nickname 91.6%,
-name typo 96.2%, missing zip 96.5%, missing phone 97.3%, missing email 97.4%, address typo 97.8%,
-email typo 97.9%, undamaged 99.3%. The baseline gets 68 to 72% on missing or misspelled contact fields.
+Recall by damage type (share of a record's true partners it was joined with): nickname 91.3%,
+name typo 96.2%, missing zip 96.4%, missing phone 97.3%, address typo 97.8%, missing email 98.0%,
+email typo 98.3%, undamaged 99.2%. The baseline gets 68 to 72% on missing or misspelled contact fields.
 The match threshold, 0.9, was fixed before scoring.
 Email events, which carry only an address, attach to a person 92.3% of the time and are right 99.7%
 of the time; an address shared by a family is left unattached on purpose.
@@ -113,7 +113,7 @@ showed it missing, because that would be tuning to the answer key.
    still fails if people who share a profile differ in name or household, which is what a wrong
    profile key would look like.
 
-Remaining error class: family members (137 of the 144 mixed-up clusters are one household).
+Remaining error class: family members (139 of the 149 mixed-up clusters are one household).
 
 ## Deletion at the person level
 
@@ -138,18 +138,30 @@ agrees with a strong one from the same request: otherwise a housemate's own phon
 mark the housemate for deletion (this exact bug deleted 12 innocent records before the rule).
 A known date of birth that disagrees vetoes the match (father and son, one name, one address).
 
-**What is left, and why:**
+**What is left, and why.** 8 of 500 deleted people still have a record (3 in the CRM, 4 at the
+vendor, 1 in the store). The kinds of leftover, measured in the first version of the world (11 left):
 - 3 deleted people have records that never carried the email or phone in their request (a work
   email, blank fields). A request holding only those two hashes cannot reach them; the fix is upstream,
   in what the deletion intake collects.
 - 8 moved: their old and new records share only the name. One key is not enough to delete, so name +
-  zip single matches go to `deletion_review`: 7 persons, 1 of them a real leftover (14% precision).
+  zip single matches go to `deletion_review`: 2 persons, 1 of them a real leftover (7 before the
+  phone rule below, so a reviewer's hit rate went from 1 in 7 to 1 in 2).
   Last name + address alone was tried too and dropped: 354 persons, 3 real, so a reviewer would drown.
 - 15 store orders of housemates sharing an inbox are still erased at load: orders carry no phone, so
   at load time there is nothing to tell them apart. Fixing it means holding ambiguous rows until
   identity has run instead of erasing at once. Open.
-- 1 innocent vendor record: two Jonathan Deckers at one address, both born in 1945; the deleted one's
-  tombstone came from a CRM row without a date of birth.
+- 0 innocent records (there was 1: two Jonathan Deckers at one address, both born in 1945).
+
+**A rule that only scale revealed.** At 300,000 people, 8 people were deleted who never asked, and 45
+of their records; at 1,000,000, 85 records. Every one shared a first name, last name and home with the
+requester (a father and son), matched two tombstone keys, and had no date of birth to veto
+it, because the requester's own rows, phone and all, had already been purged at load. Phones are
+personal, and every record carrying the requester's phone is purged at load, so a person who still
+has a phone of their own at this stage is someone else or the requester under a new number. Now:
+two keys and another phone go to a person (`keys_match_but_phone_differs`), one key and another phone
+is a namesake and is dropped. At 300,000 people: innocent people deleted 8 → 0, real deletions 58 →
+58, deleted people with data left 15 → 15, review queue 54 → 14 persons. A test plants the father
+and son.
 
 ## Data products (dbt)
 
@@ -168,12 +180,12 @@ Scored against the answer key (seed 7; `python -m plumbline --score`):
 
 | | Result | What it is compared with |
 | --- | --- | --- |
-| Current address | **90.9%** right | ceiling 91.8%: the other 8.2% moved and no source reported the new address |
+| Current address | **91.1%** right | ceiling 91.9%: the other 8.1% moved and no source reported the new address |
 | Address on a past date | 97.3% (2024-06-30), 95.3% (2025-03-31) | the true address on that date |
 | Phone, date of birth, job title | 99.9%, 99.9%, 99.5% right when filled | |
-| Work and personal email linked | **99.3%** right | of the 6,960 people for whom some source ever carried both |
-| Moves used for segments | 91% precision, 70% of detectable moves found, a median 50 days after the move | 3,157 of 12,147 true moves were detectable at all |
-| Households | precision 97.8%, recall 86.4% | true households |
+| Work and personal email linked | **99.2%** right | of the 6,958 people for whom some source ever carried both |
+| Moves used for segments | 91% precision, 69% of detectable moves found, a median 55 days after the move | 3,163 of 11,987 true moves were detectable at all |
+| Households | precision 99.98%, recall 86.4% | true households (it was 97.8%: see below) |
 
 What the scores changed, in order:
 
@@ -194,11 +206,11 @@ What the scores changed, in order:
    rightly attached to nobody; checking the address, not the person, covers them.
 
 On address choice the scores were honest with me: "newest address that is still being confirmed" beats
-"latest mention wins" by 0.4 points and "most trusted source wins" by 0.8. A small, consistent edge,
+"latest mention wins" by 0.5 points and "most trusted source wins" by 1.0. A small, consistent edge,
 not a large one. Most of the remaining gap is the ceiling.
 
 The gap between what is true and what a brand's own sources can see (only 26% of moves are detectable;
-6,960 of 50,166 people ever show both a work and a personal email) is the size of the problem
+6,958 of 50,153 people ever show both a work and a personal email) is the size of the problem
 third-party enrichment exists to close.
 
 ## Home-buyer model (Module C)
@@ -214,17 +226,17 @@ whole outcome window closed before the date it is evaluated on (`check_no_label_
 caught my own first schedule: a 182-day horizon let the last training snapshot see one day past the
 test date, so the horizon is 180.
 
-On 2025-06-30 (30,323 people, 660 bought within 180 days):
+On 2025-06-30 (30,366 people, 635 bought within 180 days):
 
 | | AUC | Top-decile lift |
 | --- | --- | --- |
-| Random | 0.48 | 0.8x |
+| Random | 0.50 | 1.1x |
 | Census ZIP income alone | 0.63 | 2.0x |
-| **Plumbline model** (logistic regression, chosen on validation over gradient boosting) | **0.661** | **2.3x** |
-| Same model without property and Census enrichment | 0.611 | 1.8x |
-| What-if: plus an on-time vendor feed (age, renter, job change, income band as of each cutoff), 5-seed gradient-boosting ensemble | 0.726 to 0.728 | 2.8x |
-| Ceiling: the rule that generated the purchases | 0.806 | 4.4x |
-| Same model with vendor data pasted back from December | 0.837 | 4.0x |
+| **Plumbline model** (logistic regression, chosen on validation over gradient boosting) | **0.660** | **2.0x** |
+| Same model without property and Census enrichment | 0.597 | 1.8x |
+| What-if: plus an on-time vendor feed (age, renter, job change, income band as of each cutoff), 5-seed gradient-boosting ensemble | 0.714 | 2.8x |
+| Ceiling: the rule that generated the purchases | 0.797 | 4.4x |
+| Same model with vendor data pasted back from December | 0.836 | 3.7x |
 
 How to read it:
 
@@ -232,23 +244,25 @@ How to read it:
   numbers in parallel, and the order of those additions is not fixed. On identical data (same data
   fingerprint) one fit gave 0.7179 on a laptop and 0.7249 in the cloud, and two runs on the same
   laptop gave different single-fit ranges (0.7188 to 0.7236, then 0.7178 to 0.7295). Gradient
-  boosting is therefore always a 5-seed ensemble, and the card records the spread. The ensemble has
-  stayed within 0.726 to 0.728 on every run so far (0.7259 and 0.7270 on the laptop, 0.7284 in the
-  cloud); it shrinks the wobble, it does not remove it. The model choice is safe from it: logistic regression wins on validation
-  average precision by 0.0052 (0.0305 vs 0.0253), more than eight times gradient boosting's own seed
-  spread (0.0006). Logistic regression is deterministic and gives the same AUC on every machine.
+  boosting is therefore always a 5-seed ensemble, and the card records the spread. In the first
+  version of the world the ensemble stayed within 0.726 to 0.728 on every run (0.7259 and 0.7270 on the
+  laptop, 0.7284 in the cloud); in the current world it scores 0.714. It shrinks the wobble, it does
+  not remove it. Logistic regression wins on validation
+  average precision by 0.0021 (0.0278 vs 0.0257), only 1.4 times gradient boosting's own seed spread
+  (0.0015): in this world the choice is close, and a different world could flip it. Logistic
+  regression is deterministic and gives the same AUC on every machine.
 
 - **The leak beats the ceiling, which is how you know it is a leak.** Vendor attributes delivered in
   November and December say who owns a home after buying it. Pasted onto earlier snapshots they score
   above the best possible model, which only a model reading the future can do. `check_not_above_ceiling`
   refuses any backtest that does.
-- **First-party data alone gets half the way.** The model captures 53% of the AUC above chance that the
-  ceiling allows, and 38% of the lift. What drives buying here is household income, age, renting and a
+- **First-party data alone gets half the way.** The model captures 54% of the AUC above chance that the
+  ceiling allows, and 31% of the lift. What drives buying here is household income, age, renting and a
   recent job change, which a brand's own systems barely see. An on-time vendor feed moves AUC from 0.66 to
-  0.73: that difference is the price of enrichment, measured. The rest of the gap is exact household
+  0.71: that difference is the price of enrichment, measured. The rest of the gap is exact household
   income, which nobody sells.
-- **Calibration runs low.** Buying rose through 2025, so scores under-predict by about 1.5x in the top
-  deciles. Use scores to rank; the model card says so.
+- **Calibration runs low.** Buying rose through 2025, so scores under-predict by about 1.3x in the top
+  decile. Use scores to rank; the model card says so.
 
 Leaks found and fixed on the way, each now a test or a rule:
 
@@ -264,7 +278,7 @@ Leaks found and fixed on the way, each now a test or a rule:
 are the training inputs, scores are probabilities that vary, the mean is plausible, missing-value rates
 are stable, and no feature drifts past a population stability index of 0.25. Every run is logged in
 `ml.model_runs` with its checks; a failed run publishes nothing. People known only from the vendor feed
-are not scored (33,432 on 2025-12-31): the model was trained before any vendor data existed, and they
+are not scored (33,426 on 2025-12-31): the model was trained before any vendor data existed, and they
 are listed in `ml.home_buyer_not_scored` with that reason. Removing that rule makes the drift check
 block publication, so the two protect each other. My first drift check had a bug of its own (it mixed
 two pandas indexes and reported a drift of 18 on flags that had not moved); it has a regression test.
@@ -289,9 +303,9 @@ on one side of the split, so a person's partner cannot leak their income into th
 | People without a vendor band, against their true band | Within one band | Mean band error | Rank correlation |
 | --- | --- | --- | --- |
 | Majority band for everyone | | | undefined |
-| ZIP income alone | 79.2% | 0.91 | 0.46 |
-| **Plumbline estimate** (5-seed gradient boosting) | **83.0%** | **0.84** | **0.55** |
-| For comparison: the vendor's band, where it exists | 94.7% | | |
+| ZIP income alone | 79.8% | 0.91 | 0.47 |
+| **Plumbline estimate** (5-seed gradient boosting) | **83.6%** | **0.83** | **0.57** |
+| For comparison: the vendor's band, where it exists | 94.9% | | |
 
 It is a modest gain, and the comparison row says why: what a brand sees about a person says little
 about their income, and a bought band is much better. Estimates go to `ml.income_estimates` only if
@@ -299,11 +313,12 @@ they beat ZIP income alone, land within one band at least 60% of the time, and d
 the same band; otherwise nothing is published.
 
 **Home seller: assessed, not published.** The question was who will sell their home in the next 180
-days, among owners on the cutoff date. On validation the best candidate scored AUC 0.47, below chance;
-on the test date 0.53, with a top-decile lift of 0.83. Even the rule that generated the moves reaches
-only 0.56: in this world selling is close to random among owners, so there is almost nothing to learn.
-All three gates failed (beats chance on validation, lift of at least 1.2, a ceiling that leaves
-room), so no scores were written, and a stale `ml.home_seller_scores` table from an earlier run is
+days, among owners on the cutoff date. On validation the best candidate scored AUC 0.54; on the
+test date 0.54, with a top-decile lift of 1.27. Even the rule that generated the moves reaches only
+0.55: in this world selling is close to random among owners, so there is almost nothing to learn.
+Two of the three gates failed (beats chance on validation, a ceiling that leaves room); the lift gate
+passed, which with a ceiling of 0.55 is luck, and it took only one failed gate to stop publication.
+No scores were written, and a stale `ml.home_seller_scores` table from an earlier run is
 dropped rather than left looking current. Every assessment is logged in `ml.model_runs_seller`. I did
 not change the world to make selling predictable: a model that should not ship is a result.
 
@@ -338,47 +353,71 @@ were buying anyway). A hidden per-person factor means no model can rank people p
 
 1. **Design before the send** (`design.py`). Everyone the activation audience may email. The plan
    (metric, smallest effect worth detecting, power) is written to `exp.plan` before any result
-   exists: 57,387 inboxes, a half-point effect detectable at 80% power.
+   exists: 57,374 inboxes, a half-point effect detectable at 80% power.
 2. **Randomize the inbox, not the person.** My first design randomized people, and the answer key
-   showed the flaw: families share inboxes, so 516 inboxes landed in both arms and "held out"
+   showed the flaw: families share inboxes, so 507 inboxes landed in both arms and "held out"
    people read the email their sibling was sent. Assignment is now a salted hash of the address.
 3. **Attribute orders through the identity graph.** People check out with their work address, or
    mistype one. An order counts for an inbox if it was placed with that address or any address the
-   identity graph ties to its people. 89.1% of orders in the window were attributed; the rest count
-   as "did not buy" in both arms, which shrinks the effect toward zero.
-4. **Check before believing.** Sample ratio: 29,046 vs 28,341 inboxes, p = 0.003. That is above
-   the alarm set in advance (0.001), and the same hash splits evenly under 40 other salts, so it is
-   chance; I did not change the salt after seeing it. A test breaks the split on purpose and the
-   readout marks itself untrustworthy.
+   identity graph ties to its people. 89.3% of orders in the window were attributed; the rest count
+   as "did not buy" in both arms, which shrinks the effect toward zero. The readout also reports the
+   effect divided by the attributed share, and says that correction assumes the loss is the same in
+   both arms.
+4. **Check before believing.** If the split does not match the design (sample ratio, alarm at
+   p < 0.001, set in advance), the readout marks itself untrustworthy. A test breaks the split on
+   purpose to prove it does.
+
+**This run tripped the alarm.** In the current world the split came out 29,087 vs 28,287 inboxes,
+p = 0.0008, and the readout refused to be trusted. I checked the hash before believing anything
+else: over 200 other salts on these same inboxes, 3.5% of splits fall below p = 0.05 and none below
+0.001, so the hash is fair and this salt is a one-in-a-thousand draw for this population. The
+protocol written before the send says: re-send with a new salt. Swapping the salt after seeing the
+result would be choosing the experiment by its outcome, so the numbers below are what this run
+measured, shown as the refused readout they are:
 
 | Bought within 30 days | Treatment | Holdout | Effect (95% CI) | True effect |
 | --- | --- | --- | --- | --- |
-| Everyone, as measured | 3.50% | 2.19% | +1.31 pts (+1.04 to +1.58) | +1.61 |
-| **Everyone, corrected for unattributed orders** | | | **+1.47** (+1.16 to +1.77) | +1.61 |
-| Lapsed customers | 6.16% | 2.09% | +4.07 (+3.39 to +4.74) | +4.45 |
-| Never ordered | 1.11% | 0.57% | +0.54 (+0.35 to +0.74) | +0.63 |
-| Recent customers | 7.57% | 7.23% | +0.33 (-0.65 to +1.31), Holm p = 0.50 | +1.23 |
+| Everyone, as measured | 3.87% | 2.03% | +1.83 pts (+1.56 to +2.11) | +1.63 |
+| Everyone, corrected for unattributed orders | | | +2.06 (+1.75 to +2.36) | +1.63 |
+| Lapsed customers | 6.22% | 2.22% | +4.00 (+3.31 to +4.68) | +4.54 |
+| Never ordered | 1.21% | 0.48% | +0.73 (+0.53 to +0.92) | +0.62 |
+| Recent customers | 9.03% | 6.48% | +2.56 (+1.56 to +3.55) | +1.24 |
 
-Revenue per inbox rose $1.54 (CI $1.14 to $1.95). The raw interval misses the true effect: 11% of
-orders cannot be tied to anyone, and they count as "did not buy" in both arms, which pulls the
-measured effect toward zero. The correction divides by the attributed share and assumes the loss is
-the same in both arms; with it, the truth is inside. That gap is the case for better attribution
-(asking for the email at checkout), not for a cleverer formula. CUPED (adjusting for
-each inbox's order history) narrowed the interval by only 0.9%: variance falls by the squared
-correlation between history and outcome, and for a rare yes/no purchase that is close to zero. A
-test pins that rule, on an outcome history does predict.
+The recent-customer row overshoots, and the answer key says why: comparing the arms with perfect
+attribution gives +2.68, while the email's real effect on those same inboxes was +1.22. The arms
+differed in who was going to buy anyway, by luck of the draw, and nothing before the send showed it:
+December purchases and order history were balanced between the arms (every p above 0.29). That is
+the variance a confidence interval is about, not a bug, which is why the interval is reported across
+runs rather than from one:
+
+| Run | True effect | Measured (raw) | Corrected for attribution | Truth inside the corrected interval |
+| --- | --- | --- | --- | --- |
+| First world, 20,000 | +1.55 | +1.47 | +1.68 | yes |
+| First world, 100,000 | +1.61 | +1.31 | +1.47 | yes (the raw interval missed) |
+| First world, 300,000 | +1.63 | +1.45 | +1.63 | yes |
+| First world, 1,000,000 (laptop) | +1.63 | +1.47 | +1.65 | yes |
+| Current world, 20,000 | +1.60 | +1.57 | +1.81 | yes |
+| **Current world, 100,000** (alarm: readout refused) | +1.63 | +1.83 | +2.06 | no (the raw interval held) |
+| Current world, 300,000 | +1.63 | +1.55 | +1.74 | yes |
+
+6 of 7 runs, as a 95% interval should roughly do. The one miss is also the one the readout refused to
+vouch for.
+
+CUPED (adjusting for each inbox's order history) narrows the interval by only about 1%: variance
+falls by the squared correlation between history and outcome, and for a rare yes/no purchase that
+is close to zero. A test pins that rule, on an outcome history does predict.
 
 **Who to send it to next time.** An uplift model (two models, sent and held out; uplift is the
 difference) learns who the email changes, using only what was known before the send. It is chosen
 on one half of the inboxes and judged on the other: logistic regression beat gradient boosting on
-validation Qini. Its ranking correlates 0.49 with the true effect (Spearman). Sending the next email to 30% of
-the list:
+validation Qini. Its ranking correlates 0.41 with the true effect (Spearman). Sending the next email
+to 30% of the list:
 
 | Policy | Extra buyers per 1,000 emails (from the answer key) |
 | --- | --- |
 | Send to everyone, or a random 30% | 16 |
 | The 30% likeliest to buy | 24 |
-| **The 30% the uplift model ranks highest** | **38** |
+| **The 30% the uplift model ranks highest** | **32** (39 at 300,000; 20 at 20,000, where it loses to the likeliest buyers' 22) |
 | Best possible 30% | 43 |
 
 The likeliest buyers are the wrong target: many of them buy anyway, so the email adds little.
@@ -421,7 +460,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | Answered right, with the right source | 18 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only |
 | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
-| Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **17 of 20 (test half)** |
+| Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **16 of 20 (test half)** |
 | Security questionnaire, left for a person when the controls page does not settle it | 7 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer) |
 
 The eval sets were tripled (from 32 to 67 knowledge questions, 18 to 53 questionnaire items),
@@ -501,51 +540,58 @@ Setting up Slack, secrets and roles: [the agent runbook](docs/runbooks/agent.md)
 
 ## Scale
 
-The same command at three sizes (`python scripts/scale_run.py --n-people N`), every stage from
-generation to the experiment readout, on a 2-core, 7 GB cloud machine. Seconds per stage, and the
-most memory the process had used by the end of the run:
+The same command at four sizes (`python scripts/scale_run.py --n-people N`), every stage from
+generation to the experiment readout. Seconds per stage, and the most memory the process had used by
+the end of the run:
 
-| People | Rows delivered | Store sync | Ingest | Identity | dbt products | Models | Experiment | Whole pipeline | Peak memory |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 20,000 | 62,729 | 6 | 6 | 14 | 20 | 90 | 4 | 2.4 min | 2.4 GB |
-| 100,000 | 314,579 | 2 (incremental) | 32 | 36 | 39 | 183 | 14 | 5.3 min | 2.6 GB |
-| 300,000 | 946,299 | 100 | 86 | 94 | 84 | 400 | 31 | 14.6 min | 3.1 GB |
+| People | Machine | Rows delivered | Store sync | Ingest | Identity | dbt products | Models | Experiment | Whole pipeline | Peak memory |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20,000 | 2-core cloud, 7 GB | 62,679 | 6 | 7 | 24 | 21 | 102 | 7 | 2.9 min | 2.4 GB |
+| 300,000 | 2-core cloud, 7 GB | 945,970 | 99 | 93 | 97 | 86 | 413 | 35 | 15.1 min | 3.1 GB |
+| 1,000,000 | 10-core laptop | 3,151,006 | 7 (incremental) | 170 | 164 | 112 | 584 | 47 | 18.8 min | 4.2 GB |
 
-And whether the answers hold as the world grows:
+And whether the answers hold as the world grows (current code and world; the 1,000,000 row is from the
+run before the last two fixes below and is re-measured on the next laptop run):
 
-| People | Identity precision / recall | Deleted people with data left | Current address right (ceiling) | Home-buyer AUC (ceiling) | Experiment: true effect inside the corrected interval |
-| --- | --- | --- | --- | --- | --- |
-| 20,000 | 99.6% / 98.9% | 0 of 100 | 91.3% (92.0%) | 0.675 (0.810) | yes |
-| 100,000 | 99.4% / 98.8% | 11 of 500 | 90.9% (91.8%) | 0.661 (0.806) | yes |
-| 300,000 | 99.3% / 98.8% | 15 of 1,500 | 91.2% (92.0%) | 0.664 (0.797) | yes |
+| People | Identity precision / recall | Deleted people with data left | People deleted who never asked | Current address right (ceiling) | Households F1 | Home-buyer AUC (ceiling) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 20,000 | 99.6% / 98.8% | 0 of 100 | 0 | 91.2% (92.0%) | 0.931 | 0.638 (0.783) |
+| 100,000 | 99.4% / 98.8% | 8 of 500 | 0 | 91.1% (91.9%) | 0.927 | 0.660 (0.797) |
+| 300,000 | 99.4% / 98.8% | 19 of 1,500 | 0 | 91.2% (92.0%) | 0.928 | 0.653 (0.800) |
+| 1,000,000 (before) | 99.3% / 98.1% | 76 of 5,000 | 85 records | 90.9% (91.5%) | 0.841 | 0.651 (0.788) |
 
-What the first scale run found, and what changed:
+What scale found, in order, each fixed at its root and held by a test:
 
 1. **Identity got worse as the world grew** (precision 99.1%, 97.4%, 93.5%): namesakes multiply
-   faster than people, and a too-generous email-typo rule joined them. Fixed in the matcher, above;
-   precision is now flat.
+   faster than people, and a too-generous email-typo rule joined them. Fixed in the matcher (item 5
+   under identity); precision is now flat.
 2. **The store sync was quadratic**, but in my test server, not the connector: the mock API re-sorted
    every order for every page, 537 s at 300,000 people. It now keeps a sorted index, like the
    database a real store pages on, and a test proves it returns exactly what the slow version did.
-   Most of what remains is honoring `Retry-After` on 177 throttled requests, which a real store
-   would impose too.
+   Most of what remains is honoring `Retry-After` on throttled requests, which a real store imposes too.
 3. **Memory is DuckDB's buffer cache more than the data.** Identity jumps to 2.4 GB already at
-   20,000 people because DuckDB takes memory it is allowed to; it grows 30% from 20,000 to 300,000.
+   20,000 people because DuckDB takes memory it is allowed to; it grows to 4.2 GB at 1,000,000.
+4. **1,000,000 people broke two assumptions.** Scoring crashed on two people the store data cannot
+   tell apart (item 6 under identity). Then the dbt test `every_address_spelling_has_one_canonical`
+   failed in a feature snapshot: address spellings are merged when they look alike, but alike is not
+   transitive ("1901 DORCHESTERROAD APT 26" is like "1901 DORCHESTER ROAD APT 26", which is like
+   "1901 DORCHESTER AVE", which the first is not like). Pointers are now followed to their end; where
+   no chain exists, nothing changes. On the 2-core machine the 1,000,000 run is killed for memory in
+   identity, so its ceiling is between 300,000 and 1,000,000 people.
+5. **Deletion started deleting the wrong people.** Records of people who never asked, deleted: 0, 1,
+   45, 85 at 20,000, 100,000, 300,000 and 1,000,000 people, and the review queue 1, 7, 107, 1,097
+   persons. Each was a namesake in the requester's home with no date of birth to tell them apart. A
+   person who still has a phone of their own after the requester's rows were purged is someone else,
+   so they now go to a person or are dropped (see "A rule that only scale revealed"). Measured on the
+   same warehouses: 45 to 0 at 300,000, with nobody left behind who was not before.
+6. **Households were being merged by the generator, not the matcher.** Household precision fell
+   from 97.8% to 93.6% between 100,000 and 300,000 people. 85% of the merged households were two
+   families the answer key itself put in one flat: the generator drew each apartment at random with no
+   record of who lived where (the birthday problem). Each home now holds one household; household
+   precision is 99.98% and F1 is flat with size. Every number in this README is from that corrected
+   world.
 
-4. **1,000,000 people found two wrong assumptions, not a slow stage.** On a 10-core laptop the run
-   first crashed in scoring, on two people the store data cannot tell apart (item 6 under identity).
-   Then a dbt test failed in a feature snapshot: `every_address_spelling_has_one_canonical`. Address
-   spellings are merged when they look alike, but alike is not transitive ("1901 DORCHESTERROAD APT
-   26" is like "1901 DORCHESTER ROAD APT 26", which is like "1901 DORCHESTER AVE", which the first is
-   not like), so a spelling's canonical could itself point elsewhere. Pointers are now followed to
-   their end; at 100,000 people the canonical table and every score are unchanged, because no chain
-   exists there. The test that caught it was written in Phase 2 for exactly this promise. On the 2-core, 7 GB machine the same run is killed for memory
-   during the identity stage, so that machine's ceiling is between 300,000 and 1,000,000 people.
-   Generating the 1,000,000-person world and its store took 3.4 GB and 6 minutes.
-
-The full 1,000,000 numbers come from `python scripts/scale_run.py --n-people 1000000` on a machine
-with more memory and land in `data/scale/n1000000.json`. Nothing here claims terabytes: everything
-runs on one machine.
+Nothing here claims terabytes: everything runs on one machine.
 
 ## How ingestion works
 
@@ -582,6 +628,7 @@ export CENSUS_API_KEY=...                                # free: api.census.gov/
 python scripts/fetch_reference.py --out data/reference  # once; needs internet; safe to rerun
 python -m plumbline.synth.cli --ref data/reference --out data/synth --n-people 100000 --seed 7
 python -m plumbline --score                              # every stage in order, with accuracy receipts
+# a world made by an older generator is refused; regenerate it with the same command plus --force
 python -m plumbline.agents ask "did last night's load reject anything?"
 python -m plumbline.agents eval                          # knowledge, routing (and the model, if configured)
 dagster dev -m plumbline.ingest.orchestration            # optional: the same pipeline, with checks, in a UI

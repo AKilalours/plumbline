@@ -34,7 +34,7 @@ items:
     terms: [famil]
   - q: How accurate is the golden person's current address?
     source: [README.md#data-products-dbt]
-    terms: ["90.9"]
+    terms: ["91.1"]
   - q: Why are vendor-only moves kept out of segments?
     source: [README.md#data-products-dbt, README.md#home-buyer-model-module-c]
     terms: ["45%"]
@@ -46,10 +46,10 @@ items:
     terms: [unsubscribe]
   - q: What test AUC does the home-buyer model get?
     source: [docs/model_card_home_buyer.md#results-on-2025-06-30, README.md#home-buyer-model-module-c]
-    terms: ["0.661"]
+    terms: ["0.660"]
   - q: What is the ceiling AUC for the home-buyer model?
     source: [docs/model_card_home_buyer.md#results-on-2025-06-30, README.md#home-buyer-model-module-c]
-    terms: ["0.806"]
+    terms: ["0.797"]
   - q: Which vendor features does the home-buyer model leave out, and why?
     source: [docs/model_card_home_buyer.md#features, README.md#home-buyer-model-module-c]
     terms: [november]
@@ -108,7 +108,7 @@ items:
     terms: [watermark]
   - q: How many persons does the seed 7 run normally queue for deletion review?
     source: [docs/runbooks/ingestion.md#6-the-deletion-review-queue-is-not-empty]
-    terms: ["7 persons"]
+    terms: ["2 persons"]
   - q: The deletion review queue suddenly jumped. What should I check first?
     source: [docs/runbooks/ingestion.md#6-the-deletion-review-queue-is-not-empty]
     terms: [identity_pairs]
@@ -147,7 +147,7 @@ items:
     terms: [quoted answer]
   - q: Why does the campaign experiment randomize inboxes rather than people?
     source: [README.md#campaign-experiment]
-    terms: [516 inboxes]
+    terms: [507 inboxes]
   - q: Which customers responded most to the reactivation email?
     source: [README.md#campaign-experiment, docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]
     terms: [lapsed]
@@ -159,10 +159,10 @@ items:
     terms: [missing for exactly]
   - q: Why was the home seller model not published?
     source: [README.md#income-estimate-and-home-seller-model]
-    terms: ["0.56"]
+    terms: ["0.55"]
   - q: How many people does the home-buyer model leave unscored?
     source: [README.md#home-buyer-model-module-c, docs/model_card_home_buyer.md]
-    terms: ["33,432"]
+    terms: ["33,426"]
   - q: How is the home-buyer model version decided?
     source: [README.md#home-buyer-model-module-c]
     terms: [hash]

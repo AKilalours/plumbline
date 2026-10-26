@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--allow-fixture", action="store_true",
                     help="permit the invented test reference data; never use for published numbers")
-    ap.add_argument("--force", action="store_true", help="write into an existing run directory")
+    ap.add_argument("--force", action="store_true", help="replace an existing run directory, everything in it")
     a = ap.parse_args(argv)
 
     ref = load_reference(a.ref)
@@ -33,8 +33,13 @@ def main(argv: list[str] | None = None) -> int:
     prefix = "" if ref.source == "real" else "FIXTURE_"
     run_dir = Path(a.out) / f"{prefix}seed{a.seed}_n{a.n_people}"
     if run_dir.exists() and not a.force:
-        print(f"refusing: {run_dir} exists; pass --force to overwrite", file=sys.stderr)
+        print(f"refusing: {run_dir} exists; pass --force to replace it", file=sys.stderr)
         return 2
+    if run_dir.exists():
+        # Replace, never write into: the store, its synced orders and the campaign are built from the
+        # world, and an old one left next to a new world would be joined to it without complaint.
+        import shutil
+        shutil.rmtree(run_dir)
     m = generate(ref, SynthConfig(seed=a.seed, n_people=a.n_people), run_dir)
     print(json.dumps({"run_dir": str(run_dir), "fingerprint": m["fingerprint"], "counts": m["counts"]}, indent=2))
     return 0

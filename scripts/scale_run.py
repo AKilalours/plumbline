@@ -27,6 +27,11 @@ def run(n: int, seed: int, ref: Path, out: Path) -> dict:
     run_dir = out / f"seed{seed}_n{n}"
     wh = out / f"warehouse_n{n}.duckdb"
     t = time.time()
+    from plumbline.synth.generate import GENERATOR_VERSION
+    m = run_dir / "manifest.json"
+    if m.exists() and json.loads(m.read_text()).get("generator_version", 1) != GENERATOR_VERSION:
+        import shutil
+        shutil.rmtree(run_dir)            # a world from another generator version: measure a new one
     if not (run_dir / "deliveries.json").exists():
         generate(load_reference(ref), SynthConfig(seed=seed, n_people=n), run_dir)
     gen = {"seconds": round(time.time() - t, 1), "peak_memory_mb": peak_memory_mb()}

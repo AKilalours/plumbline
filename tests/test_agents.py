@@ -309,11 +309,11 @@ def test_doc_edits_stay_inside_the_repository(ctx):
 def test_a_wrong_number_in_the_docs_is_corrected_from_the_warehouse(ctx):
     runbook = ctx.repo / "docs" / "runbooks" / "ingestion.md"
     with duckdb.connect(str(ctx.warehouse), read_only=True) as con:
-        n = con.execute("SELECT count(DISTINCT person_key) FROM deletion_review WHERE reason = 'one_key_matches'").fetchone()[0]
+        n = con.execute("SELECT count(DISTINCT person_key) FROM deletion_review").fetchone()[0]
     claims = ctx.repo / "docs" / "claims.yaml"
     wrong = n + 5
-    runbook.write_text(runbook.read_text().replace("Seed 7 baseline: 7 persons queued", f"Seed 7 baseline: {wrong} persons queued"))
-    claims.write_text(claims.read_text().replace("Seed 7 baseline: 7 persons queued", f"Seed 7 baseline: {wrong} persons queued"))
+    runbook.write_text(runbook.read_text().replace("Seed 7 baseline: 2 persons queued", f"Seed 7 baseline: {wrong} persons queued"))
+    claims.write_text(claims.read_text().replace("Seed 7 baseline: 2 persons queued", f"Seed 7 baseline: {wrong} persons queued"))
     stale = {s["id"]: s for s in TOOLS["check_doc_claims"].run(ctx, {})["stale"]}
     assert stale["review_queue_baseline"]["edit"]["new"].startswith(f"Seed 7 baseline: {n} persons queued")
 

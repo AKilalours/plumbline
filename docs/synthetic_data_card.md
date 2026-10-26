@@ -19,7 +19,10 @@ households, moves, job changes, home purchases.
 
 - Household size 1 to 4 with probabilities 0.32, 0.33, 0.17, 0.18.
 - Household income: lognormal around the ZIP's Census median, sigma 0.55.
-- Lots are chosen with weight min(residential units, 50).
+- Lots are chosen with weight min(residential units, 50). Each home holds one household: a free unit
+  in the building, or the house itself; a full building sends the household to another lot. Units are
+  not reused after a move. (Generator version 1 drew units at random and could put two families in one
+  flat; at 300,000 people, 2,182 addresses held two households.)
 - Initial owner: lot has <= 2 units and a 60% draw.
 - Employment: 85% under age 67, 20% at 67 or older. 15% of the employed change jobs once.
 - Home purchase per household: base 4%, multiplied by

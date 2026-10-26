@@ -95,6 +95,7 @@ def build_store(run_dir: str | Path, seed: int | None = None) -> dict:
     pd.DataFrame(damage, columns=["source", "record_id", "field", "kind"]).to_parquet(out / "damage_log.parquet", index=False)
     fp = hashlib.sha256(orders.to_csv(index=False, lineterminator="\n").encode()).hexdigest()[:16]
     info = {"orders": len(orders), "customers_with_orders": int((counts > 0).sum()), "fingerprint": fp,
+            "world_fingerprint": manifest["fingerprint"],
             "refunded": int((orders["financial_status"] == "refunded").sum())}
     (out / "store_manifest.json").write_text(json.dumps(info, indent=2) + "\n")
     return info

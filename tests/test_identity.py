@@ -125,6 +125,38 @@ def test_resolution_is_deterministic(warehouse, tmp_path):
         assert a.execute(q).fetchall() == b.execute(q).fetchall()
 
 
+def test_a_memory_cap_changes_how_much_memory_identity_uses_not_who_is_who(warehouse, tmp_path, monkeypatch):
+    _, wh, _ = warehouse
+    copy = tmp_path / "w3.duckdb"
+    shutil.copy(wh, copy)
+    monkeypatch.setenv("PLUMBLINE_DUCKDB_MEMORY", "300MB")
+    from plumbline.identity.match import splink_db
+    assert splink_db()._con.execute("SELECT current_setting('memory_limit')").fetchone()[0] in ("286.1 MiB", "300.0 MB")
+    with duckdb.connect(str(wh)) as a, duckdb.connect(str(copy)) as b:
+        resolve(b)
+        q = "SELECT source, record_id, person_key FROM identity_map ORDER BY ALL"
+        assert a.execute(q).fetchall() == b.execute(q).fetchall()
+
+
+def test_splink_spills_to_the_system_temp_folder_not_the_working_folder(tmp_path, monkeypatch):
+    """With the memory cap on, DuckDB spilled to ".tmp" in whatever folder the run started from,
+    and a .tmp/ of spill files appeared in the checkout."""
+    import tempfile
+    monkeypatch.chdir(tmp_path)
+    from plumbline.identity.match import splink_db
+    where = splink_db()._con.execute("SELECT current_setting('temp_directory')").fetchone()[0]
+    assert Path(where).resolve().is_relative_to(Path(tempfile.gettempdir()).resolve())
+    assert not Path(where).resolve().is_relative_to(tmp_path.resolve())
+
+
+@pytest.mark.parametrize("bad", ["lots", "1GB; DROP TABLE x", "-1GB"])
+def test_a_memory_cap_that_is_not_a_size_is_refused(monkeypatch, bad):
+    monkeypatch.setenv("PLUMBLINE_DUCKDB_MEMORY", bad)
+    from plumbline.identity.match import splink_db
+    with pytest.raises(ValueError, match="must look like"):
+        splink_db()
+
+
 def test_scoring_works_without_a_store(tmp_path):
     """Regression: scoring crashed when the optional store was never built."""
     run = tmp_path / "run"

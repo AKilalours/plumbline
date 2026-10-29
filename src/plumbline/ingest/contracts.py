@@ -86,7 +86,12 @@ def load_contract(path: str | Path) -> SourceContract:
 
 
 def load_contracts(directory: str | Path) -> dict[str, SourceContract]:
+    # An empty folder is an error, not "no sources": run from another directory, the relative default
+    # "sources" found nothing, ingest loaded nothing, and the run failed two stages later with
+    # "Table current_crm does not exist", which points everywhere but here.
     contracts = [load_contract(p) for p in sorted(Path(directory).glob("*.yaml"))]
+    if not contracts:
+        raise FileNotFoundError(f"no source contracts (*.yaml) in {Path(directory).resolve()}")
     return {c.name: c for c in contracts}
 
 

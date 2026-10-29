@@ -1,0 +1,201 @@
+{
+  "note": "Measured runs of the full pipeline on generator version 2 (one household per home). 20,000 and 300,000: scripts/scale_run.py on a 2-core, 7 GB cloud machine. 100,000: python -m plumbline --score --fresh on a 10-core laptop. 1,000,000: scripts/scale_run.py on the same laptop. Seed 7 throughout.",
+  "runs": [
+    {
+      "people": 20000,
+      "machine": "2-core cloud, 7 GB",
+      "identity": {
+        "precision": 0.9956,
+        "recall": 0.9877,
+        "f1": 0.9916
+      },
+      "deletion": {
+        "requested": 100,
+        "people_with_data_left": 0,
+        "records_of_people_who_never_asked": 0,
+        "review_cases": 0
+      },
+      "households_f1": 0.9308,
+      "address_right": 0.9124,
+      "address_ceiling": 0.9203,
+      "work_personal_link_right": 0.9911,
+      "home_buyer_auc": 0.6378,
+      "home_buyer_ceiling_auc": 0.7827,
+      "income_within_one_band": 0.8234,
+      "income_zip_only": 0.7979,
+      "experiment": {
+        "true_effect": 0.01604,
+        "effect": 0.01571,
+        "corrected_effect": 0.01805,
+        "truth_inside_corrected_ci": true,
+        "sample_ratio_p": 0.7803,
+        "trustworthy": true,
+        "buyers_per_1000_emails": {
+          "everyone": 15.95,
+          "likeliest_buyers_30pct": 21.65,
+          "uplift_model_30pct": 20.15,
+          "best_possible_30pct": 42.21
+        }
+      },
+      "timing": {
+        "pipeline_minutes": 2.9,
+        "peak_memory_gb": 2.4,
+        "rows_delivered": 62679,
+        "seconds": {
+          "store_build": 4,
+          "store_sync": 6,
+          "ingest": 7,
+          "identity": 24,
+          "person_deletion": 2,
+          "products": 21,
+          "model": 70,
+          "more_models": 32,
+          "experiment": 7
+        }
+      }
+    },
+    {
+      "people": 100000,
+      "machine": "10-core laptop",
+      "identity": {
+        "precision": 0.9938,
+        "recall": 0.9876,
+        "f1": 0.9907
+      },
+      "deletion": {
+        "requested": 500,
+        "people_with_data_left": 8,
+        "records_of_people_who_never_asked": 0,
+        "review_cases": 4
+      },
+      "households_f1": 0.927,
+      "address_right": 0.9105,
+      "address_ceiling": 0.9188,
+      "work_personal_link_right": 0.9915,
+      "home_buyer_auc": 0.6604,
+      "home_buyer_ceiling_auc": 0.7966,
+      "income_within_one_band": 0.8356,
+      "income_zip_only": 0.7977,
+      "experiment": {
+        "true_effect": 0.01634,
+        "effect": 0.01835,
+        "corrected_effect": 0.02055,
+        "truth_inside_corrected_ci": false,
+        "sample_ratio_p": 0.0008,
+        "trustworthy": false,
+        "buyers_per_1000_emails": {
+          "everyone": 16.22,
+          "likeliest_buyers_30pct": 23.93,
+          "uplift_model_30pct": 31.83,
+          "best_possible_30pct": 43.31
+        }
+      }
+    },
+    {
+      "people": 300000,
+      "machine": "2-core cloud, 7 GB",
+      "identity": {
+        "precision": 0.9936,
+        "recall": 0.9877,
+        "f1": 0.9906
+      },
+      "deletion": {
+        "requested": 1500,
+        "people_with_data_left": 19,
+        "records_of_people_who_never_asked": 0,
+        "review_cases": 23
+      },
+      "households_f1": 0.9282,
+      "address_right": 0.9119,
+      "address_ceiling": 0.9199,
+      "work_personal_link_right": 0.993,
+      "home_buyer_auc": 0.6532,
+      "home_buyer_ceiling_auc": 0.7995,
+      "income_within_one_band": 0.8355,
+      "income_zip_only": 0.7942,
+      "experiment": {
+        "true_effect": 0.01632,
+        "effect": 0.01545,
+        "corrected_effect": 0.01738,
+        "truth_inside_corrected_ci": true,
+        "sample_ratio_p": 0.0573,
+        "trustworthy": true,
+        "buyers_per_1000_emails": {
+          "everyone": 16.4,
+          "likeliest_buyers_30pct": 24.48,
+          "uplift_model_30pct": 39.06,
+          "best_possible_30pct": 43.71
+        }
+      },
+      "timing": {
+        "pipeline_minutes": 15.1,
+        "peak_memory_gb": 3.1,
+        "rows_delivered": 945970,
+        "seconds": {
+          "store_build": 56,
+          "store_sync": 99,
+          "ingest": 93,
+          "identity": 97,
+          "person_deletion": 25,
+          "products": 86,
+          "model": 243,
+          "more_models": 170,
+          "experiment": 35
+        }
+      }
+    },
+    {
+      "people": 1000000,
+      "machine": "10-core laptop",
+      "identity": {
+        "precision": 0.993,
+        "recall": 0.9876,
+        "f1": 0.9903
+      },
+      "deletion": {
+        "requested": 5000,
+        "people_with_data_left": 66,
+        "records_of_people_who_never_asked": 1,
+        "review_cases": 92
+      },
+      "households_f1": 0.9284,
+      "address_right": 0.9108,
+      "address_ceiling": 0.9187,
+      "work_personal_link_right": 0.9938,
+      "home_buyer_auc": 0.6515,
+      "home_buyer_ceiling_auc": 0.7917,
+      "income_within_one_band": 0.8348,
+      "income_zip_only": 0.7939,
+      "experiment": {
+        "true_effect": 0.01631,
+        "effect": 0.01512,
+        "corrected_effect": 0.01691,
+        "truth_inside_corrected_ci": true,
+        "sample_ratio_p": 0.3167,
+        "trustworthy": true,
+        "buyers_per_1000_emails": {
+          "everyone": 16.32,
+          "likeliest_buyers_30pct": 24.05,
+          "uplift_model_30pct": 39.3,
+          "best_possible_30pct": 43.45
+        }
+      },
+      "timing": {
+        "pipeline_minutes": 18.0,
+        "peak_memory_gb": 5.0,
+        "rows_delivered": 3150929,
+        "seconds": {
+          "store_build": 48,
+          "store_sync": 350,
+          "ingest": 87,
+          "identity": 84,
+          "person_deletion": 26,
+          "products": 64,
+          "model": 210,
+          "more_models": 183,
+          "experiment": 25
+        }
+      }
+    }
+  ]
+}

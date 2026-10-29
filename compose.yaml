@@ -1,5 +1,6 @@
 # docker compose run --rm pipeline                 # the whole pipeline on ./data (generate it first, see README)
 # docker compose up agent dagster                  # Slack endpoint on :3000, Dagster UI on :3001
+# docker compose up app                            # the demo app on http://127.0.0.1:8501
 # docker compose --profile lake up -d minio && docker compose --profile lake run --rm lake
 #
 # Secrets go in .env next to this file (git-ignored, never copied into the image):
@@ -31,6 +32,13 @@ services:
     <<: *plumbline
     command: ["dagster", "dev", "-m", "plumbline.ingest.orchestration", "-h", "0.0.0.0", "-p", "3001"]
     ports: ["127.0.0.1:3001:3001"]
+
+  app:
+    <<: *plumbline
+    command: ["python", "-m", "streamlit", "run", "streamlit_app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    environment:
+      PLUMBLINE_DEMO_DIR: /app/data/demo
+    ports: ["127.0.0.1:8501:8501"]
 
   minio:
     profiles: ["lake"]

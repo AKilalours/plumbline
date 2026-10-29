@@ -3,11 +3,18 @@
 dbt runs in its own process. In-process, dbt-duckdb keeps its connection to the warehouse open after
 the build, so the next stage could not open the file; a separate process also means no dbt state
 leaks between builds made for different as_of dates.
+
+dbt writes its compiled SQL, manifest and logs (about 2 MB) to a fresh folder per build. The folder
+is removed after a build that passed. The first version never removed it: one pipeline run builds
+dbt once per as_of date, and a test machine had collected 909 of them (2 GB) in /tmp, which on a
+nightly server or a hosted demo ends with a full disk. A failed build keeps its folder, and the error
+names it, because the logs there are what someone needs to see why.
 """
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -37,6 +44,7 @@ def build(warehouse: str | Path, as_of: str | None = None, select: str | None = 
               for r in results if r["status"] in ("error", "fail")]
     tests = [r for r in results if r["unique_id"].startswith("test.")]
     if proc.returncode != 0 or failed:
-        raise DbtFailed(f"dbt build failed: {failed or (proc.stdout + proc.stderr)[-2000:]}")
+        raise DbtFailed(f"dbt build failed: {failed or (proc.stdout + proc.stderr)[-2000:]} (logs kept in {target})")
+    shutil.rmtree(target, ignore_errors=True)
     return {"models": sum(r["unique_id"].startswith("model.") for r in results),
             "tests": len(tests), "tests_passed": sum(r["status"] == "pass" for r in tests)}

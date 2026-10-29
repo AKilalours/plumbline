@@ -379,3 +379,10 @@ def test_shared_inbox_keeps_family_members_with_their_own_phone(run, tmp_path):
     con = _con(wh)
     assert con.execute("SELECT count(*) FROM current_crm WHERE crm_id = 'C99999999'").fetchone()[0] == 1
     assert con.execute("SELECT count(*) FROM current_crm WHERE email = ?", [email]).fetchone()[0] == 1
+
+
+def test_a_folder_with_no_contracts_is_an_error_not_an_empty_source_list(tmp_path):
+    """Run from another directory, the default "sources" found nothing; ingest then loaded nothing and
+    the run died two stages later on a missing table."""
+    with pytest.raises(FileNotFoundError, match="no source contracts"):
+        load_contracts(tmp_path)

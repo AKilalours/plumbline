@@ -75,6 +75,10 @@ is not enough to delete automatically:
 - `keys_match_but_phone_differs`: name and address fit the deleted person, but this person has a phone
   that is not the one in the request. Usually a family member with the same name (a father and son).
   Delete only if the requester confirms the other number was theirs.
+- `keys_match_but_dob_unknown`: name and address fit the deleted person, the deleted person's date of
+  birth is known, and this record comes from a source that sends dates of birth but has none. Usually
+  a parent or child with the same name at the same home. Delete only if something independent ties
+  it to the requester (their email or phone in another source, a store order they placed).
 
 Seed 7 baseline: 2 persons queued, 1 of them a real leftover. A sudden jump means the identity model
 or a source changed; check `identity_pairs` for the persons involved before acting.

@@ -12,3 +12,4 @@ dbt/.user.yml
 logs/
 ops/roles.yaml
 data/agent.duckdb
+.tmp/

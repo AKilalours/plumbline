@@ -1,4 +1,4 @@
-# Plumbline in one image: the pipeline, the agent's Slack endpoint, Dagster and the lake publisher.
+# Plumbline in one image: the pipeline, the agent's Slack endpoint, Dagster, the lake publisher and the demo app.
 # Data lives in a mounted volume (/app/data), never in the image; secrets come from the environment.
 FROM python:3.12-slim
 
@@ -12,7 +12,7 @@ RUN useradd --create-home --uid 10001 plumbline
 COPY pyproject.toml README.md ./
 COPY src ./src
 # Editable: the package finds dbt/ and sources/ next to src/, as in a checkout.
-RUN pip install -e ".[orchestration,lake]"
+RUN pip install -e ".[orchestration,lake,app]"
 
 COPY sources ./sources
 COPY dbt ./dbt
@@ -22,10 +22,12 @@ COPY evals ./evals
 COPY scripts ./scripts
 COPY tests ./tests
 COPY ops/roles.example.yaml ./ops/roles.example.yaml
+COPY streamlit_app.py ./
+COPY .streamlit ./.streamlit
 
 RUN mkdir -p /app/data && chown -R plumbline /app
 USER plumbline
 VOLUME ["/app/data"]
-EXPOSE 3000 3001
+EXPOSE 3000 3001 8501
 
 CMD ["python", "-m", "plumbline", "--score"]

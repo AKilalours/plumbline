@@ -17,11 +17,12 @@ from .knowledge import Index
 SOURCES = ["docs/security.md", "docs/runbooks/*.md"]
 # Questionnaire items are long and full of words the controls page never uses ("handle", "traffic"),
 # so the general 0.5 refused answerable items. Chosen on the dev half of evals/questionnaire.yaml with
-# the same rule as the knowledge eval (evals.choose_threshold, grid=GRID): 0.15 to 0.25 score
-# perfectly there and the one closest to 0.5 wins. The documents change the scores, so a test re-runs
+# the same rule as the knowledge eval (evals.choose_threshold, grid=GRID): 0.25 and 0.3 score
+# perfectly there and the one closest to 0.5 wins. It sits on a tie: until the runbook gained the
+# date-of-birth review case, 0.15 to 0.25 were the perfect ones. The documents change the scores, so a test re-runs
 # the choice and fails if this constant no longer matches it.
 GRID = (0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5)
-MIN_COVERAGE = 0.25
+MIN_COVERAGE = 0.3
 
 
 def index(repo) -> Index:

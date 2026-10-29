@@ -125,7 +125,7 @@ def test_same_name_same_address_different_birthday_is_not_deleted():
     con.executemany("INSERT INTO deletion_tombstones VALUES ('t1', ?, 'purged:vendor', 'R1', 'strong', now())",
                     [[k] for k in son])
     recs = pd.DataFrame({
-        "unique_id": ["vendor:VDAD", "crm:CNODOB"], "person_key": ["PKdad", "PKnodob"],
+        "unique_id": ["vendor:VDAD", "crm:CNODOB"], "person_key": ["PKdad", "PKnodob"], "source": ["vendor", "crm"],
         "first_name": ["brian", "brian"], "last_name": ["johnson", "johnson"], "house": ["12", "12"],
         "street": ["MAIN ST", "MAIN ST"], "zip": ["10025", "10025"], "dob": ["1947-09-04", None],
         "phone": [None, None]})                       # identity_records always carries a phone column
@@ -172,7 +172,7 @@ def _phone_case(request_phone: str | None):
     con.executemany("INSERT INTO deletion_tombstones VALUES ('t1', ?, 'purged:crm', 'R1', 'strong', now())", [[k] for k in son])
     recs = pd.DataFrame({
         "unique_id": ["crm:DAD", "crm:NOPHONE", "crm:NAME", "crm:NAME2"],
-        "person_key": ["PKdad", "PKnophone", "PKname", "PKname2"],
+        "person_key": ["PKdad", "PKnophone", "PKname", "PKname2"], "source": ["crm"] * 4,
         "first_name": ["brian"] * 4, "last_name": ["johnson"] * 4,
         "house": ["12", "12", "40", "41"], "street": ["MAIN ST", "MAIN ST", "OAK AVE", "ELM ST"],
         "zip": ["10025"] * 4, "dob": [None] * 4,
@@ -185,6 +185,43 @@ def _phone_case(request_phone: str | None):
     left = {r for (r,) in con.execute("SELECT person_key FROM identity_map").fetchall()}
     queued = dict(con.execute("SELECT person_key, reason FROM deletion_review").fetchall())
     return s, left, queued
+
+
+def _dob_case(who: str):
+    """Michael Lee, born 1993, asked (no phone left on any record: they were purged at load). His
+    purged vendor row left a tombstone with his date of birth. One record is left at his home:
+    dad: a vendor record, same name, no phone, no date of birth (his father, born 1976);
+    dob: a vendor record with his own date of birth (his);
+    crm: a CRM record, same name, no date of birth (the CRM never sends one: nothing is missing)."""
+    from plumbline.ingest.engine import ensure_schema
+    import pandas as pd
+    con = duckdb.connect()
+    ensure_schema(con, CONTRACTS)
+    con.execute("INSERT INTO suppression VALUES ('R1', NULL, NULL, current_date, 'd1')")
+    son = tombstones.keys_from_parts("michael", "lee", "87-19", "81 AVE", "11385", "1993-03-31")
+    con.executemany("INSERT INTO deletion_tombstones VALUES ('t1', ?, 'purged:vendor', 'R1', 'strong', now())", [[k] for k in son])
+    src, dob = {"dad": ("vendor", None), "dob": ("vendor", "1993-03-31"), "crm": ("crm", None)}[who]
+    recs = pd.DataFrame({"unique_id": [f"{src}:X"], "person_key": ["PKx"], "source": [src], "first_name": ["michael"],
+                         "last_name": ["lee"], "house": ["87-19"], "street": ["81 AVE"], "zip": ["11385"], "dob": [dob],
+                         "phone": [None]})
+    con.register("r", recs)
+    con.execute("CREATE TABLE identity_records AS SELECT * FROM r")
+    con.execute(f"CREATE TABLE identity_map AS SELECT '{src}' AS source, 'X' AS record_id, 'PKx' AS person_key")
+    s = expand_deletions(con, CONTRACTS)
+    deleted = not con.execute("SELECT count(*) FROM identity_map").fetchone()[0]
+    queued = [r for (r,) in con.execute("SELECT reason FROM deletion_review").fetchall()]
+    return s, deleted, queued
+
+
+def test_a_namesake_at_home_with_no_date_of_birth_goes_to_a_person():
+    """Regression for 1,000,000 people: the one record still deleted for someone who never asked was a
+    father's vendor record (no email, phone or date of birth) at the home of his son of the same name.
+    Two keys matched, but name + zip and last name + address are one fact for two people in one home.
+    The son's date of birth was known and the vendor sends one, so its absence is what decides."""
+    s, deleted, queued = _dob_case("dad")
+    assert not deleted and queued == ["keys_match_but_dob_unknown"] and s["held_for_review"] == 1
+    assert _dob_case("dob")[1:] == (True, [])        # his own date of birth: his record, deleted
+    assert _dob_case("crm")[1:] == (True, [])        # the CRM sends no date of birth: nothing is missing
 
 
 def test_a_person_with_their_own_other_phone_is_not_deleted_for_someone_else():

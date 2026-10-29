@@ -110,8 +110,23 @@ def test_consent_is_always_current_even_for_a_past_audience(wh_copy):
     assert bad == 0
 
 
-def test_compliance_test_fails_when_the_rule_is_broken(wh_copy, tmp_path):
-    """The audience compliance test must actually bite: drop the unsubscribe rule and dbt must fail."""
+def test_a_passing_build_leaves_no_folder_behind(wh_copy, tmp_path, monkeypatch):
+    """Each build wrote 2 MB of compiled SQL and logs to a temp folder and never removed it."""
+    import tempfile
+    t = tmp_path / "tmp"
+    t.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(t))
+    build(wh_copy)
+    assert not list(t.glob("plumbline-dbt-*"))
+
+
+def test_compliance_test_fails_when_the_rule_is_broken(wh_copy, tmp_path, monkeypatch):
+    """The audience compliance test must actually bite: drop the unsubscribe rule and dbt must fail.
+    A failed build keeps its logs, and the error says where."""
+    import tempfile
+    t = tmp_path / "tmp"
+    t.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(t))
     proj = tmp_path / "dbt"
     shutil.copytree(DBT_DIR, proj, ignore=shutil.ignore_patterns("target", "logs"))
     m = proj / "models" / "marts" / "mart_activation_audience.sql"
@@ -120,10 +135,12 @@ def test_compliance_test_fails_when_the_rule_is_broken(wh_copy, tmp_path):
     orig = b.DBT_DIR
     b.DBT_DIR = proj
     try:
-        with pytest.raises(DbtFailed, match="audience_never_emails"):
+        with pytest.raises(DbtFailed, match="audience_never_emails") as e:
             build(wh_copy)
     finally:
         b.DBT_DIR = orig
+    kept = list(t.glob("plumbline-dbt-*"))
+    assert len(kept) == 1 and str(kept[0]) in str(e.value) and (kept[0] / "run_results.json").exists()
 
 
 def test_money_is_summed_exactly(world):

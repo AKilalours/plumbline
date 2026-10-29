@@ -1,0 +1,2 @@
+# For hosting the demo app (Streamlit Community Cloud reads this file). Local work: pip install -e ".[dev,app]"
+-e .[app]

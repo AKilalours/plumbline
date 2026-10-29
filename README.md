@@ -20,11 +20,36 @@ against the answer key, and the tests that hold each one are named.
 | Golden person (dbt) | current address right for 91.1% of people, against a ceiling of 91.9% (the rest moved and no source saw it); households 99.98% precise; work and personal identities linked 99.2% right |
 | Home-buyer model | AUC 0.660 and 2.0x lift in the top decile on a later, untouched period; the best possible is 0.797; a leaky version scoring 0.836 is caught because it beats the best possible |
 | Income estimate | for people the vendor never covered: within one band of the true income 83.6% of the time, against 79.8% for ZIP income alone; the vendor's own band, where it exists, gets 94.9% |
-| Campaign experiment | a holdout test of a reactivation email, checked against the answer key's true effect: inside the attribution-corrected 95% interval in 6 of 7 runs (20,000 to 1,000,000 people); the run that missed is the one whose readout marked itself untrustworthy; from 100,000 people up, an uplift model sends the next email to the 30% it changes most, for 32 to 40 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (at 20,000 it has too little to learn from and does not win) |
+| Campaign experiment | a holdout test of a reactivation email, checked against the answer key's true effect: inside the attribution-corrected 95% interval in 7 of 8 runs (20,000 to 1,000,000 people); the run that missed is the one whose readout marked itself untrustworthy; from 100,000 people up, an uplift model sends the next email to the 30% it changes most, for 32 to 39 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (at 20,000 it has too little to learn from and does not win) |
 | Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
 | Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 44 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 199 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 226 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+
+## See it work
+
+`python -m pip install -e ".[app]"` then `python -m streamlit run streamlit_app.py`. The app builds a city of 4,000
+people with the real pipeline (generator, store API sync, ingestion, identity, deletion, dbt) in
+about a minute, then lets you:
+
+- open a person and see every record the sources sent about them next to the answer key, including
+  the people the matcher got wrong;
+- file a deletion request for someone whose namesake lives in the same home, and see each record
+  removed, by which step, and who it really belonged to (on a private copy: the city never changes);
+- check the households it built against who really lives together;
+- read the experiment, the uplift model and the scale runs (from `docs/results/scale.json`: a city
+  of 4,000 is too small to test an email or train the home-buyer model on);
+- talk to the operations agent as any of the example roles, and approve a change as a second admin.
+
+Use `python -m streamlit`, not a bare `streamlit`: the first run of the app found Anaconda's
+Streamlit on the PATH, a Python without the project's libraries, and every page failed on a missing
+module. The app now checks its own Python first and, if anything is missing, says which and how to
+start it right (`test_a_python_without_the_projects_libraries_gets_one_clear_message`).
+
+The live city is small so the app fits a free host, which allows about 2.7 GB: identity's DuckDB is
+capped at 1 GB there (`PLUMBLINE_DUCKDB_MEMORY`). No language model is called from the public page
+unless it is started with `PLUMBLINE_APP_USE_LLM=1`, because a public page holding an API key is a
+page anyone can spend it from.
 
 | Phase | What | Status |
 | --- | --- | --- |
@@ -35,6 +60,7 @@ against the answer key, and the tests that hold each one are named.
 | 4 | Module E: operations agent (knowledge with sources, read-only tools, approvals, audit, Slack) | Done |
 | 5 | Income estimate, home-seller assessment, access provisioning, security questionnaires, hours retired | Done |
 | 6 | CI, campaign experiment and uplift model, Iceberg lake, scale runs, bigger evals, Docker | Done |
+| 7 | Demo app; the last wrongly deleted record at 1,000,000 people traced and fixed; identity memory capped | Done |
 
 ## Receipts
 
@@ -162,6 +188,13 @@ two keys and another phone go to a person (`keys_match_but_phone_differs`), one 
 is a namesake and is dropped. At 300,000 people: innocent people deleted 8 → 0, real deletions 58 →
 58, deleted people with data left 15 → 15, review queue 54 → 14 persons. A test plants the father
 and son.
+
+That left one record at 1,000,000 people (85 → 1): the father had no phone either, so the phone rule
+could not see him. His vendor record had no date of birth while his son's, from the purged row, was
+known, and the vendor sends one. A missing date of birth in a source that sends one, against a
+requester whose date of birth is known, now goes to a person (`keys_match_but_dob_unknown`): 1 → 0,
+with no requester's record kept at any size (item 7 under [Scale](#scale)). A test plants this father
+and son too.
 
 ## Data products (dbt)
 
@@ -399,8 +432,9 @@ runs rather than from one:
 | Current world, 20,000 | +1.60 | +1.57 | +1.81 | yes |
 | **Current world, 100,000** (alarm: readout refused) | +1.63 | +1.83 | +2.06 | no (the raw interval held) |
 | Current world, 300,000 | +1.63 | +1.55 | +1.74 | yes |
+| Current world, 1,000,000 (laptop) | +1.63 | +1.51 | +1.69 | yes |
 
-6 of 7 runs, as a 95% interval should roughly do. The one miss is also the one the readout refused to
+7 of 8 runs, as a 95% interval should roughly do. The one miss is also the one the readout refused to
 vouch for.
 
 CUPED (adjusting for each inbox's order history) narrows the interval by only about 1%: variance
@@ -417,7 +451,7 @@ to 30% of the list:
 | --- | --- |
 | Send to everyone, or a random 30% | 16 |
 | The 30% likeliest to buy | 24 |
-| **The 30% the uplift model ranks highest** | **32** (39 at 300,000; 20 at 20,000, where it loses to the likeliest buyers' 22) |
+| **The 30% the uplift model ranks highest** | **32** (39 at 300,000 and at 1,000,000; 20 at 20,000, where it loses to the likeliest buyers' 22) |
 | Best possible 30% | 43 |
 
 The likeliest buyers are the wrong target: many of them buy anyway, so the email adds little.
@@ -460,7 +494,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | Answered right, with the right source | 18 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only |
 | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
-| Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **16 of 20 (test half)** |
+| Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **13 of 20 (test half)**; 16 of 20 before the threshold moved (below) |
 | Security questionnaire, left for a person when the controls page does not settle it | 7 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer) |
 
 The eval sets were tripled (from 32 to 67 knowledge questions, 18 to 53 questionnaire items),
@@ -515,11 +549,14 @@ query, not a spreadsheet someone keeps.
 encryption at rest, no user accounts, no automated backups), because a questionnaire is signed as
 fact. A question the documents do not settle is marked "needs a person", not guessed. Questionnaire
 items are long and use words the controls page does not, so they have their own refusal threshold,
-chosen on the dev half by the same rule as the knowledge eval (0.25). A test re-runs that choice
-on the current documents and fails if the constant no longer matches: an earlier draft of the runbook
-moved the tie, which is how I found out the choice depends on the documents. With 9 dev questions
-several thresholds tied; with 27, 0.25 is the single best. Suffix stemming ("encrypted",
-"encryption") helped a little.
+chosen on the dev half by the same rule as the knowledge eval (now 0.3). A test re-runs that choice
+on the current documents and fails if the constant no longer matches, and it did: adding the
+date-of-birth review case to the ingestion runbook made 0.25 and 0.3 tie on the dev half, the rule
+picks the one nearer 0.5, and the held-out result fell from 16 of 20 to 13 of 20 (6 answerable items
+now refused). I kept the rule rather than pick the threshold the test half likes: the lesson is
+that lexical refusal sits on a knife edge, and a few paragraphs of documentation can move it. A
+retrieval model that scores meaning instead of shared words is the real fix, and is not built.
+Suffix stemming ("encrypted", "encryption") helped a little.
 
 **Hours retired.** `python -m plumbline.agents usage` now multiplies each skill's successful uses
 (an answer that was not a refusal, a read that worked, an approved change that ran) by the minutes
@@ -548,17 +585,16 @@ the end of the run:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20,000 | 2-core cloud, 7 GB | 62,679 | 6 | 7 | 24 | 21 | 102 | 7 | 2.9 min | 2.4 GB |
 | 300,000 | 2-core cloud, 7 GB | 945,970 | 99 | 93 | 97 | 86 | 413 | 35 | 15.1 min | 3.1 GB |
-| 1,000,000 | 10-core laptop | 3,151,006 | 7 (incremental) | 170 | 164 | 112 | 584 | 47 | 18.8 min | 4.2 GB |
+| 1,000,000 | 10-core laptop | 3,150,929 | 350 | 87 | 84 | 64 | 393 | 25 | 18.0 min | 5.0 GB |
 
-And whether the answers hold as the world grows (current code and world; the 1,000,000 row is from the
-run before the last two fixes below and is re-measured on the next laptop run):
+And whether the answers hold as the world grows (current world; every row a full run):
 
 | People | Identity precision / recall | Deleted people with data left | People deleted who never asked | Current address right (ceiling) | Households F1 | Home-buyer AUC (ceiling) |
 | --- | --- | --- | --- | --- | --- | --- |
 | 20,000 | 99.6% / 98.8% | 0 of 100 | 0 | 91.2% (92.0%) | 0.931 | 0.638 (0.783) |
 | 100,000 | 99.4% / 98.8% | 8 of 500 | 0 | 91.1% (91.9%) | 0.927 | 0.660 (0.797) |
 | 300,000 | 99.4% / 98.8% | 19 of 1,500 | 0 | 91.2% (92.0%) | 0.928 | 0.653 (0.800) |
-| 1,000,000 (before) | 99.3% / 98.1% | 76 of 5,000 | 85 records | 90.9% (91.5%) | 0.841 | 0.651 (0.788) |
+| 1,000,000 | 99.3% / 98.8% | 66 of 5,000 | 1 record, then 0 (item 7) | 91.1% (91.9%) | 0.928 | 0.652 (0.792) |
 
 What scale found, in order, each fixed at its root and held by a test:
 
@@ -570,14 +606,18 @@ What scale found, in order, each fixed at its root and held by a test:
    database a real store pages on, and a test proves it returns exactly what the slow version did.
    Most of what remains is honoring `Retry-After` on throttled requests, which a real store imposes too.
 3. **Memory is DuckDB's buffer cache more than the data.** Identity jumps to 2.4 GB already at
-   20,000 people because DuckDB takes memory it is allowed to; it grows to 4.2 GB at 1,000,000.
+   20,000 people because DuckDB takes memory it is allowed to; it grows to 5.0 GB at 1,000,000 (4.2 GB
+   in the run before one household per home; I have not measured why it moved). Splink's own DuckDB
+   is most of it: on 3,741 records identity peaked at 2.2 GB, and with `PLUMBLINE_DUCKDB_MEMORY=600MB`
+   at 0.8 GB, 3 seconds slower, with the same persons (`test_a_memory_cap_changes_how_much_memory_identity_uses_not_who_is_who`).
 4. **1,000,000 people broke two assumptions.** Scoring crashed on two people the store data cannot
    tell apart (item 6 under identity). Then the dbt test `every_address_spelling_has_one_canonical`
    failed in a feature snapshot: address spellings are merged when they look alike, but alike is not
    transitive ("1901 DORCHESTERROAD APT 26" is like "1901 DORCHESTER ROAD APT 26", which is like
    "1901 DORCHESTER AVE", which the first is not like). Pointers are now followed to their end; where
-   no chain exists, nothing changes. On the 2-core machine the 1,000,000 run is killed for memory in
-   identity, so its ceiling is between 300,000 and 1,000,000 people.
+   no chain exists, nothing changes. On the 2-core, 7 GB machine the 1,000,000 run is killed for
+   memory in identity; with `PLUMBLINE_DUCKDB_MEMORY=3GB` it completes identity (467 s) and deletion,
+   with the same persons deleted and queued as on the laptop.
 5. **Deletion started deleting the wrong people.** Records of people who never asked, deleted: 0, 1,
    45, 85 at 20,000, 100,000, 300,000 and 1,000,000 people, and the review queue 1, 7, 107, 1,097
    persons. Each was a namesake in the requester's home with no date of birth to tell them apart. A
@@ -590,6 +630,16 @@ What scale found, in order, each fixed at its root and held by a test:
    record of who lived where (the birthday problem). Each home now holds one household; household
    precision is 99.98% and F1 is flat with size. Every number in this README is from that corrected
    world.
+7. **One wrongly deleted record was left at 1,000,000 people**, after the phone rule took 85 to 1: a
+   father's vendor record (no email, phone or date of birth) at the home of his son of the same name,
+   who asked. Name + zip and last name + address are two keys, but for two people in one home they are
+   one fact said twice; the date of birth tells them apart, and the son's was known while the vendor,
+   which sends one, sent none for this record. Such a match now goes to a person
+   (`keys_match_but_dob_unknown`). Re-planned on the saved pre-deletion state of every run: 1 to 0 at
+   1,000,000, review 92 to 93 persons, no requester's record kept that was deleted before, and nothing
+   changes at 20,000 to 300,000. The rule was found on that run, so it is not its own independent check.
+8. **Every dbt build left a 2 MB folder in the temp directory**, and nothing removed them: 909 on the
+   test machine. A passing build now removes its folder; a failing one keeps it, and the error names it.
 
 Nothing here claims terabytes: everything runs on one machine.
 
@@ -622,7 +672,7 @@ Recovery steps are in [the runbook](docs/runbooks/ingestion.md).
 ## Run it
 
 ```bash
-python -m pip install -e ".[dev,orchestration,lake]"
+python -m pip install -e ".[dev,orchestration,lake,app]"
 python -m pytest -q                                      # use python -m, so the venv's pytest runs
 export CENSUS_API_KEY=...                                # free: api.census.gov/data/key_signup.html
 python scripts/fetch_reference.py --out data/reference  # once; needs internet; safe to rerun
@@ -632,6 +682,7 @@ python -m plumbline --score                              # every stage in order,
 python -m plumbline.agents ask "did last night's load reject anything?"
 python -m plumbline.agents eval                          # knowledge, routing (and the model, if configured)
 dagster dev -m plumbline.ingest.orchestration            # optional: the same pipeline, with checks, in a UI
+python -m streamlit run streamlit_app.py                 # the demo app (python -m: always the venv's Streamlit)
 ```
 
 `python -m plumbline` builds the store, syncs it through the faulty mock API, ingests every source,
@@ -654,6 +705,7 @@ python -m plumbline.ml          # snapshots, training, model card, guarded scori
 ```bash
 docker compose run --rm pipeline              # after generating data/synth as above
 docker compose up agent dagster               # Slack endpoint on :3000, Dagster on :3001 (localhost only)
+docker compose up app                         # the demo app on :8501 (localhost only)
 docker compose --profile lake up -d minio && docker compose --profile lake run --rm lake   # S3 lake on MinIO
 ```
 

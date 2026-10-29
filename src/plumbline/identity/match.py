@@ -8,7 +8,12 @@ evidence up. The answer key is never used for training; it is only used to score
 from __future__ import annotations
 
 import logging
+import os
+import re
+import tempfile
+from pathlib import Path
 
+import duckdb
 import pandas as pd
 import splink.comparison_level_library as cll
 import splink.comparison_library as cl
@@ -83,9 +88,31 @@ def settings() -> SettingsCreator:
     )
 
 
+_SIZE = re.compile(r"^\d+(\.\d+)?\s*(KB|MB|GB|TB|KiB|MiB|GiB|TiB)$", re.I)
+
+
+def splink_db() -> DuckDBAPI:
+    """Splink's own DuckDB. PLUMBLINE_DUCKDB_MEMORY (for example "1GB") caps it. Uncapped, DuckDB may
+    use 80% of the machine as buffer cache, and Splink's 5 million sampled pairs fill it: identity on
+    3,741 records peaked at 2.2 GB. Capped at 600MB the peak was 0.8 GB, 3 seconds slower, with the
+    same persons (a test compares every cluster). A hosted app gets about 2.7 GB in all."""
+    con = duckdb.connect()
+    # An in-memory DuckDB spills to ".tmp" in the current folder: with the cap on, runs from the repo
+    # left a .tmp/ of spill files in the checkout. Spill to the system temp folder instead.
+    spill = Path(tempfile.gettempdir()) / "plumbline-duckdb"
+    spill.mkdir(parents=True, exist_ok=True)
+    con.execute(f"SET temp_directory = '{spill.as_posix()}'")
+    limit = os.environ.get("PLUMBLINE_DUCKDB_MEMORY")
+    if limit:
+        if not _SIZE.match(limit.strip()):
+            raise ValueError(f"PLUMBLINE_DUCKDB_MEMORY must look like 1GB or 600MB, not {limit!r}")
+        con.execute(f"SET memory_limit = '{limit.strip()}'")
+    return DuckDBAPI(connection=con)
+
+
 def train_and_predict(records: pd.DataFrame, seed: int = 7, threshold: float = MATCH_THRESHOLD):
     """-> (pairs with match_probability, clusters unique_id -> cluster_id, linker)."""
-    linker = Linker(records, settings(), db_api=DuckDBAPI(), set_up_basic_logging=False)
+    linker = Linker(records, settings(), db_api=splink_db(), set_up_basic_logging=False)
     t = linker.training
     t.estimate_probability_two_random_records_match(
         [block_on("email", "last_name"), block_on("phone", "last_name")], recall=0.7)

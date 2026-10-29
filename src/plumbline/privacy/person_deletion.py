@@ -54,7 +54,39 @@ def _has_another_phone(con, pairs: pd.DataFrame) -> list[bool]:
 def expand_deletions(con, contracts) -> dict:
     con.execute("""CREATE TABLE IF NOT EXISTS deletion_review (
         tombstone_id VARCHAR, person_key VARCHAR, reason VARCHAR, logged_at TIMESTAMP)""")
-    recs = con.execute("""SELECT unique_id, person_key, first_name, last_name, house, street, zip, dob
+    dob_sources = tuple(n for n, c in contracts.items() if "dob" in c.identity_cols)
+    plan = plan_deletions(con, dob_sources)
+    persons, ambiguous = plan["persons"], plan["ambiguous"]
+    review, maybe, phone_conflict = plan["review"], plan["maybe"], plan["phone_conflict"]
+    dob_unknown = plan["dob_unknown"]
+
+    con.execute("BEGIN")
+    try:
+        # Queue each case once. Without the NOT EXISTS, every nightly run appended the same cases
+        # again (7, 14, 21 rows for the same 7 persons), and reviewers saw a queue that never shrank.
+        for df, reason in ((review, "tombstone_matches_several_persons"), (maybe, "one_key_matches"),
+                           (phone_conflict, "keys_match_but_phone_differs"),
+                           (dob_unknown, "keys_match_but_dob_unknown")):
+            for t, pk in df[["tombstone_id", "person_key"]].values.tolist():
+                con.execute("""INSERT INTO deletion_review SELECT ?, ?, ?, now()
+                               WHERE NOT EXISTS (SELECT 1 FROM deletion_review
+                                                 WHERE tombstone_id = ? AND person_key = ? AND reason = ?)""",
+                            [t, pk, reason, t, pk, reason])
+        removed, new_suppression, q = _delete_persons(con, contracts, persons)
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    return {"persons_deleted": len(persons), "rows_removed": removed, "quarantine_rows_removed": q,
+            "suppression_entries_added": new_suppression, "held_for_review": len(ambiguous) + len(maybe) + len(phone_conflict) + len(dob_unknown),
+            "weak_tombstones_not_used": plan["unusable"]}
+
+
+def plan_deletions(con, dob_sources: tuple[str, ...] = ("vendor",)) -> dict:
+    """Decide, without changing anything, which persons to delete and which cases go to a person.
+    Needs identity_records, deletion_tombstones and suppression. dob_sources: the sources whose
+    records normally carry a date of birth (from the contracts)."""
+    recs = con.execute("""SELECT unique_id, person_key, source, first_name, last_name, house, street, zip, dob
                           FROM identity_records""").df().astype(object)
     recs = recs.where(recs.notna(), None)
     keys = _record_keys(recs)
@@ -112,32 +144,32 @@ def expand_deletions(con, contracts) -> dict:
     hits["other_phone"] = _has_another_phone(con, hits) if len(hits) else []
     phone_conflict = hits[hits.other_phone.astype(bool)].drop_duplicates(["tombstone_id", "person_key"])
     hits = hits[~hits.other_phone.astype(bool)]
+    # The phone rule cannot see a namesake who has no phone either. At 1,000,000 people one record
+    # of someone who never asked was still deleted: Michael Lee, born 1976, a vendor record with no
+    # email, phone or date of birth, at the home of the Michael Lee born 1993 who asked. Name + zip and
+    # last name + address are two keys, but for a father and son in one home they are one fact said
+    # twice. The date of birth is what tells them apart, and the requester's is known (their purged
+    # vendor row had it) while this record, from a source that sends one, came without it. So the
+    # veto that protects people cannot run, and a person decides. Re-planned on the saved pre-deletion
+    # state of each scale run: at 1,000,000 records of people who never asked 1 -> 0, review 92 -> 93
+    # persons, no requester's record kept; at 20,000, 100,000 and 300,000 nothing changes. The rule
+    # was found on the 1,000,000 run, so that run is not an independent check of it.
+    dob_tombs = set(con.execute("SELECT DISTINCT tombstone_id FROM deletion_tombstones WHERE key_hash LIKE 'fd:%'").df().tombstone_id)
+    has_dob = set(keys.loc[keys.key_hash.str.startswith("fd:"), "unique_id"])     # a usable date of birth
+    blind = (hits.tombstone_id.isin(dob_tombs) & ~hits.unique_id.isin(has_dob)
+             & hits.unique_id.map(recs.set_index("unique_id").source).isin(dob_sources))
+    dob_unknown = hits[blind]
+    hits = hits[~blind]
+    # one row per person: a request leaves a tombstone per purged row, and a reviewer decides a person
+    dob_unknown = dob_unknown[~dob_unknown.person_key.isin(set(hits.person_key))].sort_values("tombstone_id").drop_duplicates("person_key")
     if len(maybe):
         maybe = maybe[[not v for v in _has_another_phone(con, maybe)]]
     per_tomb = hits.groupby("tombstone_id")["person_key"].nunique()
     ambiguous = set(per_tomb[per_tomb > 1].index)
     review = hits[hits.tombstone_id.isin(ambiguous)].drop_duplicates(["tombstone_id", "person_key"])
     persons = set(hits.loc[~hits.tombstone_id.isin(ambiguous), "person_key"])
-
-    con.execute("BEGIN")
-    try:
-        # Queue each case once. Without the NOT EXISTS, every nightly run appended the same cases
-        # again (7, 14, 21 rows for the same 7 persons), and reviewers saw a queue that never shrank.
-        for df, reason in ((review, "tombstone_matches_several_persons"), (maybe, "one_key_matches"),
-                           (phone_conflict, "keys_match_but_phone_differs")):
-            for t, pk in df[["tombstone_id", "person_key"]].values.tolist():
-                con.execute("""INSERT INTO deletion_review SELECT ?, ?, ?, now()
-                               WHERE NOT EXISTS (SELECT 1 FROM deletion_review
-                                                 WHERE tombstone_id = ? AND person_key = ? AND reason = ?)""",
-                            [t, pk, reason, t, pk, reason])
-        removed, new_suppression, q = _delete_persons(con, contracts, persons)
-        con.execute("COMMIT")
-    except Exception:
-        con.execute("ROLLBACK")
-        raise
-    return {"persons_deleted": len(persons), "rows_removed": removed, "quarantine_rows_removed": q,
-            "suppression_entries_added": new_suppression, "held_for_review": len(ambiguous) + len(maybe) + len(phone_conflict),
-            "weak_tombstones_not_used": len(unusable)}
+    return {"persons": persons, "ambiguous": ambiguous, "review": review, "maybe": maybe,
+            "phone_conflict": phone_conflict, "dob_unknown": dob_unknown, "hits": hits, "unusable": len(unusable)}
 
 
 

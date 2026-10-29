@@ -1,0 +1,335 @@
+{
+"calls": {
+"06960762a03c412ac17c24f6": {
+"in": 819,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"072b3768b74783940968113e": {
+"in": 395,
+"out": 40,
+"text": "If the model returns an answer with a sentence that cites a passage it was not given, the quoted answer is shown instead and the reason is recorded in the audit log (`detail.note`) [1]."
+},
+"109263a366bcfd535a668713": {
+"in": 413,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"16dcd4be2d0f32f55850267f": {
+"in": 449,
+"out": 45,
+"text": "A corrected re-send needs a new file name because a re-send with identical bytes is skipped to avoid loading the same data twice [1]. This ensures that the system recognizes the file as new and processes it accordingly [1]."
+},
+"17fd7eeeb5487de7ea1afa84": {
+"in": 520,
+"out": 52,
+"text": "A deletion tombstone keeps only HMAC-keyed hashes of name + zip, last name + address, and name + date of birth, tagged with its request and the strength of the evidence (phone matched: strong; email only: weak) [1]."
+},
+"1c81ad2d454c7fb5bf2ec31e": {
+"in": 348,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"1f96165a34bcf15ea0cbd505": {
+"in": 573,
+"out": 45,
+"text": "After person-level deletion, 11 deleted people still had data left according to the first pass, and 8 of 500 deleted people still have a record as measured in the first version of the world [1][2]."
+},
+"21707603cbe6d1e834b76c11": {
+"in": 467,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"2522f0ea84461a280e4bff65": {
+"in": 582,
+"out": 57,
+"text": "CUPED hardly narrowed the interval because the variance falls by the squared correlation between history and outcome, and for a rare yes/no purchase that correlation is close to zero [1]. This means that adjusting for each inbox's order history does not significantly reduce variance in this context [1]."
+},
+"26cb76b027b457c32f234c53": {
+"in": 717,
+"out": 82,
+"text": "Home-buyer scores must pass checks on the inputs being the training inputs, scores being plausible probabilities, the mean being plausible, missing-value rates being stable, and no feature drifting past a population stability index of 0.25 [1]. Additionally, people known only from the vendor feed are not scored to avoid drift issues [1]. If any of these guardrails fail, the run publishes nothing [1]."
+},
+"28eedab6e28ffdbc5a1e5a34": {
+"in": 416,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"2ce347c1b8b9a36e15fc737d": {
+"in": 582,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"2e362e345e7ac99157aa29e8": {
+"in": 362,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"3050fec7f743619d1d231f30": {
+"in": 241,
+"out": 15,
+"text": "bad_field_count in quarantine usually means a truncated or malformed file [1]."
+},
+"3251ec04c5dfbef3ddfc7000": {
+"in": 263,
+"out": 53,
+"text": "CUPED hardly narrowed the interval because the variance falls by the squared correlation between history and outcome, which is close to zero for a rare yes/no purchase [1]. This means the history does not strongly predict the outcome, limiting CUPED's effectiveness [1]."
+},
+"3c34296ea378371a18271a9c": {
+"in": 596,
+"out": 70,
+"text": "Gradient boosting is a five-seed ensemble because one fit is not reproducible due to parallel floating-point additions with an unfixed order, causing variability in results [1]. To manage this wobble, gradient boosting uses five different seeds and records the spread of results [1]. This approach shrinks the variability but does not remove it entirely [1]."
+},
+"3cbcce46f827cbd8fedf24d4": {
+"in": 813,
+"out": 49,
+"text": "The home-buyer model leaves out vendor columns such as income, age, and homeowner status because these features are missing for exactly the people being estimated, so including them would mean training on data that the model never sees when it runs [2]."
+},
+"3d247021dabb799abbc7438d": {
+"in": 669,
+"out": 79,
+"text": "You can see every action, including proposals and approvals, in the audit log or activity log, which records every action by whom and with its result [1][2]. The operations agent handles proposals that require a second person with the right role to approve before running, and all these steps are logged [1]. The activity log captures these approvals and the identities of those who approved them [2]."
+},
+"3e6aad30c0a3d4ba6bd02da9": {
+"in": 523,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"4123acba05f32ddb78d0cfe6": {
+"in": 585,
+"out": 87,
+"text": "Editing `ops/roles.yaml` after the first start changes nothing because the roles live in `ops.access` inside `data/agent.duckdb`, and `ops/roles.yaml` is only read to seed the first holders when that table is empty [1]. After that, role changes must be done through the agent with admin approval [1]. There is no override by editing `ops/roles.yaml` later [2]."
+},
+"4358a32df756674bc983f6c8": {
+"in": 332,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"43e80965c0b516d142cdff6d": {
+"in": 546,
+"out": 76,
+"text": "The campaign experiment randomizes inboxes rather than people because families share inboxes, and randomizing people led to 507 inboxes landing in both arms, causing \"held out\" people to read the email their sibling was sent [1]. This approach avoids contamination between treatment arms by ensuring that the assignment is consistent at the inbox level using a salted hash of the address [1]."
+},
+"4529106886864a5742450a0c": {
+"in": 371,
+"out": 44,
+"text": "Rerun the same command. Each file loads in one transaction together with its ledger row, so a crash leaves no partial file behind, and the rerun picks up exactly the files that did not finish [1]."
+},
+"49258d251cd806f4b3b4dd51": {
+"in": 373,
+"out": 79,
+"text": "The synthetic world uses reference data fetched by the script `scripts/fetch_reference.py` which outputs to `data/reference` [2]. This reference data is necessary for generating the synthetic world and is downloaded once, requiring internet access [2]. The README mentions that the synthetic world is described by truth tables, such as median household income and ownership percentages, which come from this reference data [1]."
+},
+"4a054034f7378acc3b521f6a": {
+"in": 546,
+"out": 79,
+"text": "Every Slack request getting 401 means the signing secret is wrong, or the server clock is more than five minutes off, causing requests older than that to be refused as possible replays [1]. Slack requests must carry a valid signature less than five minutes old; forged and replayed requests get 401 [2]. Check the signing secret and the server date/time to fix this issue [1]."
+},
+"4c730781023351a933970eea": {
+"in": 246,
+"out": 16,
+"text": "Keep the broken warehouse file until the cause of the issue is understood [1]."
+},
+"5149779147c7541ea439ee00": {
+"in": 293,
+"out": 24,
+"text": "The Slack app needs the bot token scopes: `app_mentions:read` and `chat:write` [1]."
+},
+"52fd9a4d2843a6c899d44e87": {
+"in": 616,
+"out": 133,
+"text": "The golden person's current address accuracy can be inferred from the `dim_person_address_history` model, which tracks where each person lived over time with `valid_from` and `valid_to` dates, allowing range lookups for specific dates like \"where did they live on 2025-06-30\" [1]. However, the exact accuracy or confidence level of the current address is not explicitly stated in the passages. The `fct_life_events` model detects moves with evidence and confidence levels, which may impact address accuracy [1]. Therefore, while the address history is detailed and time-bound, the precise accuracy of the current address is not directly provided."
+},
+"55d653a2331d8b791ae712fd": {
+"in": 521,
+"out": 108,
+"text": "If a vendor file was rejected with `missing_columns:<name>`, it means the sender dropped or renamed a column, so nothing from the file was loaded on purpose to avoid overwriting good values with blanks [1]. If the column was renamed intentionally, add `aliases: {new_name: old_name}` to `sources/<source>.yaml` and ask the sender to re-send the file [1]. The corrected file needs a new name or a `_v2` suffix because a re-send with identical bytes is skipped [1]."
+},
+"587f5a01b612cec394a226cc": {
+"in": 508,
+"out": 42,
+"text": "The command that runs the whole pipeline end to end is `python scripts/scale_run.py --n-people N` [1]. This command executes every stage from generation to the experiment readout [1]."
+},
+"68cba103ef26f3994a27e81f": {
+"in": 580,
+"out": 70,
+"text": "\"As of a date\" in the dbt models means that features are built once per cutoff date using dbt's `as_of`, so each snapshot holds only what was known on that specific day [1]. This ensures that the split cannot see the future, as models are trained only on data whose outcome window closed before the evaluation date [1]."
+},
+"78a5724f3e0d48131c6f4137": {
+"in": 691,
+"out": 58,
+"text": "To re-pull every order from the store, delete the `_sync_state.json` file only [1]. The loader will skip every row it already has, so this process costs time but maintains correctness [1]. This allows the sync to start fresh and re-fetch all data [1]."
+},
+"7ac6c60b2fc7546e090033bd": {
+"in": 375,
+"out": 68,
+"text": "Slack shows \"dispatch_failed\" because Slack retries when it does not get a 200 within three seconds, and retries are dropped by event id (`ops.slack_events`), so a double answer means two agents are running against two different `data/agent.duckdb` files. The solution is to run only one agent [1]."
+},
+"80766ef2c1132f8356b97422": {
+"in": 473,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"82c33c9a9be3785b11bf7658": {
+"in": 662,
+"out": 72,
+"text": "Vendor-only moves have a measured precision of only 45%, which is worse than a coin flip, making them unreliable evidence for moves [1]. Segments use only store and CRM evidence, which have higher precision rates (store order 86%, CRM edit 79%) [1]. This ensures that segments are built on more accurate and trustworthy data [1]."
+},
+"87de8ba11e663e5e89802184": {
+"in": 273,
+"out": 26,
+"text": "The seed 7 baseline normally queues 2 persons for deletion review, with 1 of them being a real leftover [1]."
+},
+"899b038b473553aebf6fcecd": {
+"in": 600,
+"out": 71,
+"text": "The first identity model had low precision (32%) because it treated households as matches by training on blocks of \"same last name and zip,\" which caused families to be incorrectly identified as the same person [2]. Training on blocks where families cannot dominate, such as \"same phone; same first and last name,\" fixed the weights and improved precision [2]."
+},
+"8d19a504afb77c55e83fcc6a": {
+"in": 254,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"987b50541563cc569966ade0": {
+"in": 469,
+"out": 30,
+"text": "No, `duplicate_in_delivery` rows in quarantine are expected in small numbers because the email platform repeats events, so no action is needed [1]."
+},
+"98a720d25b7b473278fdc9cb": {
+"in": 459,
+"out": 78,
+"text": "No, after identity resolution, a surviving record matching two key kinds of a trusted tombstone is deleted along with its whole person [1]. A weak tombstone counts only if its name agrees with a strong one from the same request to avoid deleting innocent records [1]. Therefore, you do not delete both persons unless the tombstone matches them strongly and passes the name agreement rule [1]."
+},
+"9a1524f0b27b17c139ba8d34": {
+"in": 543,
+"out": 60,
+"text": "No orders are lost when the store is down and the sync gives up after retries. The watermark does not move, and the last good cursor is saved in `sources/store/_sync_state.json`. You can rerun the sync later, and it will resume from that page without losing data [1]."
+},
+"9d2785f530d0fe25f777862c": {
+"in": 302,
+"out": 35,
+"text": "The environment variables to connect a language model are PLUMBLINE_LLM_MODEL, PLUMBLINE_LLM_API_KEY, and PLUMBLINE_LLM_BASE_URL [2]."
+},
+"9fe4cf68c99d10549fe50a9c": {
+"in": 245,
+"out": 26,
+"text": "No, duplicate_in_delivery is expected in small numbers because the email platform repeats events, so it is not a problem [1]."
+},
+"a5c325cca842b5bd24bd5749": {
+"in": 451,
+"out": 66,
+"text": "We should keep at least two admins [1]. One admin cannot approve their own requests, so a second admin is needed for approval [1]. Additionally, the last admin cannot be removed to ensure that there is always someone who can approve changes [1][2]. This prevents a situation where no approvals can be made [2]."
+},
+"a68308886cbdb858046e759f": {
+"in": 175,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"aba58d10fd181277ad788b58": {
+"in": 871,
+"out": 18,
+"text": "The ceiling AUC for the home-buyer model is 0.797 [2]."
+},
+"ac826289118a4feddbe834e4": {
+"in": 287,
+"out": 18,
+"text": "The store connector retries 429 responses after the server's Retry-After period [1]."
+},
+"ad2d9e80f37da8420736b316": {
+"in": 601,
+"out": 46,
+"text": "Identity resolution using Plumbline: Splink + cannot-link clustering achieves an F1 score of 0.991, compared to the exact email or phone baseline which has an F1 score of 0.927 [1]."
+},
+"af4fc5bf41a86a50cc1d2e51": {
+"in": 398,
+"out": 29,
+"text": "You should check `identity_pairs` for the persons involved before acting, as a sudden jump means the identity model or a source changed [1]."
+},
+"b4c2b2946e0f07041f79be14": {
+"in": 363,
+"out": 15,
+"text": "The questionnaire command expects an input with a `question` column [1]."
+},
+"baf5859623a7a7c792fe3d9b": {
+"in": 522,
+"out": 33,
+"text": "`bad_field_count` in quarantine usually means a truncated or malformed file. If one file accounts for most of it, a re-send should be requested [1]."
+},
+"c1f47708e288a3b61f06b240": {
+"in": 292,
+"out": 76,
+"text": "To rotate the Slack bot token, you need to regenerate the signing secret or reinstall the app to get a new bot token, then update the environment variables with the new token and restart the `serve` command [1]. Specifically, revoke the old key at the provider, set the new one, and since the token is not stored elsewhere, no other changes are needed [1]."
+},
+"c2a702509428f1f8b4ab13fb": {
+"in": 515,
+"out": 52,
+"text": "Consent is not point in time. An audience rebuilt for an earlier date included people who unsubscribed later, but unsubscribes and deletions always apply regardless of the date. Attributes are as of a date, but consent is not treated that way [2]."
+},
+"ca2ad674e7afbf2c3f5391ec": {
+"in": 543,
+"out": 70,
+"text": "To confirm that a deletion request was applied, run the following command to check the suppression log:  \n```bash\nduckdb data/warehouse.duckdb \"SELECT source, action, sum(rows) FROM suppression_log GROUP BY 1, 2\"\n```  \nThis shows the sources and actions taken, including the number of rows deleted [2]."
+},
+"cf64501581e05575883a0118": {
+"in": 870,
+"out": 23,
+"text": "The home-buyer model gets a test AUC of 0.660 on an untouched later period [2]."
+},
+"d1173428ff5595d3a879a4b3": {
+"in": 535,
+"out": 62,
+"text": "Yes, you should fix the contract only if the new format is legitimate, as indicated by the `bad_<type>:<column>` quarantine reason. Quarantined rows never reach the current tables, and after fixing the contract and receiving a corrected re-send, the data loads normally without needing cleanup [1]."
+},
+"d280821833580686f90f8bff": {
+"in": 756,
+"out": 34,
+"text": "The home-buyer model version is decided as a hash of the training data and configuration [2]. Two runs from scratch produced the same version, ensuring consistency [2]."
+},
+"d2b28834dc76b29160bfcd9a": {
+"in": 459,
+"out": 79,
+"text": "The vendor's income columns are never used as features because they are missing for exactly the people being estimated, so a model using them would be trained on data it never sees when it runs [1]. Additionally, these columns are empty in every training snapshot since the vendor feed starts later than the training data period [2]. Using them would cause leakage and invalidate the model's performance evaluation [1]."
+},
+"d3a79dfce01eb142d0784d26": {
+"in": 442,
+"out": 39,
+"text": "No, do not retry in a loop if the store sync failed with a 401 AuthError; the token is wrong or revoked and you should fix `STORE_API_TOKEN` instead [1]."
+},
+"d8df2a28d2cf6fa803ef13b3": {
+"in": 704,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"d9b8b8a53da86512cb8b77ae": {
+"in": 436,
+"out": 71,
+"text": "`one_key_matches` means the person has the same first name, last name, and zip as a deleted person's purged row, but nothing else matches. It usually indicates a namesake. Deletion should only occur if another source confirms it, such as the same work email domain or a store order shipped to the deleted person's old address [2]."
+},
+"da3cf8c3bcca27b25f77caea": {
+"in": 419,
+"out": 35,
+"text": "No, after a fix, you do not need to clean up quarantine by hand because quarantined rows never reach the current tables and the corrected re-send loads normally [1]."
+},
+"e01f69ac43c31282097fa6e9": {
+"in": 482,
+"out": 73,
+"text": "Slack shows \"dispatch_failed\" or the agent answers twice because Slack retries when it does not get a 200 within three seconds, and retries are dropped by event id (`ops.slack_events`), so a double answer means two agents are running against two different `data/agent.duckdb` files. The solution is to run only one agent [1]."
+},
+"e8b4aec9c403ad7c29581dfb": {
+"in": 675,
+"out": 117,
+"text": "The home seller model was not published because it performed poorly, with an AUC of only 0.54 on both validation and test dates, which is close to random prediction among owners [1]. Two of the three gates for model acceptance failed, and only the lift gate passed, which was considered luck given the ceiling of 0.55 [1]. Since one failed gate was enough to stop publication, no scores were written, and the stale scores table was dropped rather than updated [1]. The assessment was logged, but the model was deemed not suitable for shipping [1]."
+},
+"f827f3537228502bc158b7bf": {
+"in": 586,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"fc6eea80bc615305ec2b9bfc": {
+"in": 485,
+"out": 78,
+"text": "Lapsed customers responded most to the reactivation email, as indicated by the planted response model showing a +4.5 points increase in purchase probability for them [1][2]. Customers who never ordered responded a little, with an increase of +0.2 times income band points [1][2]. Frequent buyers did not respond significantly, as they were buying anyway [1][2]."
+}
+},
+"model": "gpt-4.1-mini"
+}

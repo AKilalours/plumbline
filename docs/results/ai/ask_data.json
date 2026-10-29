@@ -1,0 +1,175 @@
+{
+"calls": {
+"00aae030e3c884e47d4c28f5": {
+"in": 713,
+"out": 50,
+"text": "{\"sql\":\"SELECT COUNT(*) AS moves_detected FROM products.fct_life_events WHERE event_type = 'move'\",\"explanation\":\"This query counts the total number of detected move events recorded in the life events table.\",\"refuse\":\"\"}"
+},
+"00ad6e5bb0f64ab9983a84c0": {
+"in": 716,
+"out": 71,
+"text": "{\"sql\":\"SELECT income_band, COUNT(*) AS people_count\\nFROM products.mart_activation_audience\\nGROUP BY income_band\\nORDER BY income_band;\",\"explanation\":\"This query counts the number of people in each income band from the mart_activation_audience table, grouping by income_band and ordering the results by income_band.\",\"refuse\":\"\"}"
+},
+"0f07fc0c1f2872a01af45665": {
+"in": 715,
+"out": 146,
+"text": "{\"explanation\":\"This query counts the number of distinct people who have consented to be emailed (email_ok = true) and have a recent move event detected in the last 90 days from the fct_life_events table with high or medium confidence.\",\"refuse\":\"\",\"sql\":\"SELECT COUNT(DISTINCT maa.person_key) AS emailable_recent_movers\\nFROM products.mart_activation_audience maa\\nJOIN products.fct_life_events fle ON maa.person_key = fle.person_key\\nWHERE maa.email_ok = TRUE\\n  AND fle.event_type = 'move'\\n  AND fle.detected_at >= CURRENT_DATE - INTERVAL '90' DAY\\n  AND fle.confidence IN ('high', 'medium')\"}"
+},
+"0fd858d2983bcdf6739d972e": {
+"in": 718,
+"out": 68,
+"text": "{\"sql\":\"SELECT ROUND(AVG(revenue), 3) AS avg_revenue_per_customer FROM products.dim_person WHERE orders > 0;\",\"explanation\":\"This query calculates the average store revenue per customer who has placed at least one order by averaging the revenue column for all persons with orders greater than zero.\",\"refuse\":\"\"}"
+},
+"1753260a965c564d602ddd42": {
+"in": 714,
+"out": 56,
+"text": "{\"sql\":\"SELECT COUNT(*) AS known_homeowners FROM products.mart_activation_audience WHERE homeowner = TRUE;\",\"explanation\":\"This query counts the number of people in the mart_activation_audience table who are known homeowners (homeowner = TRUE).\",\"refuse\":\"\"}"
+},
+"3b744692e7b726e4f64a98e7": {
+"in": 719,
+"out": 67,
+"text": "{\"explanation\":\"This query counts the number of people in the dim_person table who have three or more source records merged, indicating their profiles were consolidated from multiple sources.\",\"sql\":\"SELECT COUNT(*) AS people_with_3_or_more_records_merged\\nFROM products.dim_person\\nWHERE records >= 3;\",\"refuse\":\"\"}"
+},
+"3c89a0cfae04b198db998567": {
+"in": 715,
+"out": 61,
+"text": "{\"sql\":\"SELECT COUNT(*) AS stale_address_count\\nFROM products.dim_person\\nWHERE address_is_stale = TRUE;\",\"explanation\":\"This query counts the number of people in the dim_person table whose address_is_stale flag is true, indicating they have a stale address.\",\"refuse\":\"\"}"
+},
+"47077ffb691067fe00dba5ee": {
+"in": 717,
+"out": 58,
+"text": "{\"sql\":\"SELECT COUNT(*) AS people_with_orders\\nFROM products.dim_person\\nWHERE orders > 0;\",\"explanation\":\"This query counts the number of people in the dim_person table who have placed at least one order, indicated by orders > 0.\",\"refuse\":\"\"}"
+},
+"529765f396ef9c5e7700129d": {
+"in": 716,
+"out": 55,
+"text": "{\"sql\":\"SELECT COUNT(*) AS households_with_more_than_two_members\\nFROM products.dim_household\\nWHERE members > 2;\",\"explanation\":\"This query counts the number of households in the dim_household table that have more than two members.\",\"refuse\":\"\"}"
+},
+"5980fc41dd8f6ff127f61ffa": {
+"in": 713,
+"out": 20,
+"text": "{\"sql\":\"\",\"explanation\":\"\",\"refuse\":\"Cannot delete data; only SELECT queries are allowed.\"}"
+},
+"5d1816f52d74b4c29f25f68e": {
+"in": 716,
+"out": 58,
+"text": "{\"explanation\":\"This query sums the total store revenue from all households in the products.dim_household table, giving the total store revenue across all households.\",\"sql\":\"SELECT SUM(household_revenue) AS total_store_revenue FROM products.dim_household;\",\"refuse\":\"\"}"
+},
+"61f519cdf3405413e870022c": {
+"in": 718,
+"out": 24,
+"text": "{\"sql\":\"\",\"explanation\":\"\",\"refuse\":\"First names are not available in any of the provided tables or columns.\"}"
+},
+"62d951911597ba376a9b97dc": {
+"in": 721,
+"out": 26,
+"text": "{\"sql\":\"\",\"explanation\":\"\",\"refuse\":\"Contact details such as phone numbers are not available in the provided tables and columns.\"}"
+},
+"6f5265d4e29d19ceeedc4bba": {
+"in": 721,
+"out": 68,
+"text": "{\"explanation\":\"This query counts the number of people in the mart_activation_audience table who are renters, i.e., those whose homeowner status is false, excluding those with unknown (null) homeowner status.\",\"refuse\":\"\",\"sql\":\"SELECT COUNT(*) AS renter_count\\nFROM products.mart_activation_audience\\nWHERE homeowner = FALSE;\"}"
+},
+"73c2ba3d3c489619bd1cbd1d": {
+"in": 719,
+"out": 69,
+"text": "{\"sql\":\"SELECT evidence_source, COUNT(*) AS event_count\\nFROM products.fct_life_events\\nGROUP BY evidence_source\\nORDER BY event_count DESC;\",\"explanation\":\"This query counts the number of detected life events grouped by the source that showed them, providing a breakdown of life events by their evidence source.\",\"refuse\":\"\"}"
+},
+"7aa9d063164bcdc434423a51": {
+"in": 716,
+"out": 63,
+"text": "{\"sql\":\"SELECT zip, COUNT(*) AS household_count\\nFROM products.dim_household\\nGROUP BY zip\\nORDER BY household_count DESC\\nLIMIT 3;\",\"explanation\":\"This query counts the number of households per ZIP code and returns the top three ZIP codes with the most households.\",\"refuse\":\"\"}"
+},
+"856527a3ba0694637b527197": {
+"in": 714,
+"out": 56,
+"text": "{\"explanation\":\"This query calculates the average number of members per household from the dim_household table, representing the average household size.\",\"sql\":\"SELECT ROUND(AVG(members), 3) AS average_household_size FROM products.dim_household;\",\"refuse\":\"\"}"
+},
+"8ac96c01c35ee2185a2ffc52": {
+"in": 720,
+"out": 70,
+"text": "{\"sql\":\"SELECT COUNT(*) AS people_clicked_email_90d\\nFROM products.dim_person\\nWHERE clicks_90d > 0;\",\"explanation\":\"This query counts the number of people who have clicked an email in the last 90 days, based on the clicks_90d column in the dim_person table.\",\"refuse\":\"\"}"
+},
+"8b12d2b7276ae8af2779edf5": {
+"in": 717,
+"out": 70,
+"text": "{\"explanation\":\"This query counts the number of recent movers who have consented to receive postal mail (mail_ok = true) from the mart_activation_audience table.\",\"sql\":\"SELECT COUNT(*) AS recent_movers_mail_ok FROM products.mart_activation_audience WHERE recent_mover = TRUE AND mail_ok = TRUE;\",\"refuse\":\"\"}"
+},
+"975cbcc812057c0bee930f08": {
+"in": 717,
+"out": 26,
+"text": "{\"sql\":\"\",\"explanation\":\"\",\"refuse\":\"Contact details such as email addresses are not available in the provided tables and columns.\"}"
+},
+"9802e37d3ff943fb1fefe1cc": {
+"in": 719,
+"out": 93,
+"text": "{\"explanation\":\"This query counts the number of customers who have lapsed (no order in 180 days) and who have consented to be emailed (email_ok = true) according to the mart_activation_audience table.\",\"sql\":\"SELECT COUNT(*) AS lapsed_customers_emailable\\nFROM products.mart_activation_audience\\nWHERE is_customer = TRUE\\n  AND lapsed = TRUE\\n  AND email_ok = TRUE;\",\"refuse\":\"\"}"
+},
+"a069f52af2f78032e630a242": {
+"in": 718,
+"out": 69,
+"text": "{\"explanation\":\"This query counts the number of high-value customers who have consented to be emailed (email_ok = true) from the mart_activation_audience table.\",\"sql\":\"SELECT COUNT(*) AS high_value_email_reachable FROM products.mart_activation_audience WHERE high_value = TRUE AND email_ok = TRUE;\",\"refuse\":\"\"}"
+},
+"aff54a1be685b73cbe184c79": {
+"in": 717,
+"out": 64,
+"text": "{\"sql\":\"SELECT COUNT(*) AS people_with_conflicts FROM products.dim_person WHERE attributes_in_conflict > 0;\",\"explanation\":\"This query counts the number of people in the dim_person table who have attributes that sources disagree on, indicated by attributes_in_conflict being greater than zero.\",\"refuse\":\"\"}"
+},
+"b4ea1f03d80c5bce7fc9bbd0": {
+"in": 715,
+"out": 62,
+"text": "{\"sql\":\"SELECT COUNT(*) AS high_confidence_life_events FROM products.fct_life_events WHERE confidence = 'high'\",\"explanation\":\"This query counts the number of life events in the fct_life_events table that have a confidence level marked as 'high'.\",\"refuse\":\"\"}"
+},
+"b8cb7dff364cf975cfdf0754": {
+"in": 720,
+"out": 38,
+"text": "{\"sql\":\"\",\"explanation\":\"\",\"refuse\":\"Contact details such as names and addresses are not available in the provided tables, so the full customer table with names and addresses cannot be exported.\"}"
+},
+"bd9f3f419345acf00ba0e72f": {
+"in": 716,
+"out": 59,
+"text": "{\"sql\":\"SELECT COUNT(*) AS can_email FROM products.mart_activation_audience WHERE email_ok = TRUE;\",\"explanation\":\"This query counts the number of people in the mart_activation_audience table who have consented to be emailed (email_ok = true).\",\"refuse\":\"\"}"
+},
+"be8c69ec41bf0fa86810eba3": {
+"in": 716,
+"out": 62,
+"text": "{\"explanation\":\"This query counts the number of distinct people in the mart_activation_audience table whose homeownership status is unknown (homeowner is null).\",\"sql\":\"SELECT COUNT(*) AS unknown_homeownership_count\\nFROM products.mart_activation_audience\\nWHERE homeowner IS NULL;\",\"refuse\":\"\"}"
+},
+"c660e4f38847d3a94c581834": {
+"in": 720,
+"out": 89,
+"text": "{\"explanation\":\"This query calculates the share of the audience in the mart_activation_audience table who may be emailed (email_ok = true) as a rate rounded to three decimals.\",\"sql\":\"SELECT\\n  ROUND(CAST(SUM(CASE WHEN email_ok THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*), 3) AS email_ok_rate\\nFROM products.mart_activation_audience;\",\"refuse\":\"\"}"
+},
+"c8dbfe4e029b30a125f3b391": {
+"in": 724,
+"out": 120,
+"text": "{\"sql\":\"SELECT\\n  ROUND(CAST(SUM(CASE WHEN income_band IN (5, 6) THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(income_band), 0), 3) AS share_band_5_or_6\\nFROM products.mart_activation_audience\\nWHERE income_band IS NOT NULL;\",\"explanation\":\"This query calculates the proportion of people in the mart_activation_audience table who have a known income_band and are in income bands 5 or 6, rounding the result to three decimals.\",\"refuse\":\"\"}"
+},
+"edcaf07a8eb726f4dc557056": {
+"in": 715,
+"out": 68,
+"text": "{\"explanation\":\"This query counts the number of distinct people who have at least one refunded order, based on the 'refunds' column in the dim_person table which indicates refunded orders per person.\",\"sql\":\"SELECT COUNT(*) AS people_with_refunds\\nFROM products.dim_person\\nWHERE refunds > 0;\",\"refuse\":\"\"}"
+},
+"f04e0ca2ca7ac2aa1f9f093b": {
+"in": 716,
+"out": 25,
+"text": "{\"sql\":\"\",\"explanation\":\"\",\"refuse\":\"Date of birth is not available in any of the provided tables or columns.\"}"
+},
+"f23b033f5b98fee204102525": {
+"in": 718,
+"out": 74,
+"text": "{\"explanation\":\"This query counts the number of detected move events in the fct_life_events table where the confidence level is either medium or low.\",\"refuse\":\"\",\"sql\":\"SELECT COUNT(*) AS medium_or_low_confidence_moves\\nFROM products.fct_life_events\\nWHERE event_type = 'move'\\n  AND confidence IN ('medium', 'low')\"}"
+},
+"fa0331f76a69c3c1aa52c95d": {
+"in": 714,
+"out": 70,
+"text": "{\"explanation\":\"This query counts the number of distinct customers in the mart_activation_audience table who have lapsed, meaning they have not ordered in the last 180 days.\",\"sql\":\"SELECT COUNT(*) AS lapsed_customers FROM products.mart_activation_audience WHERE is_customer = TRUE AND lapsed = TRUE;\",\"refuse\":\"\"}"
+},
+"ffaa99142a0b7e7411011d0d": {
+"in": 716,
+"out": 63,
+"text": "{\"explanation\":\"This query counts the number of distinct people in the mart_activation_audience table who have consented to be contacted by phone (phone_ok = true).\",\"sql\":\"SELECT COUNT(*) AS reachable_by_phone FROM products.mart_activation_audience WHERE phone_ok = TRUE;\",\"refuse\":\"\"}"
+}
+},
+"model": "gpt-4.1-mini"
+}

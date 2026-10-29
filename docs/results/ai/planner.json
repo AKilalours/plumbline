@@ -1,0 +1,205 @@
+{
+"calls": {
+"042ea0f4b918e789b682770c": {
+"in": 754,
+"out": 30,
+"text": "{\"tool\":\"ingest_status\",\"args\":{},\"reason\":\"User requested a quick health check on ingestion, which is provided by ingest_status.\"}"
+},
+"103b0c4d21baebed2c7e1290": {
+"in": 760,
+"out": 42,
+"text": "{\"tool\":\"data_products_status\",\"args\":{},\"reason\":\"To find out how many people are in the audience and check ingestion health, data_products_status provides row counts and contactable people per channel.\"}"
+},
+"115164e51793b654bce480a4": {
+"in": 759,
+"out": 46,
+"text": "{\"tool\":\"answer_from_docs\",\"args\":{},\"reason\":\"The user is asking for an explanation of what CUPED does in the campaign readout, which is a how/why question best answered from the team's documentation.\"}"
+},
+"11544b25c4df157f0a26a9af": {
+"in": 762,
+"out": 43,
+"text": "{\"tool\":\"revoke_role\",\"args\":{\"user\":\"U0OPS0001\",\"role\":\"data-platform\"},\"reason\":\"User U0OPS0001 moved teams and no longer needs the data-platform role.\"}"
+},
+"1a2d4ea8222a3c13004a2bb4": {
+"in": 757,
+"out": 32,
+"text": "{\"tool\":\"model_status\",\"args\":{},\"reason\":\"To check if the buyer propensity model is currently live, we need the latest model run status.\"}"
+},
+"1be3ab1b31e0f8af34a39939": {
+"in": 758,
+"out": 39,
+"text": "{\"tool\":\"out_of_scope\",\"args\":{},\"reason\":\"The role 'superuser' does not exist; roles must be one of admin, data-platform, docs, or privacy.\"}"
+},
+"280138cdd2b72ae3fc9c39ad": {
+"in": 761,
+"out": 40,
+"text": "{\"tool\":\"grant_role\",\"args\":{\"user\":\"U0NEW0001\",\"role\":\"privacy\"},\"reason\":\"Set up new user U0NEW0001 with the privacy role as requested.\"}"
+},
+"2b5de43c7072ba81fd36b29d": {
+"in": 762,
+"out": 29,
+"text": "{\"tool\":\"ingest_status\",\"args\":{},\"reason\":\"Check the current load status and any rejected files for vendor and CRM feeds.\"}"
+},
+"35dd48310023f719cf6212f2": {
+"in": 765,
+"out": 40,
+"text": "{\"tool\":\"grant_role\",\"args\":{\"user\":\"U0NEW0001\",\"role\":\"admin\"},\"reason\":\"Granting admin role to U0NEW0001 as requested by the user.\"}"
+},
+"49fc46caa74cac1db5742b38": {
+"in": 754,
+"out": 26,
+"text": "{\"tool\":\"out_of_scope\",\"args\":{},\"reason\":\"Cannot remove a role from everyone without specifying exact user IDs.\"}"
+},
+"50e23d435d0172cbacebe778": {
+"in": 756,
+"out": 36,
+"text": "{\"tool\":\"access_record\",\"args\":{\"user\":\"U0OPS0001\"},\"reason\":\"To find out what roles and permissions user U0OPS0001 currently holds.\"}"
+},
+"510d5716ffa76246108a847c": {
+"in": 755,
+"out": 30,
+"text": "{\"tool\":\"out_of_scope\",\"args\":{},\"reason\":\"The request to delete a person requires an exact person key, not a name.\"}"
+},
+"5a0efd6f1c52cb3ef7d5cf68": {
+"in": 757,
+"out": 35,
+"text": "{\"tool\":\"answer_from_docs\",\"args\":{},\"reason\":\"User asks how to recover after a load crashes halfway, which is a procedural question best answered from documentation.\"}"
+},
+"63477ad6e8b7ce02137d43a1": {
+"in": 759,
+"out": 40,
+"text": "{\"tool\":\"answer_from_docs\",\"args\":{},\"reason\":\"The user is asking why moves reported only by the vendor are not trusted, which is a question about how or why something works.\"}"
+},
+"69eb049046793c850c639177": {
+"in": 755,
+"out": 28,
+"text": "{\"tool\":\"model_status\",\"args\":{},\"reason\":\"To check if the latest home-buyer model run passed its publishing gates.\"}"
+},
+"7167a25f23b33954375a2232": {
+"in": 757,
+"out": 33,
+"text": "{\"tool\":\"check_doc_claims\",\"args\":{},\"reason\":\"To verify if any runbook figures have become stale by checking documented numbers against the warehouse.\"}"
+},
+"7756d0bd7024b22e0f28f291": {
+"in": 772,
+"out": 67,
+"text": "{\"tool\":\"resolve_deletion_review\",\"args\":{\"person_key\":\"PK9f8e7d6c5b4a\",\"decision\":\"keep\"},\"reason\":\"User requests to keep the person with key PK9f8e7d6c5b4a as they are a different person with the same name.\"}"
+},
+"87721efd345e075b6d1b3cb5": {
+"in": 759,
+"out": 39,
+"text": "{\"tool\":\"grant_role\",\"args\":{\"user\":\"U0NEW0002\",\"role\":\"docs\"},\"reason\":\"Granting the docs role to user U0NEW0002 as requested.\"}"
+},
+"8b4b37ae49bab5a54b4d2dd2": {
+"in": 756,
+"out": 29,
+"text": "{\"tool\":\"ingest_status\",\"args\":{},\"reason\":\"To check if any data files were rejected or bounced off the loader overnight.\"}"
+},
+"8d41d35dfb27d9f32c1c7b80": {
+"in": 756,
+"out": 35,
+"text": "{\"tool\":\"model_status\",\"args\":{},\"reason\":\"To check if today's home buyer scores were held back, we need the latest home-buyer model run status.\"}"
+},
+"9589b5d0e91e08d8bcce906b": {
+"in": 755,
+"out": 36,
+"text": "{\"tool\":\"answer_from_docs\",\"args\":{},\"reason\":\"The user asked for an explanation of how approvals work for role changes, which is covered in the team's documentation.\"}"
+},
+"98c2b00e3658424a389e8cc2": {
+"in": 759,
+"out": 29,
+"text": "{\"tool\":\"deletion_review_queue\",\"args\":{},\"reason\":\"To check if there are any pending deletion-review cases in the queue.\"}"
+},
+"9ae9a9d9c3ce382cd73c5a1f": {
+"in": 755,
+"out": 30,
+"text": "{\"tool\":\"deletion_review_queue\",\"args\":{},\"reason\":\"Check if there are any open deletion-review cases that require a privacy decision.\"}"
+},
+"9e8ab06e2f231b65383db5c8": {
+"in": 754,
+"out": 24,
+"text": "{\"tool\":\"out_of_scope\",\"args\":{},\"reason\":\"Weather information is out of scope for this platform.\"}"
+},
+"9f520a924c08d32b8dd4f61b": {
+"in": 759,
+"out": 44,
+"text": "{\"tool\":\"answer_from_docs\",\"args\":{},\"reason\":\"The user is asking about the behavior when the store API returns 429 errors, which is a how/why question best answered from the team's documentation.\"}"
+},
+"a9730a084e1fa0af20bc6762": {
+"in": 757,
+"out": 29,
+"text": "{\"tool\":\"check_doc_claims\",\"args\":{},\"reason\":\"User wants to verify if the documented numbers still match the warehouse numbers.\"}"
+},
+"b002ed4f88740ab40e553024": {
+"in": 764,
+"out": 44,
+"text": "{\"tool\":\"resolve_deletion_review\",\"args\":{\"person_key\":\"PK0123456789ab\",\"decision\":\"delete\"},\"reason\":\"Request to delete person key PK0123456789ab despite approvals being disabled.\"}"
+},
+"b3723e23a34dd5b71d297121": {
+"in": 754,
+"out": 32,
+"text": "{\"tool\":\"deletion_review_queue\",\"args\":{},\"reason\":\"To list the open erasure cases, we need to check the deletion review queue.\"}"
+},
+"b745573b91171b83af1793a4": {
+"in": 755,
+"out": 31,
+"text": "{\"tool\":\"data_products_status\",\"args\":{},\"reason\":\"User requests row counts for the data products, which is provided by data_products_status.\"}"
+},
+"c3788d7be1e423951ecb793f": {
+"in": 758,
+"out": 40,
+"text": "{\"tool\":\"data_products_status\",\"args\":{},\"reason\":\"To find out the current size of the email audience, we need the row counts of data products and contactable people per channel.\"}"
+},
+"cef4981f4ffe0ee36213a4c1": {
+"in": 762,
+"out": 46,
+"text": "{\"tool\":\"offboard_person\",\"args\":{\"user\":\"U0PRIV001\"},\"reason\":\"User U0PRIV001's last day was yesterday, so offboarding is required to remove all roles and close requests.\"}"
+},
+"cf07cc5aa26be75fe1ccc1e1": {
+"in": 761,
+"out": 35,
+"text": "{\"tool\":\"answer_from_docs\",\"args\":{},\"reason\":\"The user is asking how the deletion review queue gets filled, which is a question about how something works.\"}"
+},
+"de57a7346ad9734ec1a05af8": {
+"in": 764,
+"out": 37,
+"text": "{\"tool\":\"answer_from_docs\",\"args\":{},\"reason\":\"The user is asking for an explanation of the difference between two terms, which is best answered from the team's documentation.\"}"
+},
+"de82a658c4dfd8af0cfbe976": {
+"in": 771,
+"out": 57,
+"text": "{\"tool\":\"resolve_deletion_review\",\"args\":{\"person_key\":\"PK0a1b2c3d4e5f\",\"decision\":\"delete\"},\"reason\":\"User requests deletion of the person with key PK0a1b2c3d4e5f.\"}"
+},
+"e3e67de60dc63ab5a358cf2e": {
+"in": 755,
+"out": 23,
+"text": "{\"tool\":\"out_of_scope\",\"args\":{},\"reason\":\"Request is unrelated to running the data platform.\"}"
+},
+"ebe75218e518095f5d4b221d": {
+"in": 757,
+"out": 28,
+"text": "{\"tool\":\"check_doc_claims\",\"args\":{},\"reason\":\"To identify which documented numbers are out of date before correcting them.\"}"
+},
+"f19b4451f7d6b7fdc0fe8cba": {
+"in": 756,
+"out": 23,
+"text": "{\"tool\":\"out_of_scope\",\"args\":{},\"reason\":\"Cannot grant role without an exact user ID.\"}"
+},
+"f1f7bfb83162e9439d7c7eb5": {
+"in": 761,
+"out": 30,
+"text": "{\"tool\":\"model_status\",\"args\":{},\"reason\":\"To get the latest home-buyer model run details including performance metrics like AUC.\"}"
+},
+"f6eb740637ee803ce52c2ffc": {
+"in": 755,
+"out": 26,
+"text": "{\"tool\":\"access_record\",\"args\":{\"user\":\"admin\"},\"reason\":\"To find out who currently holds the admin role.\"}"
+},
+"fdd25a684cd1b4ac4ee644a9": {
+"in": 760,
+"out": 35,
+"text": "{\"tool\":\"access_record\",\"args\":{\"user\":\"U0ADM0002\"},\"reason\":\"To find out what roles the user U0ADM0002 currently holds.\"}"
+}
+},
+"model": "gpt-4.1-mini"
+}

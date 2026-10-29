@@ -299,6 +299,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(b, indent=1))
         return 0
     want = argv or list(TASKS)
+    import os
+    if os.environ.get("PLUMBLINE_LLM_MODEL") and not os.environ.get("PLUMBLINE_LLM_API_KEY"):
+        # The first real run hit this: an empty key line fell back to replay without a word.
+        print("PLUMBLINE_LLM_MODEL is set but PLUMBLINE_LLM_API_KEY is empty or missing, so no model can be "
+              "called. Add the key to .env (PLUMBLINE_LLM_API_KEY=...) and run again.")
+        return 2
     rt = Runtime.from_env()
     print(f"mode: {rt.mode}" + (f", model: {rt.model.model}" if rt.model else ""))
     summary_p = RECORDINGS / "summary.json"

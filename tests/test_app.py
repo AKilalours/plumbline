@@ -287,3 +287,12 @@ def test_a_dependency_the_table_does_not_know_is_checked_by_name_not_a_crash(tmp
     pp = tmp_path / "pyproject.toml"
     pp.write_text('[project]\ndependencies = ["numpy>=1", "surely-not-installed-pkg>=1"]\n')
     assert preflight.missing(pp) == ["surely-not-installed-pkg"]
+
+
+def test_a_recorded_paraphrase_is_routed_by_the_model_on_the_public_page(world, monkeypatch):
+    """No key on the page: the model's recorded tool choice replays, and a write is still a proposal."""
+    at = _app(world, monkeypatch, "agent")
+    at.pills(key="agent_pill").set_value("U0NEW0001 joined the privacy team, set them up").run()
+    assert not at.exception, at.exception
+    assert any("tool chosen by gpt-4.1-mini" in c.value for c in at.caption)
+    assert any("Nothing has changed yet" in m.value for m in at.markdown)

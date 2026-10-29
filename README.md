@@ -23,10 +23,10 @@ against the answer key, and the tests that hold each one are named.
 | Campaign experiment | a holdout test of a reactivation email, checked against the answer key's true effect: inside the attribution-corrected 95% interval in 7 of 8 runs (20,000 to 1,000,000 people); the run that missed is the one whose readout marked itself untrustworthy; from 100,000 people up, an uplift model sends the next email to the 30% it changes most, for 32 to 39 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (at 20,000 it has too little to learn from and does not win) |
 | Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
 | Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 45 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
-| AI features, measured | a model picks the agent's tool, drafts a contract for an unseen partner file, and turns English into SQL; code checks every output before anything runs (ids never invented, writes still need a second person, no contact column can be selected); each is scored on a held-out half against the way without a model, and recorded runs replay without a key |
+| AI features, measured | with gpt-4.1-mini, on held-out halves: the agent picks the right tool for 19 of 20 hard messages (keyword rules: 12 of 20); questions in English answered right 14 of 14 with no contact data ever returned; doc answers refuse what the docs do not say 9 of 9 (quoted: 7 of 9). Where it did not win (doc answers tie, contract types one worse) is in [AI, measured](#ai-measured). Code checks every model output before anything runs, and recorded runs replay without a key |
 | Model release gate | on 100,000 people it held all three challengers, including one with the champion's AUC whose probabilities were off by 0.44 on average: an AUC-only gate would have shipped it |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 288 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 291 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 ## See it work
 
@@ -76,7 +76,7 @@ page anyone can spend it from.
 | 5 | Income estimate, home-seller assessment, access provisioning, security questionnaires, hours retired | Done |
 | 6 | CI, campaign experiment and uplift model, Iceberg lake, scale runs, bigger evals, Docker | Done |
 | 7 | Demo app (control room, failure lab, identity edits, replay, audiences, activity log); the last wrongly deleted record at 1,000,000 people traced and fixed; identity memory capped | Done |
-| 8 | AI features with held-out evals and recorded runs (tool planner, contract drafter, English to SQL); release gate; learned identity re-scorer measured and not shipped | Built; model results come from the recorded run |
+| 8 | AI features with held-out evals and recorded runs (tool planner, contract drafter, English to SQL); release gate; learned identity re-scorer measured and not shipped | Done; model run recorded (gpt-4.1-mini) |
 
 ## AI, measured
 
@@ -87,22 +87,37 @@ any OpenAI-compatible endpoint), records every call by prompt hash in `docs/resu
 `summary.json`. The tests and the public app replay those recordings, so they never hold a key, and
 a replayed answer is always one the model really gave for exactly that prompt.
 
-| Feature | What code guarantees, whatever the model says | Without a model (held-out half) |
-| --- | --- | --- |
-| The agent picks the tool (`ai/planner.py`, 40 messages in `evals/routing_hard.yaml`: paraphrases, typos, injected "approvals are off") | a typed tool call; ids must appear in the message; roles must exist; writes are proposals a second person approves | keyword rules: 12/20 |
-| Answers from the docs (`agents/answer.py`, 67 questions) | every sentence cites a passage that was given, or the answer is replaced by quoted text | quoted: 19/24 right, 7/9 refusals |
-| A contract for a partner file nobody described (`ai/onboard.py`, 8 files in `evals/onboarding.yaml`) | the draft passes the same loader as every contract and is written to `sources/drafts/`, never applied | header and value rules: 7/7 email and phone columns, 31/34 types, 3/4 keys |
-| Questions in English become SQL (`ai/ask_data.py`, 34 questions with gold queries) | one SELECT, data products only, an allow-list of columns with no contact data, no file or URL readers, a row cap, read-only with a time limit | none: without a model there is no SQL |
+| Feature | What code guarantees, whatever the model says | Without a model | With gpt-4.1-mini |
+| --- | --- | --- | --- |
+| The agent picks the tool (`ai/planner.py`, 40 messages in `evals/routing_hard.yaml`: paraphrases, typos, injected "approvals are off") | a typed tool call; ids must appear in the message; roles must exist; writes are proposals a second person approves | keyword rules: 12 of 20 | **19 of 20** |
+| Answers from the docs (`agents/answer.py`, 67 questions) | every sentence cites a passage that was given, or the answer is replaced by quoted text | quoted: 19 of 24 right, 7 of 9 refusals | 19 of 24 right, **9 of 9 refusals** |
+| A contract for a partner file nobody described (`ai/onboard.py`, 8 files in `evals/onboarding.yaml`) | the draft passes the same loader as every contract and is written to `sources/drafts/`, never applied | rules: 7 of 7 email and phone columns, 31 of 34 types, 3 of 4 keys | 7 of 7 email and phone, 30 of 34 types, 4 of 4 keys, 34 of 34 identity roles (rules: 31 of 34) |
+| Questions in English become SQL (`ai/ask_data.py`, 34 questions with gold queries) | one SELECT, data products only, an allow-list of columns with no contact data, no file or URL readers, a row cap, read-only with a time limit | none: without a model there is no SQL | **14 of 14 answered right, 3 of 3 refused**; contact data returned: 0 |
 
-The model's column is filled from a recorded run, by the scorecard page and here, only from
-`docs/results/ai/summary.json`; until that file exists this README makes no claim about it. To record
-one, put two lines in `.env` (git-ignored; the command reads it and prints names, never values):
+Measured on 2026-10-29 with gpt-4.1-mini, recorded in `docs/results/ai/` and replayed by
+`test_the_recorded_run_replays_exactly_and_the_readme_reports_it`. Read it as:
 
-    PLUMBLINE_LLM_MODEL=<a chat model your key can use>
-    PLUMBLINE_LLM_API_KEY=<your key>
+- **Tool choice is the clear win.** 19 of 20 against 12 of 20 for the keyword rules,
+  which miss every paraphrase. The one held-out miss is still safe: asked "who are the admins right now?",
+  the model passed the word "admin" as a user id, and the code refused it before anything ran. On the
+  dev half it chose "check the docs" where "fix the docs" was asked (the safer of the two) and read
+  an AUC question as a status check.
+- **Answers tie; refusals improve.** 19 of 24 right either way. The model refused all
+  9 questions the docs cannot answer, where quoting let a 401(k) "match" and an "AWS
+  account" through. The citation check rejected 8 of its answers (a sentence with no
+  citation) and showed quoted text instead. One held-out miss is a right answer in other words ("keep
+  the broken warehouse file") that the phrase grader does not accept; the grader was fixed before the
+  run and is not changed after it. The retrieval bar for model mode (0.35) was chosen on the dev half.
+- **Contracts are mixed, and the rules stay.** Both caught every email and phone column with no false
+  alarms. The model got every identity role and every key; the rules got one more column type right.
+  Drafts stay drafts either way: a person approves them.
+- **English to SQL** answered every held-out question right and declined every request for contact
+  data, a delete or an export. The one dev miss counted "moved recently" from the life-events table
+  instead of the `recent_mover` flag: a definition question, which is why the gold queries exist.
 
-then `python -m plumbline.ai.evals` (a few hundred calls; it builds a 1,500-person city first) and
-commit `docs/results/ai/`.
+To run it again, put two lines in `.env` (git-ignored; the command reads it and prints names, never
+values), `PLUMBLINE_LLM_MODEL=<a chat model your key can use>` and `PLUMBLINE_LLM_API_KEY=<your key>`,
+then `python -m plumbline.ai.evals` and commit `docs/results/ai/`.
 
 Three things were tried and measured, and two were not shipped:
 
@@ -557,7 +572,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | | Result |
 | --- | --- |
 | Right section in the top 3 results | 45 of 49 answerable questions |
-| Answered right, with the right source | 18 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only |
+| Answered right, with the right source | 17 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
 | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
 | Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **13 of 20 (test half)**; 16 of 20 before the threshold moved (below) |
@@ -584,7 +599,8 @@ stage in order"), answers split across two sections, and a plausible but wrong s
 A language model reading the retrieved passages is what closes those; it is optional
 (`PLUMBLINE_LLM_MODEL`, `PLUMBLINE_LLM_API_KEY`, any OpenAI-compatible endpoint) and its answers are
 checked before anyone sees them: every sentence must cite a passage it was given, or the quoted
-answer is shown instead. Its accuracy is not reported here because it was not measured without a key.
+answer is shown instead. Measured with gpt-4.1-mini in [AI, measured](#ai-measured): the same 19 of 24 right on the
+held-out half, and 9 of 9 refusals where quoting gets 7.
 
 **What the evals changed.** Coverage first ignored words the documents never use, so an HR question
 looked fully covered by any passage that shared one ordinary word with it; unseen words now count

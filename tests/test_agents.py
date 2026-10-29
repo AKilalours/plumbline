@@ -104,10 +104,16 @@ def test_knowledge_eval_on_the_held_out_half():
     assert total >= 24 and right / total >= 0.75, r["failures"]
 
 
-def test_the_refusal_threshold_is_the_one_the_dev_half_chooses():
+def test_the_refusal_threshold_is_still_as_good_as_any_on_the_dev_half():
+    """Hysteresis: re-tune only when another threshold beats the current one on the dev half by more
+    than one question. The first version demanded the exact argmax, and edits to the README (one of
+    the indexed documents) flipped it between 0.45 and 0.5 three times as one dev question moved across
+    the line: chasing that is tuning on noise. The held-out half plays no part in this choice."""
     from plumbline.agents.answer import MIN_COVERAGE
-    best, _ = evals.choose_threshold(Index.from_repo(ROOT), evals.load(ROOT / "evals" / "knowledge.yaml"))
-    assert best == MIN_COVERAGE
+    items = evals.load(ROOT / "evals" / "knowledge.yaml")
+    best, scores = evals.choose_threshold(Index.from_repo(ROOT), items)
+    one_question = 1 / sum(1 for i in items if i["split"] == "dev")
+    assert scores[MIN_COVERAGE] >= scores[best] - one_question + 1e-9, (MIN_COVERAGE, scores)
 
 
 def test_the_documents_never_quote_the_eval_questions():

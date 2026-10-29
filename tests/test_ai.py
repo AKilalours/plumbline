@@ -229,3 +229,29 @@ def test_dotenv_sets_only_what_is_missing_and_reports_names_not_values(tmp_path,
     import os
     assert names == ["PLUMBLINE_LLM_API_KEY"] and os.environ["PLUMBLINE_LLM_MODEL"] == "already-set"
     assert os.environ["PLUMBLINE_LLM_API_KEY"] == "sk-test-not-real"
+
+
+def test_a_model_without_a_key_is_an_error_not_a_silent_replay(monkeypatch, capsys):
+    from plumbline.ai import evals
+    monkeypatch.setattr(evals, "load_dotenv", lambda *a, **k: [])
+    monkeypatch.setenv("PLUMBLINE_LLM_MODEL", "gpt-4.1-mini")
+    monkeypatch.setenv("PLUMBLINE_LLM_API_KEY", "")
+    assert evals.main([]) == 2 and "API_KEY is empty" in capsys.readouterr().out
+
+
+def test_the_recorded_run_replays_exactly_and_the_readme_reports_it(tmp_path):
+    """The model's numbers in the README and the scorecard come from docs/results/ai/summary.json, and
+    a replay of the recorded calls with no model reproduces them."""
+    from plumbline.ai import evals as E
+    s = json.loads((ROOT / "docs" / "results" / "ai" / "summary.json").read_text())
+    rt = Runtime(None, mode="replay")
+    E.eval_world(tmp_path / "world")
+    for task in ("planner", "ask_data", "onboarding"):
+        r = E.TASKS[task](rt)
+        assert {k: v for k, v in r.items() if k not in ("rows", "seconds", "model_name")} == \
+               {k: v for k, v in s[task].items() if k not in ("rows", "seconds", "model_name")}, task
+    readme = (ROOT / "README.md").read_text()
+    frac = lambda x: x.replace("/", " of ")
+    for claim in (frac(s["planner"]["model"]["test"]), frac(s["ask_data"]["test"]["answered_right"]),
+                  frac(s["answers"]["model"]["test"]["refused_when_it_should"]), frac(s["onboarding"]["test"]["model"]["types"])):
+        assert claim in readme, claim

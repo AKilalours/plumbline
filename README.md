@@ -24,22 +24,32 @@ against the answer key, and the tests that hold each one are named.
 | Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
 | Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 44 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 226 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 246 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 ## See it work
 
 `python -m pip install -e ".[app]"` then `python -m streamlit run streamlit_app.py`. The app builds a city of 4,000
 people with the real pipeline (generator, store API sync, ingestion, identity, deletion, dbt) in
-about a minute, then lets you:
+about a minute. Every button does real work on a private copy, and the city never changes:
 
-- open a person and see every record the sources sent about them next to the answer key, including
-  the people the matcher got wrong;
-- file a deletion request for someone whose namesake lives in the same home, and see each record
-  removed, by which step, and who it really belonged to (on a private copy: the city never changes);
-- check the households it built against who really lives together;
-- read the experiment, the uplift model and the scale runs (from `docs/results/scale.json`: a city
-  of 4,000 is too small to test an email or train the home-buyer model on);
-- talk to the operations agent as any of the example roles, and approve a change as a second admin.
+- **Control room**: six checks an AI marketing decision depends on (clean, current, cross-checked,
+  identity, consent, deletion), each with its count, its denominator and the rows behind it.
+- **Identity graph**: open a person, see every record next to the answer key and the field-by-field
+  evidence for each join; split out a wrong record or merge a split person, watch precision and
+  recall move against the answer key, and undo.
+- **Failure lab**: set the store API's throttling, server errors and dropped connections, crash the
+  sync mid-run, and reconcile what arrived against what the store holds.
+- **Privacy center**: delete someone whose namesake lives in the same home, see each record removed
+  and by which step, then re-send every original file and count what comes back (0).
+- **Audience builder**: describe an audience in words, see the typed rules it became, the count, and
+  who consent or missing contact keeps out; click a member to see where each value came from.
+- **Households, email experiment, scale runs** (from `docs/results/scale.json`: a city of 4,000 is
+  too small to test an email or train the home-buyer model on).
+- **Operations agent**: ask as any example role; a change needs a second admin to approve.
+- **Activity log**: every action above, by whom, with its result.
+
+The styling borrows Minerva's palette and type as a nod to the job it was built for. Plumbline is an
+independent project, not Minerva's platform, and uses none of its data, name or logo in the app.
 
 Use `python -m streamlit`, not a bare `streamlit`: the first run of the app found Anaconda's
 Streamlit on the PATH, a Python without the project's libraries, and every page failed on a missing
@@ -60,7 +70,7 @@ page anyone can spend it from.
 | 4 | Module E: operations agent (knowledge with sources, read-only tools, approvals, audit, Slack) | Done |
 | 5 | Income estimate, home-seller assessment, access provisioning, security questionnaires, hours retired | Done |
 | 6 | CI, campaign experiment and uplift model, Iceberg lake, scale runs, bigger evals, Docker | Done |
-| 7 | Demo app; the last wrongly deleted record at 1,000,000 people traced and fixed; identity memory capped | Done |
+| 7 | Demo app (control room, failure lab, identity edits, replay, audiences, activity log); the last wrongly deleted record at 1,000,000 people traced and fixed; identity memory capped | Done |
 
 ## Receipts
 
@@ -505,6 +515,12 @@ questions the knowledge threshold moved from 0.5 to 0.45: more right answers, an
 unanswerable question answered. Each new section of documentation makes lexical refusal a little
 worse (the lake section let the AWS question through); judging whether the passages actually answer
 the question is the job model mode is for, and it is measured separately with your key.
+
+The README is one of the documents the agent searches, so editing it moves the eval. A draft of the
+app section above made 0.35 to 0.5 tie on the dev half; the rule then picked 0.5 and the held-out
+half fell to 16 of 24. A later paragraph of this README moved it back. Both swings came from prose,
+not from the agent, which is the clearest case for retrieval that scores meaning instead of shared
+words. A test re-runs the choice on every change, so a stale threshold fails the build.
 
 These numbers are for the offline mode, which quotes the best-matching bullets and table rows with
 their source. What it misses: different words for the same thing ("runs the whole pipeline" vs "every

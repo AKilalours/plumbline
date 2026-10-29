@@ -17,6 +17,7 @@ from .llm import ChatModel, Completion, LLMError
 # Chosen on the dev half of evals/knowledge.yaml (evals.choose_threshold) and reported on the test
 # half; a test re-runs the choice and fails if this no longer matches it. With 34 dev questions it was
 # 0.5; with 67 it is 0.45, which answers more but let one HR question through on the held-out half.
+# The README is indexed too, so README edits can move this (one draft of the app section made it 0.5).
 MIN_COVERAGE = 0.45
 REFUSAL = "I could not find this in our documents."
 

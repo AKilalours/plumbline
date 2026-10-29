@@ -117,8 +117,11 @@ def test_saved_results_are_the_numbers_in_the_readme():
         assert f"{100 * r['identity']['precision']:.1f}% / {100 * r['identity']['recall']:.1f}%" in readme, r["people"]
 
 
-@pytest.mark.parametrize("page", ["home", "identity", "deletion", "households_page", "experiment", "agent", "scale"])
-def test_every_page_draws_without_an_error(world, page, monkeypatch):
+PAGES = ["control_room", "scale", "identity", "failure_lab", "deletion", "households_page", "audiences",
+         "experiment", "agent", "activity"]
+
+
+def _app(world, monkeypatch, page):
     st_testing = pytest.importorskip("streamlit.testing.v1")
     d, _ = world
     monkeypatch.setenv("PLUMBLINE_DEMO_DIR", str(d.root))
@@ -128,20 +131,77 @@ def test_every_page_draws_without_an_error(world, page, monkeypatch):
     at = st_testing.AppTest.from_string(f"import streamlit_app\nstreamlit_app.{page}()", default_timeout=300)
     at.run()
     assert not at.exception, at.exception
-    if page == "deletion":
-        next(b for b in at.button if b.label == "Forget them").click().run()
-        assert not at.exception, at.exception
-        assert any("0 of anyone else" in m.value for m in at.markdown)
-    if page == "identity":
-        next(b for b in at.button if "Surprise" in b.label).click().run()
-        assert not at.exception, at.exception
-    if page == "agent":
-        at.chat_input[0].set_value("Give U0NEW0001 the privacy role").run()
-        approve = [b for b in at.button if b.label.startswith("Approve P")]
-        assert approve and "U0ADM0002" in approve[0].label          # a second admin, never the asker
-        approve[0].click().run()
-        assert not at.exception, at.exception
-        assert any("approved and done" in m.value for m in at.markdown)
+    return at
+
+
+def _button(at, test):
+    return next(b for b in at.button if test(b.label))
+
+
+def test_every_page_in_the_menu_has_a_test():
+    import ast
+    tree = ast.parse((ROOT / "streamlit_app.py").read_text())
+    pages = {c.args[0].id for c in ast.walk(tree)
+             if isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "Page" and c.args}
+    assert pages == set(PAGES)
+
+
+@pytest.mark.parametrize("page", PAGES)
+def test_every_page_draws_without_an_error(world, page, monkeypatch):
+    _app(world, monkeypatch, page)
+
+
+def test_forget_them_then_replay_brings_nobody_back(world, monkeypatch):
+    at = _app(world, monkeypatch, "deletion")
+    _button(at, lambda l: l == "Forget them").click().run()
+    assert not at.exception, at.exception
+    assert any("0 of anyone else" in m.value for m in at.markdown)
+    _button(at, lambda l: l == "Re-send every original file").click().run()
+    assert not at.exception, at.exception
+    assert any("0 of their records came back" in m.value for m in at.markdown)
+
+
+def test_the_failure_lab_runs_a_real_sync_and_every_order_arrives_once(world, monkeypatch):
+    at = _app(world, monkeypatch, "failure_lab")
+    _button(at, lambda l: l == "Run the sync").click().run()
+    assert not at.exception, at.exception
+    r = at.session_state["lab"]
+    assert r["resumed"] and r["missing"] == 0 and r["copies"] == r["received"] == r["expected"] and r["retries"] > 0
+
+
+def test_a_split_rescores_and_undo_puts_the_numbers_back(world, monkeypatch):
+    at = _app(world, monkeypatch, "identity")
+    at.segmented_control(key="id_view").set_value("Fix it").run()
+    first = [m.value for m in at.metric]
+    _button(at, lambda l: l.startswith("Split out")).click().run()
+    assert not at.exception, at.exception
+    assert [m.value for m in at.metric] != first and len(at.session_state["edits"].history) == 1
+    _button(at, lambda l: l == "Undo last change").click().run()
+    assert [m.value for m in at.metric] == first
+
+
+def test_a_preset_audience_counts_people_and_respects_consent(world, monkeypatch):
+    at = _app(world, monkeypatch, "audiences")
+    _button(at, lambda l: l == "Lapsed big spenders").click().run()
+    assert not at.exception, at.exception
+    assert at.text_input(key="aud_text").value
+    _button(at, lambda l: l == "Save this audience").click().run()
+    assert not at.exception, at.exception
+    from plumbline.app.ops import ActivityLog
+    d, _ = world
+    saved = ActivityLog(d.root.parent / f"{d.root.name}-activity.jsonl").recent(1).iloc[0]
+    assert saved.action == "audience: saved" and saved.result["rules"]["channel"] == "email_ok"
+    assert 0 < saved.result["reachable"] <= saved.result["segment"]
+
+
+def test_the_agent_needs_a_second_admin_to_approve(world, monkeypatch):
+    at = _app(world, monkeypatch, "agent")
+    at.chat_input[0].set_value("Give U0NEW0001 the privacy role").run()
+    approve = [b for b in at.button if b.label.startswith("Approve P")]
+    assert approve and "U0ADM0002" in approve[0].label          # a second admin, never the asker
+    approve[0].click().run()
+    assert not at.exception, at.exception
+    assert any("approved and done" in m.value for m in at.markdown)
 
 
 def test_a_cold_start_then_a_second_viewer_both_draw(tmp_path, monkeypatch):
@@ -152,7 +212,7 @@ def test_a_cold_start_then_a_second_viewer_both_draw(tmp_path, monkeypatch):
     monkeypatch.setenv("PLUMBLINE_DEMO_DIR", str(tmp_path / "demo"))
     monkeypatch.setenv("PLUMBLINE_DEMO_PEOPLE", "1500")
     monkeypatch.syspath_prepend(str(ROOT))
-    for page in ("home", "identity"):
+    for page in ("control_room", "identity"):
         sys.modules.pop("streamlit_app", None)
         at = st_testing.AppTest.from_string(f"import streamlit_app\nstreamlit_app.{page}()", default_timeout=600)
         at.run()

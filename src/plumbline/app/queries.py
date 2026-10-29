@@ -194,11 +194,12 @@ def hidden_records(con, run: Path) -> pd.Series:
     return h.groupby("person_id").size()
 
 
-def deletion_sandbox(demo: Demo, person_id: str, work: str | Path | None = None) -> dict:
+def deletion_sandbox(demo: Demo, person_id: str, work: str | Path | None = None, keep: bool = False) -> dict:
     """File a deletion request for one person on a copy of the world, run it the way the nightly
     pipeline does (purge at load, then person-level deletion), and check every removed record
     against the answer key. The demo world itself is never changed."""
     work = Path(work or tempfile.mkdtemp(prefix="plumbline-sandbox-"))
+    work.mkdir(parents=True, exist_ok=True)
     try:
         run, wh = work / "run", work / "w.duckdb"
         shutil.copytree(demo.run, run)
@@ -239,9 +240,10 @@ def deletion_sandbox(demo: Demo, person_id: str, work: str | Path | None = None)
                 "removed": int((out.removed_by != "NOT REMOVED").sum()),
                 "left_behind": int((out.removed_by == "NOT REMOVED").sum()),
                 "innocent": int((out.belongs_to == "SOMEONE ELSE").sum()),
-                "review": review}
+                "review": review, **({"run": run, "warehouse": wh} if keep else {})}
     finally:
-        shutil.rmtree(work, ignore_errors=True)
+        if not keep:
+            shutil.rmtree(work, ignore_errors=True)
 
 
 def saved_results(path: Path = RESULTS) -> dict:

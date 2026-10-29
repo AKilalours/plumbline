@@ -26,32 +26,30 @@ against the answer key, and the tests that hold each one are named.
 | AI features, measured | with gpt-4.1-mini, on held-out halves: the agent picks the right tool for 19 of 20 hard messages (keyword rules: 12 of 20); questions in English answered right 14 of 14 with no contact data ever returned; doc answers refuse what the docs do not say 9 of 9 (quoted: 7 of 9). Where it did not win (doc answers tie, contract types one worse) is in [AI, measured](#ai-measured). Code checks every model output before anything runs, and recorded runs replay without a key |
 | Model release gate | on 100,000 people it held all three challengers, including one with the champion's AUC whose probabilities were off by 0.44 on average: an AUC-only gate would have shipped it |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 291 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 307 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 ## See it work
 
 `python -m pip install -e ".[app]"` then `python -m streamlit run streamlit_app.py`. The app builds a city of 4,000
 people with the real pipeline (generator, store API sync, ingestion, identity, deletion, dbt) in
-about a minute. Every button does real work on a private copy, and the city never changes:
+about a minute. Every button does real work on a private copy, and the city never changes. Seven
+places, almost no text; every number has its evidence one click away:
 
-- **Control room**: six checks an AI marketing decision depends on (clean, current, cross-checked,
-  identity, consent, deletion), each with its count, its denominator and the rows behind it.
-- **Identity graph**: open a person, see every record next to the answer key and the field-by-field
-  evidence for each join; split out a wrong record or merge a split person, watch precision and
-  recall move against the answer key, and undo.
-- **Failure lab**: set the store API's throttling, server errors and dropped connections, crash the
-  sync mid-run, and reconcile what arrived against what the store holds.
-- **Privacy center**: delete someone whose namesake lives in the same home, see each record removed
-  and by which step, then re-send every original file and count what comes back (0).
-- **Audience builder**: describe an audience in words, see the typed rules it became, the count, and
-  who consent or missing contact keeps out; click a member to see where each value came from.
-- **Households, email experiment, scale runs** (from `docs/results/scale.json`: a city of 4,000 is
-  too small to test an email or train the home-buyer model on).
-- **Operations agent**: ask as any example role; a change needs a second admin to approve.
-- **Activity log**: every action above, by whom, with its result.
-- **AI scorecard, Ask the data, Source onboarding, Release gate**: the model features below, each next
-  to the way without a model; "Try to break it" sends attack SQL at the guardrails, and "Try the gate"
-  shapes a challenger and runs the real release decision on it.
+- **Overview**: six live checks (clean, current, conflicts, identity, consent, deletion) and open incidents.
+- **Sources**: delivery health, a failure lab that throttles and crashes the store API, and AI-drafted
+  contracts for partner files nobody described.
+- **Identity**: every person's records against the answer key, with split, merge and undo; households;
+  person-level deletion with a replay that proves nobody comes back.
+- **Audiences**: typed rules from a sentence, English to guarded SQL, and the email experiment.
+- **Models**: the release gate, the AI scorecard, and the scale runs.
+- **Agent**: the incident lab and the operations agent. Inject one of four real incidents (a false
+  identity merge, an interrupted store sync, a warehouse restored from a backup older than a deletion
+  request, a training snapshot filled with values from the future). Checks a team would run detect it
+  without the answer key; a timed trace shows each step; the fix is proposed by the agent and runs only
+  after a person with the right role approves (the agent cannot approve itself, and an approval runs
+  once); verification re-runs the checks and asks the answer key; the incident report is generated
+  from the run record.
+- **Activity**: every action, by whom, and every incident report.
 
 The styling borrows Minerva's palette and type as a nod to the job it was built for. Plumbline is an
 independent project, not Minerva's platform, and uses none of its data, name or logo in the app.
@@ -77,6 +75,7 @@ page anyone can spend it from.
 | 6 | CI, campaign experiment and uplift model, Iceberg lake, scale runs, bigger evals, Docker | Done |
 | 7 | Demo app (control room, failure lab, identity edits, replay, audiences, activity log); the last wrongly deleted record at 1,000,000 people traced and fixed; identity memory capped | Done |
 | 8 | AI features with held-out evals and recorded runs (tool planner, contract drafter, English to SQL); release gate; learned identity re-scorer measured and not shipped | Done; model run recorded (gpt-4.1-mini) |
+| 9 | Seven-place app with minimal text; incident lab (inject, detect, inspect, approve, fix, verify, report) for four incidents | Done |
 
 ## AI, measured
 
@@ -572,7 +571,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | | Result |
 | --- | --- |
 | Right section in the top 3 results | 45 of 49 answerable questions |
-| Answered right, with the right source | 17 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
+| Answered right, with the right source | 18 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
 | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
 | Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **13 of 20 (test half)**; 16 of 20 before the threshold moved (below) |

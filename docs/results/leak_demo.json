@@ -1,0 +1,3 @@
+{"city": "seed 7, 100,000 people", "leaky_auc": 0.836, "ceiling_auc": 0.797, "honest_auc": 0.660,
+ "leaked_columns": ["vendor_homeowner", "income_band", "age_years"],
+ "caught_by": "check_not_above_ceiling: a backtest that beats the best possible model is refused"}

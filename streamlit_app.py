@@ -6,6 +6,7 @@ without Streamlit); saved scale results come from docs/results/scale.json.
 """
 from __future__ import annotations
 
+import contextlib
 import html
 import json
 import os
@@ -40,10 +41,21 @@ html, body, [class*="css"], .stMarkdown, p, li, label, input, textarea, button, 
 [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{ background: #FFFFFF; }}
 [data-testid="stSidebar"] {{ background: #FFFFFF; border-right: 1px solid {LINE}; }}
 h1 {{ font-family: 'Geist', sans-serif !important; font-weight: 500 !important; color: {BLUE} !important;
-     font-size: 2.6rem !important; letter-spacing: -0.02em; line-height: 1.08 !important; }}
+     font-size: 1.75rem !important; letter-spacing: -0.015em; line-height: 1.15 !important; }}
 h2, h3 {{ font-family: 'Geist', sans-serif !important; font-weight: 500 !important; color: {INK}; letter-spacing: -0.01em; }}
 .block-container {{ max-width: 1200px; padding-top: 2rem; }}
-.lede {{ font-size: 1.12rem; color: {INK}; margin: -0.3rem 0 1.4rem 0; padding-bottom: 1.1rem; border-bottom: 1px solid {LINE}; }}
+.lede {{ font-size: 0.95rem; color: {MUTED}; margin: -0.4rem 0 1.1rem 0; }}
+.trace {{ border-left: 2px solid {LINE}; margin: 0 0 0 4px; padding: 0 0 0 14px; }}
+.trace div {{ display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 0.9rem; }}
+.trace .ph {{ font-family: 'Geist Mono', monospace; font-size: 0.68rem; text-transform: uppercase; color: {BLUE}; min-width: 64px; }}
+.trace .lb {{ flex: 1; }} .trace .dt {{ color: {MUTED}; }} .trace .sec {{ font-family: 'Geist Mono', monospace; color: {MUTED}; font-size: 0.75rem; }}
+.pill {{ display: inline-block; border-radius: 9999px; padding: 2px 10px; font-size: 0.72rem; font-family: 'Geist Mono', monospace;
+        text-transform: uppercase; letter-spacing: 0.04em; margin-right: 6px; }}
+.pill.risk {{ background: #FBEDEA; color: {RED}; }} .pill.ok {{ background: #F1F8F4; color: {GREEN}; }}
+.pill.wait {{ background: #FFF6E0; color: #8A6A10; }} .pill.info {{ background: {TINT}; color: {BLUE}; }}
+.idbox {{ border: 1px solid {LINE}; border-radius: 12px; padding: 10px 14px; }}
+.idbox b {{ display: block; font-family: 'Geist Mono', monospace; font-size: 0.68rem; color: {MUTED}; font-weight: 500; text-transform: uppercase; }}
+.idbox span {{ font-size: 1.15rem; font-weight: 500; }}
 .mono {{ font-family: 'Geist Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; color: {MUTED}; }}
 .big {{ font-size: 2.1rem; font-weight: 500; color: {INK}; line-height: 1.1; font-variant-numeric: tabular-nums; }}
 .big small {{ font-size: 0.95rem; color: {MUTED}; font-weight: 400; }}
@@ -183,13 +195,29 @@ def run_for(label: str) -> dict:
     return next(r for r in Q.saved_results()["runs"] if r["people"] == SIZES[label])
 
 
-def header(title: str, lede: str):
+_EMBED = [0]
+
+
+@contextlib.contextmanager
+def embedded():
+    """A view drawn inside a destination: no title of its own."""
+    _EMBED[0] += 1
+    try:
+        yield
+    finally:
+        _EMBED[0] -= 1
+
+
+def header(title: str, lede: str = ""):
+    if _EMBED[0]:
+        return
     st.title(title)
-    st.markdown(f'<p class="lede">{html.escape(lede)}</p>', unsafe_allow_html=True)
+    if lede:
+        st.markdown(f'<p class="lede">{html.escape(lede)}</p>', unsafe_allow_html=True)
 
 
 def how(text: str):
-    with st.popover("How it works"):
+    with st.popover("Details"):
         st.markdown(text)
 
 
@@ -214,53 +242,6 @@ def log_change(key: str, action: str, result):
         if f"_logged_{key}" in st.session_state:
             log(action, result)
         st.session_state[f"_logged_{key}"] = result
-
-
-# ----------------------------------------------------------------- Observe
-def control_room():
-    d = demo()
-    header("Customer data that checks its own answers",
-           "A live city where the truth is known. Six checks every AI marketing decision depends on.")
-    rows = checks(d, key(d))
-    cols = st.columns(3)
-    for i, c in enumerate(rows):
-        with cols[i % 3].container(key=f"card_{c['id']}"):
-            value = num(c["value"]) if isinstance(c["value"], float) else f"{c['value']:,}"
-            stat(c["title"], value, f"of {c['of']:,}" if c["of"] else "", c["status"])
-            st.markdown(f'<div class="note">{html.escape(c["unit"])}. {html.escape(c["note"])}.</div>', unsafe_allow_html=True)
-            with st.popover("Evidence", width="stretch"):
-                st.caption(f"{len(c['evidence']):,} rows behind this number")
-                st.dataframe(c["evidence"].head(500), hide_index=True, width="stretch")
-
-    st.subheader("Find the failure, fix it, prove it")
-    steps = [("failure_lab", "Break a sync", "Throttle, error and crash the store API. Count what arrived."),
-             ("identity", "Fix a wrong merge", "Split it out. Watch precision change against the answer key."),
-             ("deletion", "Forget someone", "Delete a person, then re-send every file. Nobody comes back."),
-             ("audiences", "Build an audience", "Describe it in words. See the rules, the count and who consent excludes.")]
-    c = st.columns(4)
-    for col, (page, title, text) in zip(c, steps):
-        with col.container(key=f"card_step_{page}"):
-            st.markdown(f'<div class="mono">step {steps.index((page, title, text)) + 1}</div>', unsafe_allow_html=True)
-            st.page_link(PAGES[page], label=title)
-            st.caption(text)
-
-    with st.container(key="band"):
-        size = st.segmented_control("Measured at", list(SIZES), default="1M", key="home_size") or "1M"
-        r = run_for(size)
-        b = st.columns(4)
-        with b[0]:
-            stat("Identity F1 (pairs)", num(r["identity"]["f1"]))
-        with b[1]:
-            stat("Household F1", num(r["households_f1"]))
-        with b[2]:
-            stat("Wrongly deleted", "1 → 0" if size == "1M" else str(r["deletion"]["records_of_people_who_never_asked"]), "records")
-        with b[3]:
-            stat("Pipeline", f"{r['timing']['pipeline_minutes']} min" if "timing" in r else "not timed", r["machine"])
-    how("One generator makes a city: messy records from four sources, and an answer key the pipeline never sees. "
-        "Every check above runs live on this city. Pairwise scores count pairs of records; "
-        "\"resolved exactly\" counts whole people. "
-        "At 1M, wrongly deleted records went 85 → 1 (phone rule) → 0 (date-of-birth rule, re-planned on the same run). "
-        f"[Source code]({REPO_URL})")
 
 
 def scale():
@@ -336,15 +317,14 @@ def identity():
     view = st.segmented_control("View", ["Graph", "Why they were joined", "Fix it"], default="Graph", key="id_view") or "Graph"
     if view == "Graph":
         st.graphviz_chart(Q.person_dot(recs, strangers, truth["name"]))
-        st.caption("The pipeline's decision as built. Dashed boxes: its persons. Gold lines: whose record it really is. "
-                   "Red: someone else's. Edits in \"Fix it\" are scored on a private copy.")
+
     elif view == "Why they were joined":
         if evidence.empty:
             st.info("No scored pairs inside these persons.")
         else:
             colors = {"agree": f"color: {GREEN}", "differ": f"color: {RED}; font-weight: 600", "missing": f"color: {MUTED}"}
             st.dataframe(evidence.style.map(lambda v: colors.get(v, ""), subset=list(O.FIELDS)), hide_index=True, width="stretch")
-            st.caption("Probability: the matcher's belief that the two records are one person. Fields: agree, differ, or missing on one side.")
+
     else:
         fix_identity(d, pid, row, recs, strangers)
 
@@ -359,7 +339,7 @@ def fix_identity(d, pid, row, recs, strangers):
     c[0].metric("Precision (pairs)", num(now["precision"], 4), delta("precision"))
     c[1].metric("Recall (pairs)", num(now["recall"], 4), delta("recall"))
     c[2].metric("People resolved exactly", pct(now["people_resolved_exactly"], 2), delta("people_resolved_exactly"))
-    st.caption(f"Scored over all {now['true_pairs']:,} true pairs and {now['people']:,} people in the city, against the answer key.")
+    st.caption(f"vs answer key · {now['people']:,} people")
     with Q.connect(d) as con:      # a store order is matched as part of its customer profile
         profile = dict(con.execute("SELECT order_id, profile_id FROM identity_store_profiles").fetchall())
     me = Q.person_truth(d.run, pid)["name"]
@@ -387,7 +367,9 @@ def fix_identity(d, pid, row, recs, strangers):
         edits.undo()
         log("identity: undo", {"edits_left": len(edits.history)})
         st.rerun()
-    how("Edits live on a private overlay of the identity map; the city never changes. Each edit is rescored on "
+    how("Graph: dashed boxes are the pipeline's persons, gold lines whose record it really is, red someone else's. "
+        "Evidence: probability is the matcher's belief two records are one person; fields agree, differ or are missing. "
+        "Edits live on a private overlay of the identity map; the city never changes. Each edit is rescored on "
         "every record in the city: pairwise precision and recall count pairs of records, \"resolved exactly\" "
         "counts people whose records form one cluster holding nobody else.")
 
@@ -601,7 +583,7 @@ def audiences():
                                         "value": st.column_config.TextColumn("Value"),
                                         "source": st.column_config.TextColumn("Source", width="small"),
                                         "seen": st.column_config.TextColumn("Seen", width="small")})
-            st.caption("Every value with the source it came from and when that source last saw it.")
+
     if st.button("Save this audience", type="primary"):
         log("audience: saved", {"rules": rules, "segment": a["segment"], "reachable": a["reachable"]})
         st.toast(f"Saved: {a['reachable']:,} reachable people. See the activity log.", icon="✅")
@@ -640,7 +622,7 @@ def experiment():
         tooltip=["Policy", alt.Tooltip("Extra buyers per 1,000 emails:Q", format=".1f")])
         + enc.mark_text(dy=-10, fontSize=15, fontWeight=500, color=INK).encode(
             text=alt.Text("Extra buyers per 1,000 emails:Q", format=".0f"))).properties(height=280), width="stretch")
-    st.caption("Extra buyers per 1,000 emails, emailing 30% of inboxes. Measured runs; a few thousand people are too few to test an email.")
+    st.caption("Extra buyers per 1,000 emails · 30% of inboxes · measured runs")
     how("Inboxes are split by a hash of the address, so nobody can choose. The answer key knows what each person "
         "would have done with and without the email, so the measured effect can be checked. An uplift model learns "
         "who the email changes, using only what was known before the send.")
@@ -764,8 +746,7 @@ def scorecard():
     ]
     st.dataframe(pd.DataFrame([{"Feature": f, "Measured on the held-out half": m, "Without a model": bb or "not run",
                                 "With the model": mm or "not recorded"} for f, m, bb, mm in rows]), hide_index=True, width="stretch")
-    st.caption("Held-out half: alternate items, never used to choose a prompt or a threshold. Recorded runs replay "
-               "the model's exact outputs; nothing on this page calls a model.")
+    st.caption("Held-out half · recorded runs · no live model on this page")
     st.subheader("Machine learning that did not ship")
     rg = json.loads((Path(__file__).parent / "docs/results/release_gate.json").read_text())
     ss = json.loads((Path(__file__).parent / "docs/results/identity_second_stage.json").read_text())
@@ -843,7 +824,7 @@ def ask_data_page():
     if row.get("sql"):
         st.code(row["sql"], language="sql")
     if rt.mode != "live":
-        st.caption("Recorded run on the evaluation city (1,500 people), so counts differ from this page's city.")
+        st.caption("Recorded on the 1,500-person eval city")
 
 
 def onboarding_page():
@@ -937,7 +918,7 @@ def release_page():
                 st.markdown(f'<div class="step"><span class="dot {"pass" if gte["passed"] else "fail"}"></span>'
                             f'{gte["name"].replace("_", " ")}: {html.escape(gate_value(gte))}</div>', unsafe_allow_html=True)
     st.subheader("Try the gate")
-    st.caption("A synthetic champion and a challenger you shape. The decision comes from the same code.")
+
     a, b, cc = st.columns(3)
     skill = a.slider("Challenger's skill vs champion", -0.5, 0.5, 0.0, 0.05, key="rg_skill")
     bend = b.slider("Probability distortion (1 = honest)", 0.2, 2.0, 0.4, 0.1, key="rg_bend")
@@ -963,23 +944,283 @@ def release_page():
         "agents read scores as probabilities. A challenger that is only not worse stays out unless it brings something else.")
 
 
-PAGES = {"home": st.Page(control_room, title="Control room", icon="📏", default=True),
-         "scale": st.Page(scale, title="Scale", icon="⏱️", url_path="scale"),
-         "identity": st.Page(identity, title="Identity graph", icon="🔍", url_path="identity"),
-         "failure_lab": st.Page(failure_lab, title="Failure lab", icon="⚡", url_path="failure-lab"),
-         "deletion": st.Page(deletion, title="Privacy center", icon="🗑️", url_path="deletion"),
-         "households": st.Page(households_page, title="Households", icon="🏠", url_path="households"),
-         "audiences": st.Page(audiences, title="Audience builder", icon="🎯", url_path="audiences"),
-         "experiment": st.Page(experiment, title="Email experiment", icon="📈", url_path="experiment"),
-         "agent": st.Page(agent, title="Operations agent", icon="💬", url_path="agent"),
-         "activity": st.Page(activity, title="Activity log", icon="🧾", url_path="activity"),
-         "scorecard": st.Page(scorecard, title="AI scorecard", icon="🧪", url_path="ai-scorecard"),
-         "ask_data": st.Page(ask_data_page, title="Ask the data", icon="🗣️", url_path="ask-data"),
-         "onboarding": st.Page(onboarding_page, title="Source onboarding", icon="📥", url_path="onboarding"),
-         "release": st.Page(release_page, title="Release gate", icon="🚦", url_path="release-gate")}
+# ----------------------------------------------------------------- the seven destinations
+from plumbline.app import scenarios as SC  # noqa: E402
+
+RUNS = ROOT.parent / f"{ROOT.name}-runs"
+SHORT = {"clean": "Clean", "stale": "Current", "conflicts": "Conflicts", "identity": "Identity",
+         "consent": "Consent", "deletion": "Deletion"}
+INCIDENTS = {"false_merge": ("Identity", "False merge"), "interrupted_sync": ("Sources", "Interrupted sync"),
+             "stale_restore": ("Privacy", "Stale backup restore"), "future_feature": ("Models", "Future-dated feature")}
+
+
+def view(options: list[str], key: str) -> str:
+    return st.segmented_control("View", options, default=options[0], key=key, label_visibility="collapsed") or options[0]
+
+
+def runs_list() -> list[SC.Run]:
+    if not RUNS.exists():
+        return []
+    out = []
+    for p in sorted(RUNS.glob("run_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
+        try:
+            out.append(SC.Run.load(RUNS, p.stem))
+        except Exception:  # noqa: BLE001 - a half-written record must not break the page
+            continue
+    return out
+
+
+def status_pill(r: SC.Run) -> str:
+    if r.status == "verified":
+        return '<span class="pill ok">verified</span>' if r.verification.get("passed") else '<span class="pill risk">verification failed</span>'
+    if r.status == "proposed":
+        return '<span class="pill wait">awaiting approval</span>'
+    return f'<span class="pill info">{r.status}</span>'
+
+
+def overview():
+    d = demo()
+    header("Overview")
+    rows = checks(d, key(d))
+    cols = st.columns(6)
+    for col, c in zip(cols, rows):
+        with col.container(key=f"card_{c['id']}"):
+            value = num(c["value"]) if isinstance(c["value"], float) else f"{c['value']:,}"
+            stat(SHORT[c["id"]], value, f"/ {c['of']:,}" if c["of"] else "", c["status"])
+            with st.popover("Evidence", width="stretch"):
+                st.markdown(f"**{c['title']}**  \n{c['unit']}. {c['note']}.")
+                st.dataframe(c["evidence"].head(500), hide_index=True, width="stretch")
+    st.write("")
+    left, right = st.columns([3, 2], gap="large")
+    with left:
+        st.markdown('<div class="mono">Incidents</div>', unsafe_allow_html=True)
+        rs = runs_list()
+        if not rs:
+            st.markdown('<p class="note">None open.</p>', unsafe_allow_html=True)
+        for r in rs[:6]:
+            area, name = INCIDENTS[r.scenario]
+            st.markdown(f'<div class="step">{status_pill(r)} <b>{name}</b> <span class="note">· {area} · {r.id}</span></div>',
+                        unsafe_allow_html=True)
+        st.page_link(PAGES["agent"], label="Open the incident lab", icon="🧪")
+    with right, st.container(key="band"):
+        size = st.segmented_control("Measured at", list(SIZES), default="1M", key="home_size") or "1M"
+        r = run_for(size)
+        b = st.columns(2)
+        with b[0]:
+            stat("Identity F1", num(r["identity"]["f1"]))
+            stat("Wrongly deleted", "0" if size == "1M" else str(r["deletion"]["records_of_people_who_never_asked"]), "records")
+        with b[1]:
+            stat("Household F1", num(r["households_f1"]))
+            stat("Pipeline", f"{r['timing']['pipeline_minutes']} min" if "timing" in r else "n/a")
+    how("A synthetic city with an answer key the pipeline never sees. The six checks run live on it; the band shows "
+        "the same pipeline measured at 20,000 to 1,000,000 people. At 1M, wrongly deleted records went 85 → 1 → 0. "
+        f"[Source code]({REPO_URL})")
+
+
+def sources_page():
+    header("Sources")
+    v = view(["Health", "Failure lab", "Onboarding"], "src_view")
+    if v == "Health":
+        d = demo()
+        with Q.connect(d) as con:
+            led = con.execute("""SELECT source AS Source, count(*) FILTER (WHERE status = 'loaded') AS Loaded,
+                                        count(*) FILTER (WHERE status = 'rejected') AS Rejected, max(loaded_at) AS "Last load"
+                                 FROM ingest_ledger GROUP BY 1 ORDER BY 1""").df()
+            qu = con.execute("SELECT source AS Source, reason AS Reason, count(*) AS Rows FROM quarantine GROUP BY 1, 2 ORDER BY 3 DESC").df()
+        k = st.columns(3)
+        with k[0]:
+            stat("Deliveries loaded", f"{int(led.Loaded.sum()):,}", "", "pass")
+        with k[1]:
+            stat("Rejected files", f"{int(led.Rejected.sum()):,}", "", "pass" if not led.Rejected.sum() else "warn")
+        with k[2]:
+            stat("Quarantined rows", f"{int(qu.Rows.sum()) if len(qu) else 0:,}", "", "warn" if len(qu) else "pass")
+        a, b = st.columns(2, gap="large")
+        a.dataframe(led, hide_index=True, width="stretch")
+        if len(qu):
+            b.altair_chart(alt.Chart(qu).mark_bar(color=GOLD, cornerRadiusEnd=4).encode(
+                y=alt.Y("Reason:N", title=None, axis=alt.Axis(labelLimit=240)), x=alt.X("Rows:Q", axis=alt.Axis(tickMinStep=1, format="d")),
+                color=alt.Color("Source:N", scale=alt.Scale(range=[BLUE, GOLD, NAVY, GREEN])), tooltip=["Source", "Reason", "Rows"]
+            ).properties(height=alt.Step(30)), width="stretch")
+    elif v == "Failure lab":
+        with embedded():
+            failure_lab()
+    else:
+        with embedded():
+            onboarding_page()
+
+
+def identity_page():
+    header("Identity")
+    v = view(["People", "Households", "Deletion"], "id_dest")
+    with embedded():
+        {"People": identity, "Households": households_page, "Deletion": deletion}[v]()
+
+
+def audiences_page():
+    header("Audiences")
+    v = view(["Builder", "Ask the data", "Experiment"], "aud_dest")
+    with embedded():
+        {"Builder": audiences, "Ask the data": ask_data_page, "Experiment": experiment}[v]()
+
+
+def models_page():
+    header("Models")
+    v = view(["Release gate", "AI scorecard", "Scale"], "mod_dest")
+    with embedded():
+        {"Release gate": release_page, "AI scorecard": scorecard, "Scale": scale}[v]()
+
+
+def agent_page():
+    header("Agent")
+    v = view(["Incidents", "Ask"], "agent_dest")
+    if v == "Ask":
+        with embedded():
+            agent()
+        return
+    incident_lab()
+
+
+def incident_lab():
+    d = demo()
+    roles = {u: set(r) for u, r in Q.example_roles().items()}
+    pick = st.segmented_control("Incident", list(INCIDENTS), default="false_merge", key="inc_pick",
+                                format_func=lambda k: f"{INCIDENTS[k][1]}", label_visibility="collapsed") or "false_merge"
+    run_id = st.session_state.get(f"inc_run_{pick}")
+    run = SC.Run.load(RUNS, run_id) if run_id and (RUNS / f"{run_id}.json").exists() else None
+    steps = ["Inject", "Detect", "Inspect", "Fix", "Verify"]
+    done = {"new": 0, "injected": 1, "detected": 3, "proposed": 3, "fixed": 4, "verified": 5}[run.status if run else "new"]
+    st.markdown("".join(f'<span class="pill {"ok" if i < done else "info"}">{i + 1} · {s_}</span>' for i, s_ in enumerate(steps)),
+                unsafe_allow_html=True)
+    a, b = st.columns([1, 1])
+    if a.button("Inject incident", type="primary", key=f"inject_{pick}", width="stretch"):
+        with st.spinner("Injecting on a private copy"):
+            run = SC.start(pick, d, RUNS)
+        st.session_state[f"inc_run_{pick}"] = run.id
+        log("incident: injected", {"run": run.id, "scenario": pick})
+        st.rerun()
+    if run and run.status == "injected" and b.button("Investigate", key=f"inv_{run.id}", width="stretch"):
+        with st.spinner("Running checks"):
+            SC.investigate(run, d, RUNS)
+        log("incident: investigated", {"run": run.id, "findings": run.findings.get("check")})
+        st.rerun()
+    if not run:
+        return
+    left, right = st.columns([3, 2], gap="large")
+    with left:
+        st.markdown(f'<div class="mono">Trace · {run.id}</div>', unsafe_allow_html=True)
+        st.markdown('<div class="trace">' + "".join(
+            f'<div><span class="ph">{html.escape(e["phase"])}</span><span class="lb">{html.escape(e["label"])}'
+            f'{" · <span class=dt>" + html.escape(e["detail"]) + "</span>" if e["detail"] else ""}</span>'
+            f'<span class="sec">{e["seconds"]:.1f}s</span></div>' for e in run.events) + "</div>", unsafe_allow_html=True)
+    with right:
+        if run.status in ("proposed", "fixed", "verified"):
+            finding_card(run)
+    if run.status == "proposed":
+        approval_card(run, roles, d)
+    if run.status == "verified":
+        verified_card(run)
+
+
+def finding_card(run: SC.Run):
+    f, e = run.findings, run.evidence
+    with st.container(key=f"card_find_{run.id}"):
+        if run.scenario == "false_merge":
+            st.markdown('<span class="pill risk">high risk</span><b>Possible false merge</b>', unsafe_allow_html=True)
+            c = st.columns(2)
+            c[0].markdown(f'<div class="idbox"><b>Identity A</b><span>{e["identity_a"][-6:]}</span></div>', unsafe_allow_html=True)
+            c[1].markdown(f'<div class="idbox"><b>Identity B</b><span>{e["identity_b"][-6:]}</span></div>', unsafe_allow_html=True)
+            st.caption(" · ".join([f"Shared {', '.join(e['shared'])}"] + ([f"Conflicting {', '.join(e['conflicting'])}"] if e["conflicting"] else [])))
+        elif run.scenario == "interrupted_sync":
+            st.markdown('<span class="pill risk">data loss</span><b>Orders missing</b>', unsafe_allow_html=True)
+            stat("Missing", f"{f['missing']:,}", f"/ {f['store_orders']:,}", "fail")
+            st.caption(f"Cursor at page {e.get('cursor_page')} · {e.get('duplicates_so_far', 0)} duplicates")
+        elif run.scenario == "stale_restore":
+            st.markdown('<span class="pill risk">privacy</span><b>Deleted person is back</b>', unsafe_allow_html=True)
+            stat("Rows back", f"{f['rows_back']:,}", "", "fail")
+            st.caption(" · ".join(f"{k} {v}" for k, v in f["by_table"].items()))
+        else:
+            st.markdown('<span class="pill risk">leakage</span><b>Training data from the future</b>', unsafe_allow_html=True)
+            stat("Future values", f"{f['values_from_the_future']:,}", f"after {e['as_of']}", "fail")
+            lk = e["at_100k"]
+            st.caption(f"At 100k: AUC {lk['leaky_auc']} vs best possible {lk['ceiling_auc']}")
+        with st.popover("Inspect", width="stretch"):
+            st.json({"findings": f, "evidence": e})
+
+
+def approval_card(run: SC.Run, roles: dict, d):
+    p = run.proposal
+    with st.container(key=f"card_appr_{run.id}"):
+        st.markdown(f'<span class="pill wait">pending</span><b>{html.escape(p["summary"])}</b>', unsafe_allow_html=True)
+        c = st.columns(3)
+        with c[0]:
+            stat("Profiles", str(p["affected_profiles"]))
+        with c[1]:
+            stat("Downstream", f"{sum(p['downstream'].values()):,}", "rows")
+        with c[2]:
+            stat("Verification", "required")
+        approver = next((u for u, r in sorted(roles.items()) if p["role"] in r and u != p["proposed_by"]), None)
+        x, y = st.columns(2)
+        if approver is None:
+            x.error(f"Nobody holds the {p['role']} role, so this fix cannot be approved.")
+        elif x.button(f"Approve as {approver}", type="primary", key=f"ok_{run.id}", width="stretch"):
+            SC.approve(run, approver, roles)
+            with st.spinner("Applying and verifying"):
+                SC.fix_and_verify(run, d, RUNS)
+            log("incident: approved and verified", {"run": run.id, "by": approver, "passed": run.verification.get("passed")})
+            st.rerun()
+        if y.button("Let the agent approve its own fix", key=f"self_{run.id}", width="stretch"):
+            try:
+                SC.approve(run, p["proposed_by"], roles)
+            except SC.NotAllowed as err:
+                st.error(f"Refused: {err}")
+                log("incident: approval refused", {"run": run.id, "by": p["proposed_by"], "why": str(err)})
+
+
+def verified_card(run: SC.Run):
+    v = run.verification
+    with st.container(key=f"card_ver_{run.id}"):
+        st.markdown(f'<span class="pill {"ok" if v["passed"] else "risk"}">{"verified" if v["passed"] else "failed"}</span>'
+                    f'<b>Approved by {html.escape(run.approval["by"])}</b>', unsafe_allow_html=True)
+        c = st.columns(max(len(v["before_after"]), 1) + 1)
+        for col, (k_, (a_, b_)) in zip(c, v["before_after"].items()):
+            with col:
+                stat(k_, f"{a_} → {b_}")
+        with c[-1]:
+            ok = sum(1 for val in v["checks"].values() if val in (0, True))
+            stat("Checks", f"{ok}/{len(v['checks'])}", "", "pass" if v["passed"] else "fail")
+        rep = SC.report(run)
+        x, y = st.columns(2)
+        x.download_button("Incident report", rep, file_name=f"{run.id}.md", mime="text/markdown", key=f"dl_{run.id}", width="stretch")
+        with y.popover("Read report", width="stretch"):
+            st.markdown(rep)
+
+
+def activity_page():
+    header("Activity")
+    v = view(["Log", "Incident reports"], "act_view")
+    if v == "Log":
+        with embedded():
+            activity()
+        return
+    rs = [r for r in runs_list() if r.status in ("proposed", "fixed", "verified")]
+    if not rs:
+        st.markdown('<p class="note">No incidents investigated yet.</p>', unsafe_allow_html=True)
+        return
+    rid = st.selectbox("Incident", [r.id for r in rs], format_func=lambda i: f"{i} · {INCIDENTS[next(r for r in rs if r.id == i).scenario][1]}",
+                       label_visibility="collapsed")
+    r = next(x for x in rs if x.id == rid)
+    st.markdown(status_pill(r), unsafe_allow_html=True)
+    st.markdown(SC.report(r))
+
+
+
+PAGES = {"home": st.Page(overview, title="Overview", icon="📊", default=True),
+         "sources": st.Page(sources_page, title="Sources", icon="📥", url_path="sources"),
+         "identity": st.Page(identity_page, title="Identity", icon="🧬", url_path="identity"),
+         "audiences": st.Page(audiences_page, title="Audiences", icon="🎯", url_path="audiences"),
+         "models": st.Page(models_page, title="Models", icon="📈", url_path="models"),
+         "agent": st.Page(agent_page, title="Agent", icon="🛠️", url_path="agent"),
+         "activity": st.Page(activity_page, title="Activity", icon="🧾", url_path="activity")}
 
 if __name__ == "__main__":
-    st.navigation({"Observe": [PAGES["home"], PAGES["scale"]],
-                   "Investigate": [PAGES["identity"], PAGES["failure_lab"], PAGES["deletion"], PAGES["households"]],
-                   "Decide": [PAGES["audiences"], PAGES["experiment"], PAGES["agent"], PAGES["activity"]],
-                   "AI": [PAGES["scorecard"], PAGES["ask_data"], PAGES["onboarding"], PAGES["release"]]}).run()
+    st.navigation(list(PAGES.values())).run()

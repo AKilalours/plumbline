@@ -117,8 +117,10 @@ def test_saved_results_are_the_numbers_in_the_readme():
         assert f"{100 * r['identity']['precision']:.1f}% / {100 * r['identity']['recall']:.1f}%" in readme, r["people"]
 
 
-PAGES = ["control_room", "scale", "identity", "failure_lab", "deletion", "households_page", "audiences",
-         "experiment", "agent", "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page"]
+DESTINATIONS = ["overview", "sources_page", "identity_page", "audiences_page", "models_page", "agent_page", "activity_page"]
+VIEWS = ["scale", "identity", "failure_lab", "deletion", "households_page", "audiences", "experiment", "agent",
+         "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page"]
+PAGES = DESTINATIONS + VIEWS
 
 
 def _app(world, monkeypatch, page):
@@ -143,7 +145,7 @@ def test_every_page_in_the_menu_has_a_test():
     tree = ast.parse((ROOT / "streamlit_app.py").read_text())
     pages = {c.args[0].id for c in ast.walk(tree)
              if isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "Page" and c.args}
-    assert pages == set(PAGES)
+    assert pages == set(DESTINATIONS)
 
 
 @pytest.mark.parametrize("page", PAGES)
@@ -212,7 +214,7 @@ def test_a_cold_start_then_a_second_viewer_both_draw(tmp_path, monkeypatch):
     monkeypatch.setenv("PLUMBLINE_DEMO_DIR", str(tmp_path / "demo"))
     monkeypatch.setenv("PLUMBLINE_DEMO_PEOPLE", "1500")
     monkeypatch.syspath_prepend(str(ROOT))
-    for page in ("control_room", "identity"):
+    for page in ("overview", "identity"):
         sys.modules.pop("streamlit_app", None)
         at = st_testing.AppTest.from_string(f"import streamlit_app\nstreamlit_app.{page}()", default_timeout=600)
         at.run()
@@ -296,3 +298,16 @@ def test_a_recorded_paraphrase_is_routed_by_the_model_on_the_public_page(world, 
     assert not at.exception, at.exception
     assert any("tool chosen by gpt-4.1-mini" in c.value for c in at.caption)
     assert any("Nothing has changed yet" in m.value for m in at.markdown)
+
+
+def test_an_incident_runs_end_to_end_on_the_page_and_the_agent_cannot_approve_itself(world, monkeypatch):
+    at = _app(world, monkeypatch, "agent_page")
+    at.segmented_control(key="inc_pick").set_value("interrupted_sync").run()
+    _button(at, lambda l: l == "Inject incident").click().run()
+    _button(at, lambda l: l == "Investigate").click().run()
+    assert not at.exception, at.exception
+    _button(at, lambda l: l.startswith("Let the agent")).click().run()
+    assert any("never approves its own work" in e.value for e in at.error)
+    _button(at, lambda l: l.startswith("Approve as")).click().run()
+    assert not at.exception, at.exception
+    assert any("verified" in m.value for m in at.markdown)

@@ -119,7 +119,7 @@ def test_saved_results_are_the_numbers_in_the_readme():
 
 DESTINATIONS = ["overview", "sources_page", "identity_page", "audiences_page", "models_page", "agent_page", "activity_page"]
 VIEWS = ["scale", "identity", "failure_lab", "deletion", "households_page", "audiences", "experiment", "agent",
-         "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page"]
+         "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page", "reasons_page"]
 PAGES = DESTINATIONS + VIEWS
 
 
@@ -311,3 +311,15 @@ def test_an_incident_runs_end_to_end_on_the_page_and_the_agent_cannot_approve_it
     _button(at, lambda l: l.startswith("Approve as")).click().run()
     assert not at.exception, at.exception
     assert any("verified" in m.value for m in at.markdown)
+
+
+def test_the_suite_stops_with_one_clear_message_on_the_wrong_python(tmp_path):
+    """Run from Anaconda's base Python, the suite used to fail with twelve unrelated import errors."""
+    import subprocess
+    code = ("import sys, importlib.util as u; real = u.find_spec\n"
+            "def fs(n, *a, **k):\n    return None if n == 'splink' else real(n, *a, **k)\n"
+            "u.find_spec = fs\nimport pytest; sys.exit(pytest.main(['-q', '--co', '-p', 'no:cacheprovider']))")
+    r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=120)
+    out = r.stdout + r.stderr
+    assert r.returncode == 2, out[-800:]
+    assert "missing: splink" in out and "source .venv/bin/activate" in out

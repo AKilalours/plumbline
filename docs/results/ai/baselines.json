@@ -5,8 +5,8 @@
  },
  "answers_quoted": {
   "dev": {
-   "answered_correctly": "18/25",
-   "refused_when_it_should": "9/9"
+   "answered_correctly": "19/25",
+   "refused_when_it_should": "8/9"
   },
   "test": {
    "answered_correctly": "19/24",

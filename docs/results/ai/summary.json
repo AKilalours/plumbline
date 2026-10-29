@@ -482,18 +482,18 @@
    }
   ],
   "model_name": "gpt-4.1-mini",
-  "seconds": 37.4
+  "seconds": 0.2
  },
  "answers": {
-  "min_coverage": 0.35,
+  "min_coverage": 0.3,
   "dev_grid": {
    "0.15": 0.853,
    "0.2": 0.853,
    "0.25": 0.853,
    "0.3": 0.853,
-   "0.35": 0.853,
-   "0.4": 0.824,
-   "0.45": 0.824
+   "0.35": 0.794,
+   "0.4": 0.794,
+   "0.45": 0.794
   },
   "model": {
    "dev": {
@@ -502,13 +502,13 @@
    },
    "test": {
     "answered_correctly": "19/24",
-    "refused_when_it_should": "9/9"
+    "refused_when_it_should": "8/9"
    }
   },
   "quoted_offline": {
    "dev": {
-    "answered_correctly": "18/25",
-    "refused_when_it_should": "9/9"
+    "answered_correctly": "19/25",
+    "refused_when_it_should": "8/9"
    },
    "test": {
     "answered_correctly": "19/24",
@@ -517,14 +517,14 @@
   },
   "answer_modes": {
    "model": 40,
-   "quoted": 8,
-   "refused": 19
+   "quoted": 9,
+   "refused": 18
   },
   "failures_test": [
    {
     "q": "A tombstone matches several persons. Do I delete both?",
     "why": "wrong source",
-    "coverage": 0.478
+    "coverage": 0.476
    },
    {
     "q": "What checks must home-buyer scores pass before they are published?",
@@ -534,17 +534,21 @@
    {
     "q": "What command runs the whole pipeline end to end?",
     "why": "wrong source",
-    "coverage": 0.881
+    "coverage": 0.478
    },
    {
     "q": "What should I do with the broken warehouse file after rebuilding?",
     "why": "missing ['keep the broken file']",
-    "coverage": 0.701
+    "coverage": 0.692
    },
    {
     "q": "How many people does the home-buyer model leave unscored?",
     "why": "refused",
-    "coverage": 0.448
+    "coverage": 0.454
+   },
+   {
+    "q": "What is the company's 401(k) match?",
+    "coverage": 0.492
    }
   ],
   "examples": [
@@ -567,13 +571,13 @@
     "q": "A load crashed halfway through. How do I recover?",
     "should_refuse": false,
     "model": {
-     "text": "- Rerun the same command. Each file loads in one transaction together with its ledger row, so a crash leaves no partial file behind, and the rerun picks up exactly the files that did not finish. [docs/runbooks/ingestion.md#4-a-load-crashed-halfway]\n- 100,000 invented New Yorkers, with a hidden answer key, reach a fictional outdoor brand through four messy feeds: a CRM, a third-party data vendor, email events and an online store API that throttles, crashes and changes data mid-sync. Plumbline loads them, works out which records are the same person, and deletes people who ask to be deleted, everywhere. Every number below is measured against the answer key, and the tests that hold each one are named. [README.md#plumbline]",
+     "text": "- Rerun the same command. Each file loads in one transaction together with its ledger row, so a crash leaves no partial file behind, and the rerun picks up exactly the files that did not finish. [docs/runbooks/ingestion.md#4-a-load-crashed-halfway]\n- 100,000 invented New Yorkers, with a hidden answer key, reach a fictional outdoor brand through four messy feeds: a CRM, a third-party data vendor, email events and an online store API that throttles, crashes and changes data mid-sync. Plumbline loads them, works out which records are the same person, and deletes people who ask to be deleted, everywhere. Every number below is measured against the answer key, and the tests that hold each one are named. [README.md#results]",
      "mode": "quoted",
      "ok": true,
      "note": "model answer rejected (sentence without a citation: 'Rerun the same command.'); quoted instead"
     },
     "offline": {
-     "text": "- Rerun the same command. Each file loads in one transaction together with its ledger row, so a crash leaves no partial file behind, and the rerun picks up exactly the files that did not finish. [docs/runbooks/ingestion.md#4-a-load-crashed-halfway]\n- 100,000 invented New Yorkers, with a hidden answer key, reach a fictional outdoor brand through four messy feeds: a CRM, a third-party data vendor, email events and an online store API that throttles, crashes and changes data mid-sync. Plumbline loads them, works out which records are the same person, and deletes people who ask to be deleted, everywhere. Every number below is measured against the answer key, and the tests that hold each one are named. [README.md#plumbline]",
+     "text": "- Rerun the same command. Each file loads in one transaction together with its ledger row, so a crash leaves no partial file behind, and the rerun picks up exactly the files that did not finish. [docs/runbooks/ingestion.md#4-a-load-crashed-halfway]\n- 100,000 invented New Yorkers, with a hidden answer key, reach a fictional outdoor brand through four messy feeds: a CRM, a third-party data vendor, email events and an online store API that throttles, crashes and changes data mid-sync. Plumbline loads them, works out which records are the same person, and deletes people who ask to be deleted, everywhere. Every number below is measured against the answer key, and the tests that hold each one are named. [README.md#results]",
      "mode": "quoted",
      "ok": true
     }
@@ -582,13 +586,13 @@
     "q": "How do I re-pull every order from the store?",
     "should_refuse": false,
     "model": {
-     "text": "To re-pull every order from the store, delete the `_sync_state.json` file only [docs/runbooks/ingestion.md#5-the-store-sync-failed]. The loader will skip every row it already has, so this process costs time but maintains correctness [docs/runbooks/ingestion.md#5-the-store-sync-failed]. This allows the sync to start fresh and re-fetch all data [docs/runbooks/ingestion.md#5-the-store-sync-failed].",
+     "text": "To re-pull every order from the store, delete the `_sync_state.json` file only [docs/runbooks/ingestion.md#5-the-store-sync-failed]. The loader will skip every row it already has, so this process costs time but maintains correctness [docs/runbooks/ingestion.md#5-the-store-sync-failed]. This allows the sync to start over from the beginning [docs/runbooks/ingestion.md#5-the-store-sync-failed].",
      "mode": "model",
      "ok": true,
      "note": null
     },
     "offline": {
-     "text": "- - `gave up after N retries`: the store was down longer than the backoff budget. Nothing is lost: the watermark did not move and `sources/store/_sync_state.json` holds the last good cursor. Rerun the sync later and it resumes from that page. [docs/runbooks/ingestion.md#5-the-store-sync-failed]\n- - To re-pull everything (for example after the store fixed bad data on its side), delete `_sync_state.json` only. The loader skips every row it already has, so this costs time, not correctness. [docs/runbooks/ingestion.md#5-the-store-sync-failed]\n- | Claim | Measured | Where it is tested | | A crashed sync resumes without loss or a full re-pull | resumes from the saved cursor; the next sync fetches only changes | `test_crash_between_pages_resumes_without_loss`, `test_second_sync_only_fetches_changes` | [README.md#receipts]",
+     "text": "- - `gave up after N retries`: the store was down longer than the backoff budget. Nothing is lost: the watermark did not move and `sources/store/_sync_state.json` holds the last good cursor. Rerun the sync later and it resumes from that page. [docs/runbooks/ingestion.md#5-the-store-sync-failed]\n- - To re-pull everything (for example after the store fixed bad data on its side), delete `_sync_state.json` only. The loader skips every row it already has, so this costs time, not correctness. [docs/runbooks/ingestion.md#5-the-store-sync-failed]\n- The online store is an API, not a file drop. `src/plumbline/ingest/connectors/store_api.py` pulls it incrementally (watermark minus a 5-minute overlap, keyset cursors), retries 429s after the server's Retry-After and 5xx or dropped connections with jittered backoff, stops at once on a 401, and lands each page as a CSV atomically before saving its cursor. Landing as files means every promise above applies to API data with no extra code. The store itself is a local mock (`src/plumbline/store/server.py`) that throttles, fails, cuts responses in half and refunds orders while you page through it. [README.md#how-ingestion-works]",
      "mode": "quoted",
      "ok": true
     }
@@ -597,13 +601,13 @@
     "q": "A tombstone matches several persons. Do I delete both?",
     "should_refuse": false,
     "model": {
-     "text": "No, after identity resolution, a surviving record matching two key kinds of a trusted tombstone is deleted along with its whole person [README.md#deletion-at-the-person-level]. A weak tombstone counts only if its name agrees with a strong one from the same request to avoid deleting innocent records [README.md#deletion-at-the-person-level]. Therefore, you do not delete both persons unless the tombstone matches them strongly and passes the name agreement rule [README.md#deletion-at-the-person-level].",
+     "text": "No, after identity resolution, a surviving record matching two key kinds of a trusted tombstone is deleted along with its whole person [README.md#deletion-at-the-person-level]. A weak tombstone counts only if its name agrees with a strong one from the same request to avoid deleting innocent records [README.md#deletion-at-the-person-level]. Therefore, not all persons matched by a tombstone are deleted, only those confirmed by the rules [README.md#deletion-at-the-person-level].",
      "mode": "model",
      "ok": false,
      "note": null
     },
     "offline": {
-     "text": "- **Tombstones.** A purged row leaves only HMAC-keyed hashes of name + zip, last name + address and name + date of birth, tagged with its request and how strong the evidence was (phone matched: strong; email only: weak). After identity resolution, a surviving record matching two key kinds of a trusted tombstone is deleted along with its whole person, and its email and phone join suppression so replays stay deleted (`test_person_level_deletions_survive_a_full_replay`). A weak tombstone counts only if its name agrees with a strong one from the same request: otherwise a housemate's own phone-less order would mark the housemate for deletion (this exact bug deleted 12 innocent records before the rule). A known date of birth that disagrees vetoes the match (father and son, one name, one address). [README.md#deletion-at-the-person-level]\n- Exact email and phone matching is only the first pass. After identity resolution, person-level deletion also removes the person's other records (tombstones plus the identity graph), and cases with too little evidence go to the review queue (section 6). Seed 7: 23 of 500 deleted people had data left after the first pass, 11 after person-level deletion. [docs/runbooks/ingestion.md#3-a-deletion-request-arrives]",
+     "text": "- **Tombstones.** A purged row leaves only HMAC-keyed hashes of name + zip, last name + address and name + date of birth, tagged with its request and how strong the evidence was (phone matched: strong; email only: weak). After identity resolution, a surviving record matching two key kinds of a trusted tombstone is deleted along with its whole person, and its email and phone join suppression so replays stay deleted (`test_person_level_deletions_survive_a_full_replay`). A weak tombstone counts only if its name agrees with a strong one from the same request: otherwise a housemate's own phone-less order would mark the housemate for deletion (this exact bug deleted 12 innocent records before the rule). A known date of birth that disagrees vetoes the match (father and son, one name, one address). [README.md#deletion-at-the-person-level]\n- | | Deleted people with any record left | Records of people who never asked, removed | | Phase 2: one erasure rule + tombstones + identity graph | **11 of 500** | **50** (34 are email events of the listed address) | [README.md#deletion-at-the-person-level]",
      "mode": "quoted",
      "ok": false
     }
@@ -612,7 +616,7 @@
     "q": "Why did the first identity model have such low precision?",
     "should_refuse": false,
     "model": {
-     "text": "The first identity model had low precision (32%) because it treated households as matches by training on blocks of \"same last name and zip,\" which caused families to be incorrectly identified as the same person [README.md#identity-resolution-module-b]. Training on blocks where families cannot dominate, such as \"same phone; same first and last name,\" fixed the weights and improved precision [README.md#identity-resolution-module-b].",
+     "text": "The first identity model had 32% precision because it trained on blocks of \"same last name and zip,\" which taught the model that a family is a match, leading to many incorrect matches [README.md#identity-resolution-module-b]. Training on blocks where families cannot dominate (same phone; same first and last name) fixed the weights and improved precision [README.md#identity-resolution-module-b].",
      "mode": "model",
      "ok": true,
      "note": null
@@ -627,7 +631,7 @@
     "q": "Why are vendor-only moves kept out of segments?",
     "should_refuse": false,
     "model": {
-     "text": "Vendor-only moves have a measured precision of only 45%, which is worse than a coin flip, making them unreliable evidence for moves [README.md#data-products-dbt]. Segments use only store and CRM evidence, which have higher precision rates (store order 86%, CRM edit 79%) [README.md#data-products-dbt]. This ensures that segments are built on more accurate and trustworthy data [README.md#data-products-dbt].",
+     "text": "Vendor-only moves have a measured precision of 45%, which is worse than a coin flip, making them unreliable evidence for moves [README.md#data-products-dbt]. Segments use only store and CRM evidence, which have higher precision rates (84% and 79%, respectively) [README.md#data-products-dbt]. This ensures that segments are based on more accurate move data [README.md#data-products-dbt].",
      "mode": "model",
      "ok": true,
      "note": null
@@ -657,13 +661,13 @@
     "q": "What is the ceiling AUC for the home-buyer model?",
     "should_refuse": false,
     "model": {
-     "text": "The ceiling AUC for the home-buyer model is 0.797 [docs/role_map.md#data-science-features-and-models-agents-can-rely-on].",
+     "text": "The ceiling AUC for the home-buyer model is 0.797 [README.md#home-buyer-model-module-c].",
      "mode": "model",
      "ok": true,
      "note": null
     },
     "offline": {
-     "text": "- - **The leak beats the ceiling, which is how you know it is a leak.** Vendor attributes delivered in November and December say who owns a home after buying it. Pasted onto earlier snapshots they score above the best possible model, which only a model reading the future can do. `check_not_above_ceiling` refuses any backtest that does. [README.md#home-buyer-model-module-c]\n- - **First-party data alone gets half the way.** The model captures 54% of the AUC above chance that the ceiling allows, and 31% of the lift. What drives buying here is household income, age, renting and a recent job change, which a brand's own systems barely see. An on-time vendor feed moves AUC from 0.66 to 0.71: that difference is the price of enrichment, measured. The rest of the gap is exact household income, which nobody sells. [README.md#home-buyer-model-module-c]\n- | The work | Where | Status | | Home buyer model | `src/plumbline/ml/` | AUC 0.660 vs ceiling 0.797 on an untouched later period; enrichment worth +0.06, an on-time vendor feed +0.05 | [docs/role_map.md#data-science-features-and-models-agents-can-rely-on]",
+     "text": "- - **The leak beats the ceiling, which is how you know it is a leak.** Vendor attributes delivered in November and December say who owns a home after buying it. Pasted onto earlier snapshots they score above the best possible model, which only a model reading the future can do. `check_not_above_ceiling` refuses any backtest that does. [README.md#home-buyer-model-module-c]\n- - **First-party data alone gets half the way.** The model captures 54% of the AUC above chance that the ceiling allows, and 31% of the lift. What drives buying here is household income, age, renting and a recent job change, which a brand's own systems barely see. An on-time vendor feed moves AUC from 0.66 to 0.71: that difference is the price of enrichment, measured. The rest of the gap is exact household income, which nobody sells. [README.md#home-buyer-model-module-c]\n- | | AUC | Top-decile lift | | Ceiling: the rule that generated the purchases | 0.797 | 4.4x | [README.md#home-buyer-model-module-c]",
      "mode": "quoted",
      "ok": true
     }
@@ -672,7 +676,7 @@
     "q": "What checks must home-buyer scores pass before they are published?",
     "should_refuse": false,
     "model": {
-     "text": "Home-buyer scores must pass checks on the inputs being the training inputs, scores being plausible probabilities, the mean being plausible, missing-value rates being stable, and no feature drifting past a population stability index of 0.25 [README.md#home-buyer-model-module-c]. Additionally, people known only from the vendor feed are not scored to avoid drift issues [README.md#home-buyer-model-module-c]. If any of these guardrails fail, the run publishes nothing [README.md#home-buyer-model-module-c].",
+     "text": "Home-buyer scores must pass checks that the inputs are the training inputs, scores are probabilities that vary, the mean is plausible, missing-value rates are stable, and no feature drifts past a population stability index of 0.25 [README.md#home-buyer-model-module-c]. Additionally, people known only from the vendor feed are not scored, as the model was trained before any vendor data existed, and they are listed in `ml.home_buyer_not_scored` with that reason [README.md#home-buyer-model-module-c]. If any of these guardrails fail, the run publishes nothing [README.md#home-buyer-model-module-c].",
      "mode": "model",
      "ok": false,
      "note": null
@@ -702,13 +706,13 @@
     "q": "What command runs the whole pipeline end to end?",
     "should_refuse": false,
     "model": {
-     "text": "The command that runs the whole pipeline end to end is `python scripts/scale_run.py --n-people N` [README.md#scale]. This command executes every stage from generation to the experiment readout [README.md#scale].",
+     "text": "The command to run the whole pipeline end to end in Docker is `docker compose run --rm pipeline` after generating data/synth as described [README.md#a-world-made-by-an-older-generator-is-refused-regenerate-it-with-the-same-command-plus-force].",
      "mode": "model",
      "ok": false,
      "note": null
     },
     "offline": {
-     "text": "- The same command at four sizes (`python scripts/scale_run.py --n-people N`), every stage from generation to the experiment readout. Seconds per stage, and the most memory the process had used by the end of the run: [README.md#scale]\n- | People | Machine | Rows delivered | Store sync | Ingest | Identity | dbt products | Models | Experiment | Whole pipeline | Peak memory | | 20,000 | 2-core cloud, 7 GB | 62,679 | 6 | 7 | 24 | 21 | 102 | 7 | 2.9 min | 2.4 GB | [README.md#scale]\n- These numbers are for the offline mode, which quotes the best-matching bullets and table rows with their source. What it misses: different words for the same thing (\"runs the whole pipeline\" vs \"every stage in order\"), answers split across two sections, and a plausible but wrong section ranked first. A language model reading the retrieved passages is what closes those; it is optional (`PLUMBLINE_LLM_MODEL`, `PLUMBLINE_LLM_API_KEY`, any OpenAI-compatible endpoint) and its answers are checked before anyone sees them: every sentence must cite a passage it was given, or the quoted answer is shown instead. Its accuracy is not reported here because it was not measured without a key. [README.md#operations-agent-module-e]",
+     "text": "- The same command at four sizes (`python scripts/scale_run.py --n-people N`), every stage from generation to the experiment readout. Seconds per stage, and the most memory the process had used by the end of the run: [README.md#scale]\n- CI builds the image on every push, checks that no `.env`, roles file or data is inside it and that it runs as a non-root user, and runs the test suites inside it. [README.md#a-world-made-by-an-older-generator-is-refused-regenerate-it-with-the-same-command-plus-force]",
      "mode": "quoted",
      "ok": false
     }
@@ -732,10 +736,10 @@
     "q": "Who is on call this weekend?",
     "should_refuse": true,
     "model": {
-     "text": "I could not find this in our documents. The closest section is docs/security.md#audit-trail, which does not answer it.",
+     "text": "I could not find this in our documents.",
      "mode": "refused",
      "ok": true,
-     "note": null
+     "note": "model found no answer in the passages"
     },
     "offline": {
      "text": "I could not find this in our documents. The closest section is docs/security.md#audit-trail, which does not answer it.",
@@ -768,7 +772,7 @@
      "note": "model found no answer in the passages"
     },
     "offline": {
-     "text": "- That was not enough. Iceberg's default writes each column's lowest and highest value into the manifests, cut to 16 characters, and a delete commit keeps an entry for the file it replaced, with those values, in the live manifest. After deleting `aadams@kestrelmail.test`, the bucket still held `aadams@kestrelma`. Tables are now created with `write.metadata.metrics.default = counts` (null and value counts, no values). The test reads every file in the bucket, decoding Parquet values and manifest bounds, and finds no trace of the address, not even a prefix. It runs against a local S3 server (moto), the same API as AWS S3 or MinIO; I did not run it against a real AWS account. [README.md#bronze-on-iceberg-and-deletion-that-reaches-the-files]\n- | | Result | | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) \"match\" and an \"AWS account\" each share enough words with a section to get through | [README.md#operations-agent-module-e]",
+     "text": "- That was not enough. Iceberg's default writes each column's lowest and highest value into the manifests, cut to 16 characters, and a delete commit keeps an entry for the file it replaced, with those values, in the live manifest. After deleting `aadams@kestrelmail.test`, the bucket still held `aadams@kestrelma`. Tables are now created with `write.metadata.metrics.default = counts` (null and value counts, no values). The test reads every file in the bucket, decoding Parquet values and manifest bounds, and finds no trace of the address, not even a prefix. It runs against a local S3 server (moto), the same API as AWS S3 or MinIO; I did not run it against a real AWS account. [README.md#bronze-on-iceberg-and-deletion-that-reaches-the-files]\n- - **Answers tie; refusals improve.** 19 of 24 right either way. The model refused all 9 questions the docs cannot answer, where quoting let a 401(k) \"match\" and an \"AWS account\" through. The citation check rejected 8 of its answers (a sentence with no citation) and showed quoted text instead. One held-out miss is a right answer in other words (\"keep the broken warehouse file\") that the phrase grader does not accept; the grader was fixed before the run and is not changed after it. The retrieval bar for model mode (0.35) was chosen on the dev half. [README.md#ai-measured]",
      "mode": "quoted",
      "ok": false
     }
@@ -777,13 +781,13 @@
     "q": "Which office has the best coffee in Brooklyn?",
     "should_refuse": true,
     "model": {
-     "text": "I could not find this in our documents. The closest section is README.md#operations-agent-module-e, which does not answer it.",
+     "text": "I could not find this in our documents. The closest section is README.md#campaign-experiment, which does not answer it.",
      "mode": "refused",
      "ok": true,
      "note": null
     },
     "offline": {
-     "text": "I could not find this in our documents. The closest section is README.md#operations-agent-module-e, which does not answer it.",
+     "text": "I could not find this in our documents. The closest section is README.md#campaign-experiment, which does not answer it.",
      "mode": "refused",
      "ok": true
     }
@@ -798,7 +802,7 @@
      "note": "model answer rejected (sentence without a citation: 'Yes, you should fix the contract only if the new format is l'); quoted instead"
     },
     "offline": {
-     "text": "- - `bad_<type>:<column>`: the sender changed a format. Fix the contract only if the new format is legitimate. [docs/runbooks/ingestion.md#2-quarantine-is-growing]\n- Quarantined rows never reach the current tables. Nothing needs cleaning up after a fix: the corrected re-send loads normally. [docs/runbooks/ingestion.md#2-quarantine-is-growing]\n- | Promise | How | | Bad rows never load silently | quarantine with a reason code; a file missing a required column is rejected whole | [README.md#how-ingestion-works]",
+     "text": "- - `bad_<type>:<column>`: the sender changed a format. Fix the contract only if the new format is legitimate. [docs/runbooks/ingestion.md#2-quarantine-is-growing]\n- Quarantined rows never reach the current tables. Nothing needs cleaning up after a fix: the corrected re-send loads normally. [docs/runbooks/ingestion.md#2-quarantine-is-growing]\n- | The work | Where | Evidence | | Open table formats on object storage | `lake/iceberg.py` (Iceberg on any S3 API) | sync with snapshots and time travel; deletion expires history and removes files; no column values in manifest statistics; tested against an S3 API | [docs/role_map.md#ingestion-making-sources-you-do-not-control-dependable]",
      "mode": "quoted",
      "ok": true
     }
@@ -858,7 +862,7 @@
      "note": null
     },
     "offline": {
-     "text": "- - **Slack shows \"dispatch_failed\" or the agent answers twice.** Slack retries when it does not get a 200 within three seconds. Retries are dropped by event id (`ops.slack_events`), so a double answer means two agents are running against two different `data/agent.duckdb` files. Run one. [docs/runbooks/agent.md#when-something-goes-wrong]\n- - **Every request gets 401.** The signing secret is wrong, or the server clock is more than five minutes off (requests older than that are refused as possible replays). Check `date`. [docs/runbooks/agent.md#when-something-goes-wrong]\n- - Slack requests must carry a valid signature less than five minutes old (forged and replayed requests get 401); a retried event or a double click runs once; bot messages are ignored [README.md#operations-agent-module-e]",
+     "text": "- - **Slack shows \"dispatch_failed\" or the agent answers twice.** Slack retries when it does not get a 200 within three seconds. Retries are dropped by event id (`ops.slack_events`), so a double answer means two agents are running against two different `data/agent.duckdb` files. Run one. [docs/runbooks/agent.md#when-something-goes-wrong]\n- - **Every request gets 401.** The signing secret is wrong, or the server clock is more than five minutes off (requests older than that are refused as possible replays). Check `date`. [docs/runbooks/agent.md#when-something-goes-wrong]",
      "mode": "quoted",
      "ok": true
     }
@@ -918,7 +922,7 @@
      "note": null
     },
     "offline": {
-     "text": "- If the model returns an answer with a sentence that cites nothing, or cites a passage it was not given, the quoted answer is shown instead and the reason is in the audit log (`detail.note`). [docs/runbooks/agent.md#connect-a-language-model-optional]\n- These numbers are for the offline mode, which quotes the best-matching bullets and table rows with their source. What it misses: different words for the same thing (\"runs the whole pipeline\" vs \"every stage in order\"), answers split across two sections, and a plausible but wrong section ranked first. A language model reading the retrieved passages is what closes those; it is optional (`PLUMBLINE_LLM_MODEL`, `PLUMBLINE_LLM_API_KEY`, any OpenAI-compatible endpoint) and its answers are checked before anyone sees them: every sentence must cite a passage it was given, or the quoted answer is shown instead. Its accuracy is not reported here because it was not measured without a key. [README.md#operations-agent-module-e]",
+     "text": "- If the model returns an answer with a sentence that cites nothing, or cites a passage it was not given, the quoted answer is shown instead and the reason is in the audit log (`detail.note`). [docs/runbooks/agent.md#connect-a-language-model-optional]\n- These numbers are for the offline mode, which quotes the best-matching bullets and table rows with their source. What it misses: different words for the same thing (\"runs the whole pipeline\" vs \"every stage in order\"), answers split across two sections, and a plausible but wrong section ranked first. A language model reading the retrieved passages is what closes those; it is optional (`PLUMBLINE_LLM_MODEL`, `PLUMBLINE_LLM_API_KEY`, any OpenAI-compatible endpoint) and its answers are checked before anyone sees them: every sentence must cite a passage it was given, or the quoted answer is shown instead. Measured with gpt-4.1-mini in [AI, measured](#ai-measured): the same 19 of 24 right on the held-out half, and 9 of 9 refusals where quoting gets 7. [README.md#operations-agent-module-e]",
      "mode": "quoted",
      "ok": true
     }
@@ -927,13 +931,13 @@
     "q": "Which customers responded most to the reactivation email?",
     "should_refuse": false,
     "model": {
-     "text": "Lapsed customers responded most to the reactivation email, as indicated by the planted response model showing a +4.5 points increase in purchase probability for them [README.md#campaign-experiment][docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]. Customers who never ordered responded a little, with an increase of +0.2 times income band points [README.md#campaign-experiment][docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]. Frequent buyers did not respond significantly, as they were buying anyway [README.md#campaign-experiment][docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py].",
+     "text": "Lapsed customers (those whose last order was 180+ days before) responded most to the reactivation email, with an added 4.5 points to their chance of buying in the next 30 days [docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]. This is confirmed by the planted campaign response model, which shows lapsed customers respond most, people who never ordered respond a little, and frequent buyers not at all [README.md#campaign-experiment].",
      "mode": "model",
      "ok": true,
      "note": null
     },
     "offline": {
-     "text": "- The question a marketing data scientist gets most: did the campaign cause those sales, and who should get the next one? `src/plumbline/experiments/` answers it for a winter reactivation email. The world's response is planted in the answer key (`src/plumbline/synth/campaign.py`): lapsed customers respond most, people who never ordered a little, and frequent buyers not at all (they were buying anyway). A hidden per-person factor means no model can rank people perfectly. [README.md#campaign-experiment]\n- Each person's effect is multiplied by a hidden lognormal factor (mean 1, sigma 0.6). An email reaches everyone who reads the inbox. 15% of buyers order twice; 10% of orders use the buyer's other address and 3% a mistyped one. An uplift model that finds \"lapsed customers respond\" is rediscovering these rules. Report it that way. [docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]",
+     "text": "- <details><summary>Holdout, CUPED and uplift: 32 to 39 extra buyers per 1,000 emails</summary> [README.md#campaign-experiment]\n- The question a marketing data scientist gets most: did the campaign cause those sales, and who should get the next one? `src/plumbline/experiments/` answers it for a winter reactivation email. The world's response is planted in the answer key (`src/plumbline/synth/campaign.py`): lapsed customers respond most, people who never ordered a little, and frequent buyers not at all (they were buying anyway). A hidden per-person factor means no model can rank people perfectly. [README.md#campaign-experiment]\n- Each person's effect is multiplied by a hidden lognormal factor (mean 1, sigma 0.6). An email reaches everyone who reads the inbox. 15% of buyers order twice; 10% of orders use the buyer's other address and 3% a mistyped one. An uplift model that finds \"lapsed customers respond\" is rediscovering these rules. Report it that way. [docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]",
      "mode": "quoted",
      "ok": true
     }
@@ -942,13 +946,13 @@
     "q": "Why are the vendor's income columns never used as features for the income estimate?",
     "should_refuse": false,
     "model": {
-     "text": "The vendor's income columns are never used as features because they are missing for exactly the people being estimated, so a model using them would be trained on data it never sees when it runs [README.md#income-estimate-and-home-seller-model]. Additionally, these columns are empty in every training snapshot since the vendor feed starts later than the training data period [docs/model_card_home_buyer.md#features]. Using them would cause leakage and invalidate the model's performance evaluation [README.md#income-estimate-and-home-seller-model].",
+     "text": "The vendor's income columns are never used as features because they are missing for exactly the people being estimated, so a model using them would be trained on data it never sees when it runs [README.md#income-estimate-and-home-seller-model]. Additionally, these columns are empty in every training snapshot since the vendor feed starts later, making them unusable for training [docs/model_card_home_buyer.md#features].",
      "mode": "model",
      "ok": true,
      "note": null
     },
     "offline": {
-     "text": "- **Income band, for people the vendor never covered.** A brand gets an income band from the vendor for some people and nothing for the rest. The model learns from the covered people and estimates the uncovered ones from first-party behaviour, place and property data. The vendor's own columns (income, age, homeowner) are never features: they are missing for exactly the people being estimated, so a model using them would be trained on something it never sees when it runs. Households are kept whole on one side of the split, so a person's partner cannot leak their income into the test. [README.md#income-estimate-and-home-seller-model]\n- **Not used, and why:** vendor income band, age and homeowner flag, and email engagement. They are empty in every training snapshot: the vendor feed starts in November 2025 and email data in December. A model that never saw them cannot use them, so they are left out instead of imputed. [docs/model_card_home_buyer.md#features]",
+     "text": "- <details><summary>Income where the vendor has nothing, and a model refused on purpose</summary> [README.md#income-estimate-and-home-seller-model]\n- **Income band, for people the vendor never covered.** A brand gets an income band from the vendor for some people and nothing for the rest. The model learns from the covered people and estimates the uncovered ones from first-party behaviour, place and property data. The vendor's own columns (income, age, homeowner) are never features: they are missing for exactly the people being estimated, so a model using them would be trained on something it never sees when it runs. Households are kept whole on one side of the split, so a person's partner cannot leak their income into the test. [README.md#income-estimate-and-home-seller-model]\n- **Not used, and why:** vendor income band, age and homeowner flag, and email engagement. They are empty in every training snapshot: the vendor feed starts in November 2025 and email data in December. A model that never saw them cannot use them, so they are left out instead of imputed. [docs/model_card_home_buyer.md#features]",
      "mode": "quoted",
      "ok": true
     }
@@ -963,8 +967,8 @@
      "note": "model found no answer in the passages"
     },
     "offline": {
-     "text": "I could not find this in our documents. The closest section is README.md#home-buyer-model-module-c, which does not answer it.",
-     "mode": "refused",
+     "text": "- 1. `records` (how many records a person has) was the top feature. It counted today's identity graph, and a buyer who moves gets a new store profile at the new address: the feature knew the outcome. It is now counted from what was known by the cutoff, and is no longer a feature. [README.md#home-buyer-model-module-c]\n- The likeliest buyers are the wrong target: many of them buy anyway, so the email adds little. [README.md#campaign-experiment]",
+     "mode": "quoted",
      "ok": false
     }
    },
@@ -1002,10 +1006,10 @@
     "q": "What is the phone number for the on-call manager?",
     "should_refuse": true,
     "model": {
-     "text": "I could not find this in our documents. The closest section is docs/security.md#personal-data-held, which does not answer it.",
+     "text": "I could not find this in our documents.",
      "mode": "refused",
      "ok": true,
-     "note": null
+     "note": "model found no answer in the passages"
     },
     "offline": {
      "text": "I could not find this in our documents. The closest section is docs/security.md#personal-data-held, which does not answer it.",
@@ -1017,13 +1021,13 @@
     "q": "What is the company's 401(k) match?",
     "should_refuse": true,
     "model": {
-     "text": "I could not find this in our documents.",
-     "mode": "refused",
-     "ok": true,
-     "note": "model found no answer in the passages"
+     "text": "- Plumbline was built against the work described in four data roles at an AI-for-consumer-marketing company: data products, ingestion, data science, and internal AI systems. This page maps that work to code and to the measurement that backs it. Gaps are listed as gaps. [docs/role_map.md#what-each-part-of-plumbline-demonstrates]\n- | | Result | | Refused when the documents have no answer | 8 of 9 (dev), **7 of 9 (test)**: a 401(k) \"match\" and an \"AWS account\" each share enough words with a section to get through | [README.md#operations-agent-module-e]",
+     "mode": "quoted",
+     "ok": false,
+     "note": "model answer rejected (sentence without a citation: \"The passages do not provide information about the company's \"); quoted instead"
     },
     "offline": {
-     "text": "- Plumbline was built against the work described in four data roles at an AI-for-consumer-marketing company: data products, ingestion, data science, and internal AI systems. This page maps that work to code and to the measurement that backs it. Gaps are listed as gaps. [docs/role_map.md#what-each-part-of-plumbline-demonstrates]\n- | | Result | | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) \"match\" and an \"AWS account\" each share enough words with a section to get through | [README.md#operations-agent-module-e]",
+     "text": "- Plumbline was built against the work described in four data roles at an AI-for-consumer-marketing company: data products, ingestion, data science, and internal AI systems. This page maps that work to code and to the measurement that backs it. Gaps are listed as gaps. [docs/role_map.md#what-each-part-of-plumbline-demonstrates]\n- | | Result | | Refused when the documents have no answer | 8 of 9 (dev), **7 of 9 (test)**: a 401(k) \"match\" and an \"AWS account\" each share enough words with a section to get through | [README.md#operations-agent-module-e]",
      "mode": "quoted",
      "ok": false
     }
@@ -1045,7 +1049,7 @@
    }
   ],
   "model_name": "gpt-4.1-mini",
-  "seconds": 60.1
+  "seconds": 42.2
  },
  "onboarding": {
   "dev": {
@@ -3899,7 +3903,7 @@
    }
   ],
   "model_name": "gpt-4.1-mini",
-  "seconds": 33.3
+  "seconds": 1.1
  },
  "ask_data": {
   "dev": {
@@ -4538,6 +4542,6 @@
    }
   ],
   "model_name": "gpt-4.1-mini",
-  "seconds": 35.8
+  "seconds": 1.2
  }
 }

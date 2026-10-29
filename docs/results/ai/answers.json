@@ -1,5 +1,20 @@
 {
 "calls": {
+"00b78a954e3a2f0fbd215ac3": {
+"in": 635,
+"out": 148,
+"text": "The golden person's current address is represented in the `dim_person_address_history` model, which tracks where each person lived over time with `valid_from` and `valid_to` dates, allowing range lookups like \"where did they live on 2025-06-30\" [1]. This suggests the address data is time-stamped and sourced, providing a historical and current view. Additionally, the `dim_person` model includes values with the source and date that vouched for them, along with conflict counts and staleness, indicating measures of data accuracy and freshness [1]. Therefore, the golden person's current address is accurate to the extent that it is sourced, dated, and conflict-checked within the data platform [1]."
+},
+"015d1779b0eb665caeb4612f": {
+"in": 460,
+"out": 30,
+"text": "Identity resolution achieves an F1 score of 0.991 compared to the exact email or phone baseline F1 of 0.927 [1]."
+},
+"045fe1e6a0625233b767bf0d": {
+"in": 834,
+"out": 49,
+"text": "The home-buyer model leaves out vendor columns such as income, age, and homeowner status because these are missing for exactly the people being estimated, so including them would mean training on data the model never sees when it runs [1][2]."
+},
 "06960762a03c412ac17c24f6": {
 "in": 819,
 "out": 4,
@@ -12,6 +27,11 @@
 },
 "109263a366bcfd535a668713": {
 "in": 413,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"16281180bbae5fe1794bcec8": {
+"in": 251,
 "out": 4,
 "text": "NOT_IN_SOURCES"
 },
@@ -35,10 +55,20 @@
 "out": 45,
 "text": "After person-level deletion, 11 deleted people still had data left according to the first pass, and 8 of 500 deleted people still have a record as measured in the first version of the world [1][2]."
 },
+"202a3927798b704dc23395f8": {
+"in": 411,
+"out": 76,
+"text": "No, after identity resolution, a surviving record matching two key kinds of a trusted tombstone is deleted along with its whole person [1]. A weak tombstone counts only if its name agrees with a strong one from the same request to avoid deleting innocent records [1]. Therefore, not all persons matched by a tombstone are deleted, only those confirmed by the rules [1]."
+},
 "21707603cbe6d1e834b76c11": {
 "in": 467,
 "out": 4,
 "text": "NOT_IN_SOURCES"
+},
+"21d8cb7bbd97c8ab10117caa": {
+"in": 720,
+"out": 109,
+"text": "Home-buyer scores must pass checks that the inputs are the training inputs, scores are probabilities that vary, the mean is plausible, missing-value rates are stable, and no feature drifts past a population stability index of 0.25 [1]. Additionally, people known only from the vendor feed are not scored, as the model was trained before any vendor data existed, and they are listed in `ml.home_buyer_not_scored` with that reason [1]. If any of these guardrails fail, the run publishes nothing [1]."
 },
 "2522f0ea84461a280e4bff65": {
 "in": 582,
@@ -55,10 +85,20 @@
 "out": 4,
 "text": "NOT_IN_SOURCES"
 },
+"2c94fae2710925e1a919c4de": {
+"in": 480,
+"out": 66,
+"text": "The vendor's income columns are never used as features because they are missing for exactly the people being estimated, so a model using them would be trained on data it never sees when it runs [1]. Additionally, these columns are empty in every training snapshot since the vendor feed starts later, making them unusable for training [2]."
+},
 "2ce347c1b8b9a36e15fc737d": {
 "in": 582,
 "out": 4,
 "text": "NOT_IN_SOURCES"
+},
+"2df596ebe76e89234dd864c0": {
+"in": 409,
+"out": 52,
+"text": "A deletion tombstone keeps only HMAC-keyed hashes of name + zip, last name + address, and name + date of birth, tagged with its request and the strength of the evidence (phone matched: strong; email only: weak) [1]."
 },
 "2e362e345e7ac99157aa29e8": {
 "in": 362,
@@ -70,10 +110,30 @@
 "out": 15,
 "text": "bad_field_count in quarantine usually means a truncated or malformed file [1]."
 },
+"3208f39e6aa771563765add4": {
+"in": 628,
+"out": 56,
+"text": "\"As of a date\" in the dbt models means that each snapshot holds only what was known on that specific day, ensuring the split cannot see the future [1]. This is implemented using dbt's `as_of` feature to build features once per cutoff date [1]."
+},
 "3251ec04c5dfbef3ddfc7000": {
 "in": 263,
 "out": 53,
 "text": "CUPED hardly narrowed the interval because the variance falls by the squared correlation between history and outcome, which is close to zero for a rare yes/no purchase [1]. This means the history does not strongly predict the outcome, limiting CUPED's effectiveness [1]."
+},
+"338557db4b45260a6b503f06": {
+"in": 666,
+"out": 18,
+"text": "The Slack channel used for incidents is not mentioned in the provided passages [1][2]."
+},
+"3542c84715f5ee7a4236a338": {
+"in": 420,
+"out": 26,
+"text": "No, duplicate_in_delivery rows are expected in small numbers because the email platform repeats events, so no action is needed [1]."
+},
+"38a9f213ce627c1fab7bd58b": {
+"in": 472,
+"out": 107,
+"text": "If a vendor file was rejected with `missing_columns:<name>`, it means the sender dropped or renamed a column, so nothing from the file was loaded to avoid overwriting good values with blanks [1]. If the column was renamed intentionally, add `aliases: {new_name: old_name}` to `sources/<source>.yaml` and ask the sender to re-send the file [1]. Since a re-send with identical bytes is skipped, the corrected file needs a new name or a `_v2` suffix [1]."
 },
 "3c34296ea378371a18271a9c": {
 "in": 596,
@@ -95,6 +155,11 @@
 "out": 4,
 "text": "NOT_IN_SOURCES"
 },
+"410cc387901bc38858019e27": {
+"in": 388,
+"out": 100,
+"text": "The synthetic world uses reference data fetched by the command `python scripts/fetch_reference.py --out data/reference` which requires internet access and is safe to rerun [2]. This reference data is stored in the `data/reference` directory and is used as input for generating the synthetic world [2]. The synthetic world is described as having median household income, ownership percentages, and home buying rates that are sanity-checked against truth tables, indicating the reference data includes such demographic and economic statistics [1]."
+},
 "4123acba05f32ddb78d0cfe6": {
 "in": 585,
 "out": 87,
@@ -114,6 +179,11 @@
 "in": 371,
 "out": 44,
 "text": "Rerun the same command. Each file loads in one transaction together with its ledger row, so a crash leaves no partial file behind, and the rerun picks up exactly the files that did not finish [1]."
+},
+"452f81ce2e5a5497ecf340d2": {
+"in": 514,
+"out": 80,
+"text": "Lapsed customers (those whose last order was 180+ days before) responded most to the reactivation email, with an added 4.5 points to their chance of buying in the next 30 days [2]. This is confirmed by the planted campaign response model, which shows lapsed customers respond most, people who never ordered respond a little, and frequent buyers not at all [1]."
 },
 "49258d251cd806f4b3b4dd51": {
 "in": 373,
@@ -149,6 +219,16 @@
 "in": 508,
 "out": 42,
 "text": "The command that runs the whole pipeline end to end is `python scripts/scale_run.py --n-people N` [1]. This command executes every stage from generation to the experiment readout [1]."
+},
+"60913e9ef9343cc17ebf0f15": {
+"in": 670,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"659357c3adacf6362b475e22": {
+"in": 759,
+"out": 28,
+"text": "The home-buyer model version is a hash of the training data and configuration, and two runs from scratch produced the same one [2]."
 },
 "68cba103ef26f3994a27e81f": {
 "in": 580,
@@ -190,6 +270,11 @@
 "out": 4,
 "text": "NOT_IN_SOURCES"
 },
+"9157e169e0d39df27f4fa555": {
+"in": 588,
+"out": 67,
+"text": "The first identity model had 32% precision because it trained on blocks of \"same last name and zip,\" which taught the model that a family is a match, leading to many incorrect matches [2]. Training on blocks where families cannot dominate (same phone; same first and last name) fixed the weights and improved precision [2]."
+},
 "987b50541563cc569966ade0": {
 "in": 469,
 "out": 30,
@@ -200,10 +285,20 @@
 "out": 78,
 "text": "No, after identity resolution, a surviving record matching two key kinds of a trusted tombstone is deleted along with its whole person [1]. A weak tombstone counts only if its name agrees with a strong one from the same request to avoid deleting innocent records [1]. Therefore, you do not delete both persons unless the tombstone matches them strongly and passes the name agreement rule [1]."
 },
+"98b5da936b61850ed554cba2": {
+"in": 566,
+"out": 18,
+"text": "The ceiling AUC for the home-buyer model is 0.797 [2]."
+},
 "9a1524f0b27b17c139ba8d34": {
 "in": 543,
 "out": 60,
 "text": "No orders are lost when the store is down and the sync gives up after retries. The watermark does not move, and the last good cursor is saved in `sources/store/_sync_state.json`. You can rerun the sync later, and it will resume from that page without losing data [1]."
+},
+"9b487dee046996abb8b4d127": {
+"in": 430,
+"out": 40,
+"text": "If the model returns an answer with a sentence that cites a passage it was not given, the quoted answer is shown instead and the reason is recorded in the audit log (`detail.note`) [1]."
 },
 "9d2785f530d0fe25f777862c": {
 "in": 302,
@@ -220,10 +315,20 @@
 "out": 66,
 "text": "We should keep at least two admins [1]. One admin cannot approve their own requests, so a second admin is needed for approval [1]. Additionally, the last admin cannot be removed to ensure that there is always someone who can approve changes [1][2]. This prevents a situation where no approvals can be made [2]."
 },
+"a5d3f2fd402d85be47005843": {
+"in": 628,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
 "a68308886cbdb858046e759f": {
 "in": 175,
 "out": 4,
 "text": "NOT_IN_SOURCES"
+},
+"a9910b62034066516100af2d": {
+"in": 361,
+"out": 31,
+"text": "The command to run the whole pipeline end to end in Docker is `docker compose run --rm pipeline` after generating data/synth as described [2]."
 },
 "aba58d10fd181277ad788b58": {
 "in": 871,
@@ -240,15 +345,35 @@
 "out": 46,
 "text": "Identity resolution using Plumbline: Splink + cannot-link clustering achieves an F1 score of 0.991, compared to the exact email or phone baseline which has an F1 score of 0.927 [1]."
 },
+"af2fd5c6ccef79870bf60587": {
+"in": 433,
+"out": 55,
+"text": "The passages do not provide information about the company's 401(k) match. Passage [2] mentions a 401(k) \"match\" in the context of refusal when documents have no answer, but no details are given. Therefore, the answer is NOT_IN_SOURCES."
+},
 "af4fc5bf41a86a50cc1d2e51": {
 "in": 398,
 "out": 29,
 "text": "You should check `identity_pairs` for the persons involved before acting, as a sudden jump means the identity model or a source changed [1]."
 },
+"afbc21125936fd9444535213": {
+"in": 711,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"b1cd9f18902d63f78617052d": {
+"in": 434,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
 "b4c2b2946e0f07041f79be14": {
 "in": 363,
 "out": 15,
 "text": "The questionnaire command expects an input with a `question` column [1]."
+},
+"b621e895de106fe15672da23": {
+"in": 555,
+"out": 73,
+"text": "To see which proposals were approved and by whom, you can check the audit log where every question, tool call, proposal, and decision is recorded [2]. The audit log includes details of approvals by the second person with the right role [2]. This log is accessible through the `src/plumbline/agents/` interface used by the team [2]."
 },
 "baf5859623a7a7c792fe3d9b": {
 "in": 522,
@@ -265,10 +390,20 @@
 "out": 52,
 "text": "Consent is not point in time. An audience rebuilt for an earlier date included people who unsubscribed later, but unsubscribes and deletions always apply regardless of the date. Attributes are as of a date, but consent is not treated that way [2]."
 },
+"c78fbb5f8f4a13ec4c54b32d": {
+"in": 445,
+"out": 44,
+"text": "No, do not retry in a loop if the store sync failed with a 401 AuthError; fix the `STORE_API_TOKEN` instead [1]. The ingestion process stops immediately on a 401 error [2]."
+},
 "ca2ad674e7afbf2c3f5391ec": {
 "in": 543,
 "out": 70,
 "text": "To confirm that a deletion request was applied, run the following command to check the suppression log:  \n```bash\nduckdb data/warehouse.duckdb \"SELECT source, action, sum(rows) FROM suppression_log GROUP BY 1, 2\"\n```  \nThis shows the sources and actions taken, including the number of rows deleted [2]."
+},
+"cbf2233df8cc9bc0b93323ac": {
+"in": 683,
+"out": 68,
+"text": "Vendor-only moves have a measured precision of 45%, which is worse than a coin flip, making them unreliable evidence for moves [1]. Segments use only store and CRM evidence, which have higher precision rates (84% and 79%, respectively) [1]. This ensures that segments are based on more accurate move data [1]."
 },
 "cf64501581e05575883a0118": {
 "in": 870,
@@ -310,6 +445,11 @@
 "out": 35,
 "text": "No, after a fix, you do not need to clean up quarantine by hand because quarantined rows never reach the current tables and the corrected re-send loads normally [1]."
 },
+"df082b0399b395071e4e603f": {
+"in": 678,
+"out": 117,
+"text": "The home seller model was not published because it performed poorly, with an AUC of only 0.54 on both validation and test dates, which is close to random prediction among owners [1]. Two of the three gates for model quality failed, and only the lift gate passed, which was considered luck given the ceiling of 0.55 [1]. Since one failed gate was enough to stop publication, no scores were written, and the stale scores table was dropped rather than updated [1]. The assessment was logged, but the model was deemed not suitable for shipping [1]."
+},
 "e01f69ac43c31282097fa6e9": {
 "in": 482,
 "out": 73,
@@ -320,15 +460,40 @@
 "out": 117,
 "text": "The home seller model was not published because it performed poorly, with an AUC of only 0.54 on both validation and test dates, which is close to random prediction among owners [1]. Two of the three gates for model acceptance failed, and only the lift gate passed, which was considered luck given the ceiling of 0.55 [1]. Since one failed gate was enough to stop publication, no scores were written, and the stale scores table was dropped rather than updated [1]. The assessment was logged, but the model was deemed not suitable for shipping [1]."
 },
+"f4e962f1baada75d56c736bd": {
+"in": 476,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
+"f5cadb71e6e52c9130cd07dd": {
+"in": 332,
+"out": 44,
+"text": "Rerun the same command. Each file loads in one transaction together with its ledger row, so a crash leaves no partial file behind, and the rerun picks up exactly the files that did not finish [1]."
+},
+"f72eadf007f79a8e836779d6": {
+"in": 365,
+"out": 4,
+"text": "NOT_IN_SOURCES"
+},
 "f827f3537228502bc158b7bf": {
 "in": 586,
 "out": 4,
 "text": "NOT_IN_SOURCES"
 },
+"fafe5c035571e7d5aebeca75": {
+"in": 441,
+"out": 56,
+"text": "To re-pull every order from the store, delete the `_sync_state.json` file only [1]. The loader will skip every row it already has, so this process costs time but maintains correctness [1]. This allows the sync to start over from the beginning [1]."
+},
 "fc6eea80bc615305ec2b9bfc": {
 "in": 485,
 "out": 78,
 "text": "Lapsed customers responded most to the reactivation email, as indicated by the planted response model showing a +4.5 points increase in purchase probability for them [1][2]. Customers who never ordered responded a little, with an increase of +0.2 times income band points [1][2]. Frequent buyers did not respond significantly, as they were buying anyway [1][2]."
+},
+"ff4e512de5eeff8251699347": {
+"in": 290,
+"out": 18,
+"text": "The store connector retries 429 responses after the server's Retry-After period [1]."
 }
 },
 "model": "gpt-4.1-mini"

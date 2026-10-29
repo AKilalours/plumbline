@@ -1,0 +1,112 @@
+{
+ "city": "seed 7, 100,000 people",
+ "snapshot": "2025-06-30",
+ "people": 30323,
+ "base_rate": 0.02177,
+ "faithfulness_max_gap": 8.326672684688674e-17,
+ "top_decile_first_reason": {
+  "ZIP income": 2574,
+  "average order value": 333,
+  "building size": 71,
+  "building class H": 26,
+  "building class K": 13,
+  "building class N": 6
+ },
+ "examples": [
+  {
+   "person_key": "PK3040b3f9eb24",
+   "score": 0.0874,
+   "bought": false,
+   "reasons": [
+    [
+     "average order value",
+     1.344
+    ],
+    [
+     "ZIP income",
+     0.349
+    ],
+    [
+     "lives in a small building",
+     0.105
+    ]
+   ]
+  },
+  {
+   "person_key": "PK98db46d336c6",
+   "score": 0.0352,
+   "bought": false,
+   "reasons": [
+    [
+     "ZIP income",
+     0.472
+    ],
+    [
+     "building size",
+     0.272
+    ],
+    [
+     "lives in a small building",
+     0.105
+    ]
+   ]
+  },
+  {
+   "person_key": "PK113f133dbc55",
+   "score": 0.0314,
+   "bought": false,
+   "reasons": [
+    [
+     "ZIP income",
+     0.523
+    ],
+    [
+     "building size",
+     0.191
+    ],
+    [
+     "lives in a small building",
+     0.105
+    ]
+   ]
+  },
+  {
+   "person_key": "PK4890013e66cf",
+   "score": 0.0289,
+   "bought": false,
+   "reasons": [
+    [
+     "ZIP income",
+     0.419
+    ],
+    [
+     "building size",
+     0.118
+    ],
+    [
+     "lives in a small building",
+     0.105
+    ]
+   ]
+  },
+  {
+   "person_key": "PKcd7b03b31efb",
+   "score": 0.0267,
+   "bought": false,
+   "reasons": [
+    [
+     "ZIP income",
+     0.577
+    ],
+    [
+     "building size",
+     0.19
+    ],
+    [
+     "no average order value on file",
+     -0.121
+    ]
+   ]
+  }
+ ]
+}

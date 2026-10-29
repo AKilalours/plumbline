@@ -1,8 +1,61 @@
-# Plumbline
+<h1 align="center">Plumbline</h1>
 
-[![tests](https://github.com/AKilalours/plumbline/actions/workflows/tests.yml/badge.svg)](https://github.com/AKilalours/plumbline/actions/workflows/tests.yml)
+<p align="center"><b>Customer data that checks its own answers.</b><br>
+Ingest · resolve · predict · act. Evidence for every step, approval for every change.</p>
 
-**A consumer data platform where every value has a receipt.**
+<p align="center">
+<a href="https://github.com/AKilalours/plumbline/actions/workflows/tests.yml"><img src="https://github.com/AKilalours/plumbline/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
+<img src="https://img.shields.io/badge/python-3.12-2941B9" alt="python 3.12">
+<img src="https://img.shields.io/badge/data-synthetic%20with%20an%20answer%20key-E5B74D" alt="synthetic data with an answer key">
+</p>
+
+<p align="center"><img src="docs/img/incident.gif" width="880" alt="An injected false identity merge: detected, inspected, approved by a second person, fixed and verified"></p>
+
+<table>
+<tr>
+<td width="33%"><img src="docs/img/overview.png" alt="Overview"></td>
+<td width="33%"><img src="docs/img/release.png" alt="Release gate"></td>
+<td width="33%"><img src="docs/img/guardrails.png" alt="SQL guardrails"></td>
+</tr>
+<tr>
+<td align="center">Six live checks</td>
+<td align="center">A release gate that holds bad models</td>
+<td align="center">English to SQL that cannot leak</td>
+</tr>
+</table>
+
+| | |
+| --- | --- |
+| 🧬 Identity | **F1 0.991** (exact matching: 0.927) |
+| 🗑️ Deletion | **0** innocent people deleted at 1,000,000 |
+| 🔁 Ingestion | **100** injected faults, **0** changes |
+| 🤖 Agent | right tool **19 of 20** (rules: 12 of 20) |
+| 🚦 Models | held a model with the champion's AUC and probabilities off by **0.44** |
+| ⚡ Pipeline | **6.0 min** for 100,000 people on 2 cores |
+| ✅ Tests | **312** |
+
+```mermaid
+flowchart LR
+  S["4 messy sources"] --> I["Ingest<br/>contracts · quarantine"]
+  I --> R["Resolve<br/>identity graph"]
+  R --> P["Data products<br/>dbt"]
+  P --> M["Models<br/>release gate"]
+  P --> A["Audiences<br/>consent built in"]
+  M --> G["Agent<br/>plans · proposes"]
+  A --> G
+  G -- "approval" --> H(("A person"))
+  K[("Answer key")] -. "scores everything,<br/>trains nothing" .-> R
+```
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+python -m pip install -e ".[dev,app]"
+python -m streamlit run streamlit_app.py      # a live city in about a minute
+```
+
+## Results
+
+<details><summary>Every headline number, with the run it came from</summary>
 
 100,000 invented New Yorkers, with a hidden answer key, reach a fictional outdoor brand through
 four messy feeds: a CRM, a third-party data vendor, email events and an online store API that
@@ -10,7 +63,7 @@ throttles, crashes and changes data mid-sync. Plumbline loads them, works out wh
 same person, and deletes people who ask to be deleted, everywhere. Every number below is measured
 against the answer key, and the tests that hold each one are named.
 
-**At a glance** (seed 7, 100,000 people, 314,839 rows, one command; time and memory per stage at 20,000 to 300,000 people are in [Scale](#scale)):
+**At a glance** (seed 7, 100,000 people, 314,839 rows, one command; time and memory per stage at 20,000 to 1,000,000 people are in [Scale](#scale)):
 
 | | Result |
 | --- | --- |
@@ -24,11 +77,16 @@ against the answer key, and the tests that hold each one are named.
 | Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
 | Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 45 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | AI features, measured | with gpt-4.1-mini, on held-out halves: the agent picks the right tool for 19 of 20 hard messages (keyword rules: 12 of 20); questions in English answered right 14 of 14 with no contact data ever returned; doc answers refuse what the docs do not say 9 of 9 (quoted: 7 of 9). Where it did not win (doc answers tie, contract types one worse) is in [AI, measured](#ai-measured). Code checks every model output before anything runs, and recorded runs replay without a key |
+| Reason codes | every home-buyer score splits exactly into its reasons, checked for all 30,323 test people (largest gap 5e-17); in the top decile the leading reason is ZIP income for 2,574 people and average order value for 333 |
 | Model release gate | on 100,000 people it held all three challengers, including one with the champion's AUC whose probabilities were off by 0.44 on average: an AUC-only gate would have shipped it |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 307 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 312 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+
+</details>
 
 ## See it work
+
+<details><summary>Seven places, four incidents you can inject, every number one click from its evidence</summary>
 
 `python -m pip install -e ".[app]"` then `python -m streamlit run streamlit_app.py`. The app builds a city of 4,000
 people with the real pipeline (generator, store API sync, ingestion, identity, deletion, dbt) in
@@ -41,7 +99,7 @@ places, almost no text; every number has its evidence one click away:
 - **Identity**: every person's records against the answer key, with split, merge and undo; households;
   person-level deletion with a replay that proves nobody comes back.
 - **Audiences**: typed rules from a sentence, English to guarded SQL, and the email experiment.
-- **Models**: the release gate, the AI scorecard, and the scale runs.
+- **Models**: the release gate, why each person got their score (reason codes that add back up to it), the AI scorecard, and the scale runs.
 - **Agent**: the incident lab and the operations agent. Inject one of four real incidents (a false
   identity merge, an interrupted store sync, a warehouse restored from a backup older than a deletion
   request, a training snapshot filled with values from the future). Checks a team would run detect it
@@ -77,7 +135,11 @@ page anyone can spend it from.
 | 8 | AI features with held-out evals and recorded runs (tool planner, contract drafter, English to SQL); release gate; learned identity re-scorer measured and not shipped | Done; model run recorded (gpt-4.1-mini) |
 | 9 | Seven-place app with minimal text; incident lab (inject, detect, inspect, approve, fix, verify, report) for four incidents | Done |
 
+</details>
+
 ## AI, measured
+
+<details><summary>gpt-4.1-mini against rules on held-out halves: where it won, tied and lost</summary>
 
 Each model feature has a way that works without a model, a held-out half the model never tuned on,
 and code that checks the model's output before anything happens. `python -m plumbline.ai.evals`
@@ -142,7 +204,11 @@ Two mistakes in my own harness, caught before any number was reported: the onboa
 listed words taken from the eval's partner headers (tuning on the test; removed), and the eval picked
 a five-row CRM change file as a partner sample (now the largest delivery).
 
+</details>
+
 ## Receipts
+
+<details><summary>Each claim, its measurement, and the test that holds it</summary>
 
 | Claim | Measured | Where it is tested |
 | --- | --- | --- |
@@ -165,7 +231,11 @@ state, drop the overlap, take the watermark from the last page only), three were
 Dropping the overlap survived, which exposed the missing same-second test, now added. The last
 one changes nothing (pages are sorted, so the last page always holds the newest time).
 
+</details>
+
 ## Identity resolution (Module B)
+
+<details><summary>F1 0.991 against 0.927, and the bugs that taught the matcher what a match is</summary>
 
 Which CRM rows, vendor rows and store customers are the same real person, scored against the hidden
 answer key (seed 7, 100,000 people, 122,994 records; the key is used only to score, never to train):
@@ -221,7 +291,11 @@ showed it missing, because that would be tuning to the answer key.
 
 Remaining error class: family members (139 of the 149 mixed-up clusters are one household).
 
+</details>
+
 ## Deletion at the person level
+
+<details><summary>No innocent person deleted at 1,000,000 people: how 85 became 0</summary>
 
 | | Deleted people with any record left | Records of people who never asked, removed |
 | --- | --- | --- |
@@ -276,7 +350,11 @@ requester whose date of birth is known, now goes to a person (`keys_match_but_do
 with no requester's record kept at any size (item 7 under [Scale](#scale)). A test plants this father
 and son too.
 
+</details>
+
 ## Data products (dbt)
+
+<details><summary>Golden person, households and life events, point in time</summary>
 
 `dbt/` turns resolved records into the tables a marketing product actually reads, in the warehouse's
 `products` schema. dbt runs inside the Dagster job and from `python -m plumbline`.
@@ -326,7 +404,11 @@ The gap between what is true and what a brand's own sources can see (only 26% of
 6,958 of 50,153 people ever show both a work and a personal email) is the size of the problem
 third-party enrichment exists to close.
 
+</details>
+
 ## Home-buyer model (Module C)
+
+<details><summary>AUC 0.660 against a ceiling of 0.797, and the leak that beat the ceiling</summary>
 
 Who will buy a home in the next 180 days. Features come from `dbt/models/marts/fct_person_features.sql`,
 built once per cutoff date with dbt's `as_of`, so each snapshot holds only what was known that day.
@@ -400,7 +482,11 @@ The model and its card are written to `data/models/home_buyer/<version>/`; the v
 the training data and configuration, and two runs from scratch produced the same one.
 [The model card](docs/model_card_home_buyer.md) has the details.
 
+</details>
+
 ## Income estimate and home-seller model
+
+<details><summary>Income where the vendor has nothing, and a model refused on purpose</summary>
 
 Two more models on the same point-in-time snapshots, with the same rules: chosen on validation,
 reported on a later or held-out set, compared with a baseline and with the ceiling, and published only
@@ -435,7 +521,11 @@ No scores were written, and a stale `ml.home_seller_scores` table from an earlie
 dropped rather than left looking current. Every assessment is logged in `ml.model_runs_seller`. I did
 not change the world to make selling predictable: a model that should not ship is a result.
 
+</details>
+
 ## Bronze on Iceberg, and deletion that reaches the files
+
+<details><summary>Deletion that reaches the files, the manifests and the history</summary>
 
 `src/plumbline/lake/` publishes the bronze tables as Iceberg tables on any S3-compatible store, so
 Spark, Trino or Snowflake can read them (`python -m plumbline.lake publish`, or `--lake` on the
@@ -456,7 +546,11 @@ value counts, no values). The test reads every file in the bucket, decoding Parq
 manifest bounds, and finds no trace of the address, not even a prefix. It runs against a local S3
 server (moto), the same API as AWS S3 or MinIO; I did not run it against a real AWS account.
 
+</details>
+
 ## Campaign experiment
+
+<details><summary>Holdout, CUPED and uplift: 32 to 39 extra buyers per 1,000 emails</summary>
 
 The question a marketing data scientist gets most: did the campaign cause those sales, and who
 should get the next one? `src/plumbline/experiments/` answers it for a winter reactivation email.
@@ -540,7 +634,11 @@ Also found: 2.4% of sends bounced, addresses in the golden record that belong to
 the record kept). They are in the readout as bounces rather than hidden, and the true effect of
 sending to the list counts them as zero, because the list is what was decided.
 
+</details>
+
 ## Operations agent (Module E)
+
+<details><summary>Cited answers, read-only tools, two-person approvals, Slack</summary>
 
 `src/plumbline/agents/` is the agent the team that runs Plumbline talks to, in Slack or from the
 command line. It answers from the team's own documents, reads live state through read-only tools,
@@ -571,8 +669,8 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | | Result |
 | --- | --- |
 | Right section in the top 3 results | 45 of 49 answerable questions |
-| Answered right, with the right source | 18 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
-| Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
+| Answered right, with the right source | 19 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
+| Refused when the documents have no answer | 8 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
 | Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **13 of 20 (test half)**; 16 of 20 before the threshold moved (below) |
 | Security questionnaire, left for a person when the controls page does not settle it | 7 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer) |
@@ -662,7 +760,11 @@ Adoption and cost: `python -m plumbline.agents usage` reports requests, refusals
 model tokens and cost per skill, decision times for proposals, hours retired, and skills nobody used.
 Setting up Slack, secrets and roles: [the agent runbook](docs/runbooks/agent.md).
 
+</details>
+
 ## Scale
+
+<details><summary>20,000 to 1,000,000 people: time and memory per stage</summary>
 
 The same command at four sizes (`python scripts/scale_run.py --n-people N`), every stage from
 generation to the experiment readout. Seconds per stage, and the most memory the process had used by
@@ -671,6 +773,7 @@ the end of the run:
 | People | Machine | Rows delivered | Store sync | Ingest | Identity | dbt products | Models | Experiment | Whole pipeline | Peak memory |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 20,000 | 2-core cloud, 7 GB | 62,679 | 6 | 7 | 24 | 21 | 102 | 7 | 2.9 min | 2.4 GB |
+| 100,000 | 2-core cloud, 7 GB | 314,839 | 36 | 29 | 38 | 43 | 176 | 13 | 6.0 min | 2.6 GB |
 | 300,000 | 2-core cloud, 7 GB | 945,970 | 99 | 93 | 97 | 86 | 413 | 35 | 15.1 min | 3.1 GB |
 | 1,000,000 | 10-core laptop | 3,150,929 | 350 | 87 | 84 | 64 | 393 | 25 | 18.0 min | 5.0 GB |
 
@@ -730,7 +833,11 @@ What scale found, in order, each fixed at its root and held by a test:
 
 Nothing here claims terabytes: everything runs on one machine.
 
+</details>
+
 ## How ingestion works
+
+<details><summary>Contracts, quarantine, and a ledger that makes every rerun a no-op</summary>
 
 Each source is one YAML contract in `sources/`: its files, key, column types and which columns
 identify a person. Adding a source is a new YAML file and nothing else
@@ -756,7 +863,11 @@ while you page through it.
 Details and the reasons behind each choice are in `src/plumbline/ingest/engine.py`.
 Recovery steps are in [the runbook](docs/runbooks/ingestion.md).
 
+</details>
+
 ## Run it
+
+<details><summary>The command for every stage</summary>
 
 ```bash
 python -m pip install -e ".[dev,orchestration,lake,app]"
@@ -799,7 +910,11 @@ docker compose --profile lake up -d minio && docker compose --profile lake run -
 CI builds the image on every push, checks that no `.env`, roles file or data is inside it and that it
 runs as a non-root user, and runs the test suites inside it.
 
+</details>
+
 ## The synthetic world
+
+<details><summary>What is real, what is invented, and the answer key</summary>
 
 To measure how well a pipeline matches the same person across sources, you need to know who is
 really who. Real consumer data never tells you, and building on real people's contact details
@@ -826,3 +941,5 @@ column is refused; corrections only move values toward the truth.
 
 Seed 7 sanity checks against the truth tables: median household income $81,200, 24.5% owners,
 6.6% of households buy a home over two years. These describe the synthetic world, not New York.
+
+</details>

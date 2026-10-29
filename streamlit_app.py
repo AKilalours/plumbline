@@ -768,7 +768,7 @@ def ask_data_page():
     d = demo()
     header("Ask the data", "A question in English becomes SQL. Code, not the model, decides whether it may run.")
     rt, sm = ai_runtime(), ai_summary().get("ask_data")
-    tab = st.segmented_control("View", ["Ask", "Try to break it"], default="Ask", key="ask_view") or "Ask"
+    tab = st.segmented_control("View", ["Ask", "Try to break it"], default="Ask", key="ask_view", label_visibility="collapsed") or "Ask"
     if tab == "Try to break it":
         attacks = {"Read people's phone numbers": "SELECT person_key, phone FROM products.dim_person",
                    "Every column, including contact data": "SELECT * FROM products.dim_person",
@@ -1065,9 +1065,9 @@ def audiences_page():
 
 def models_page():
     header("Models")
-    v = view(["Release gate", "AI scorecard", "Scale"], "mod_dest")
+    v = view(["Release gate", "Why this score", "AI scorecard", "Scale"], "mod_dest")
     with embedded():
-        {"Release gate": release_page, "AI scorecard": scorecard, "Scale": scale}[v]()
+        {"Release gate": release_page, "Why this score": reasons_page, "AI scorecard": scorecard, "Scale": scale}[v]()
 
 
 def agent_page():
@@ -1078,6 +1078,36 @@ def agent_page():
             agent()
         return
     incident_lab()
+
+
+def reasons_page():
+    rc = json.loads((Path(__file__).parent / "docs/results/reason_codes.json").read_text())
+    st.markdown(f'<span class="chip">city: 100,000 people</span><span class="chip">snapshot: {rc["snapshot"]}</span>'
+                f'<span class="chip blue">reasons rebuild every score (max gap {rc["faithfulness_max_gap"]:.0e})</span>',
+                unsafe_allow_html=True)
+    ex = rc["examples"]
+    i = st.segmented_control("Person (top decile)", list(range(len(ex))), default=0, key="rc_pick",
+                             format_func=lambda k: ex[k]["person_key"][-6:]) or 0
+    e = ex[i]
+    a, b = st.columns([1, 2], gap="large")
+    with a:
+        stat("Home-buyer score", f"{e['score']:.1%}", f"base rate {rc['base_rate']:.1%}")
+        stat("Bought within 180 days", "yes" if e["bought"] else "no", "answer key", "pass" if e["bought"] else None)
+    with b:
+        df = pd.DataFrame(e["reasons"], columns=["Reason", "Push"])
+        st.altair_chart(alt.Chart(df).mark_bar(cornerRadiusEnd=4).encode(
+            y=alt.Y("Reason:N", sort=None, title=None, axis=alt.Axis(labelLimit=260, labelFontSize=13)),
+            x=alt.X("Push:Q", title="push on the log-odds vs an average person"),
+            color=alt.condition("datum.Push > 0", alt.value(BLUE), alt.value(GOLD)), tooltip=["Reason", "Push"]
+        ).properties(height=alt.Step(40)), width="stretch")
+    st.markdown('<div class="mono">Most common top reason in the top decile</div>', unsafe_allow_html=True)
+    top = pd.DataFrame(list(rc["top_decile_first_reason"].items()), columns=["Reason", "People"])
+    st.altair_chart(alt.Chart(top).mark_bar(color=NAVY, cornerRadiusEnd=4).encode(
+        y=alt.Y("Reason:N", sort="-x", title=None, axis=alt.Axis(labelLimit=260)), x=alt.X("People:Q", axis=alt.Axis(format="d")),
+        tooltip=["Reason", "People"]).properties(height=alt.Step(30)), width="stretch")
+    how("The champion is logistic regression, so a score splits exactly into one push per input: the weight "
+        "times the person's standardised value, measured from an average person. The biggest pushes are the reasons. "
+        "The reasons are checked, not trusted: for every person they add back up to the model's own score.")
 
 
 def incident_lab():

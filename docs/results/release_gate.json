@@ -1,0 +1,138 @@
+{
+ "challenger_algorithm": "gradient_boosting",
+ "city": "seed 7, 100,000 people (the README's scale run)",
+ "test_cutoff": "2025-06-30",
+ "champion_algorithm": "logistic",
+ "other_algorithm": {
+  "release": false,
+  "reason": "held: not_worse_auc, top_decile_kept",
+  "gates": [
+   {
+    "name": "not_worse_auc",
+    "passed": false,
+    "value": {
+     "diff": -0.023,
+     "ci95": [
+      -0.0366,
+      -0.0087
+     ]
+    },
+    "rule": "lower 95% bound of the AUC difference above -0.01"
+   },
+   {
+    "name": "calibrated",
+    "passed": true,
+    "value": 0.0074,
+    "rule": "expected calibration error <= 0.05"
+   },
+   {
+    "name": "top_decile_kept",
+    "passed": false,
+    "value": {
+     "champion": 151,
+     "challenger": 123
+    },
+    "rule": "top decile catches >= 95% of the champion's buyers"
+   },
+   {
+    "name": "slices_hold",
+    "passed": true,
+    "value": {
+     "first_party": -0.023
+    },
+    "rule": "AUC within 0.03 of the champion on every slice"
+   }
+  ]
+ },
+ "test_rows": 30323,
+ "test_buyers": 660,
+ "auc": {
+  "champion": 0.661,
+  "other_algorithm": 0.638,
+  "no_property_data": 0.6114,
+  "balanced_classes": 0.6602
+ },
+ "no_property_data": {
+  "release": false,
+  "reason": "held: not_worse_auc, top_decile_kept, slices_hold",
+  "gates": [
+   {
+    "name": "not_worse_auc",
+    "passed": false,
+    "value": {
+     "diff": -0.0496,
+     "ci95": [
+      -0.0717,
+      -0.0271
+     ]
+    },
+    "rule": "lower 95% bound of the AUC difference above -0.01"
+   },
+   {
+    "name": "calibrated",
+    "passed": true,
+    "value": 0.0077,
+    "rule": "expected calibration error <= 0.05"
+   },
+   {
+    "name": "top_decile_kept",
+    "passed": false,
+    "value": {
+     "champion": 151,
+     "challenger": 120
+    },
+    "rule": "top decile catches >= 95% of the champion's buyers"
+   },
+   {
+    "name": "slices_hold",
+    "passed": false,
+    "value": {
+     "first_party": -0.0496
+    },
+    "rule": "AUC within 0.03 of the champion on every slice"
+   }
+  ]
+ },
+ "balanced_classes": {
+  "release": false,
+  "reason": "held: calibrated",
+  "gates": [
+   {
+    "name": "not_worse_auc",
+    "passed": true,
+    "value": {
+     "diff": -0.0007,
+     "ci95": [
+      -0.0034,
+      0.0016
+     ]
+    },
+    "rule": "lower 95% bound of the AUC difference above -0.01"
+   },
+   {
+    "name": "calibrated",
+    "passed": false,
+    "value": 0.4444,
+    "rule": "expected calibration error <= 0.05"
+   },
+   {
+    "name": "top_decile_kept",
+    "passed": true,
+    "value": {
+     "champion": 151,
+     "challenger": 149
+    },
+    "rule": "top decile catches >= 95% of the champion's buyers"
+   },
+   {
+    "name": "slices_hold",
+    "passed": true,
+    "value": {
+     "first_party": -0.0007
+    },
+    "rule": "AUC within 0.03 of the champion on every slice"
+   }
+  ]
+ },
+ "champion_ece": 0.0071
+}

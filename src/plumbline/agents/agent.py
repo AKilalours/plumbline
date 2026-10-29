@@ -33,6 +33,8 @@ class Context:
     roles: dict[str, set[str]] = field(default_factory=dict)
     run_dir: Path | None = None
     model: ChatModel | None = None
+    runtime: object | None = None          # plumbline.ai.Runtime: the model picks tools when set
+    last_planner: str | None = None        # "model" or "keywords": who chose the tool for the last message
     agent_con: duckdb.DuckDBPyConnection | None = None
     _index: Index | None = None
     _skills: dict | None = None
@@ -103,15 +105,20 @@ def handle(ctx: Context, user: str, text: str, channel: str = "cli") -> Reply:
                      "for example `approve P1a2b3c4d5e`; the proposal message shows the exact one. Nothing changed.",
                      "approvals", refused=True)
 
-    skill, intent, args = route(ctx.skills, text)
-    if intent is None:
+    skill, tool_name, args, why_not, planner = _decide(ctx, text)
+    ctx.last_planner = planner
+    if why_not is not None:
+        audit.log(con, actor=user, channel=channel, skill=skill.name, action="plan", tool=tool_name,
+                  outcome="refused", detail={"why": why_not, "planner": planner})
+        return Reply(f"Not done: {why_not}. Nothing changed.", skill.name, tool_name, refused=True)
+    if tool_name is None:
         a = answer(text, ctx.index, model=ctx.model)
         audit.log(con, actor=user, channel=channel, skill=skill.name, action="answer",
                   outcome="refused" if a.refused else a.mode, detail={"sources": a.sources, "coverage": a.coverage, "note": a.note},
                   usage=a.usage, latency_ms=int((time.time() - t0) * 1000))
         return Reply(a.text, skill.name, sources=a.sources, refused=a.refused)
 
-    tool = TOOLS[intent.tool]
+    tool = TOOLS[tool_name]
     if tool.name not in skill.tools:            # defence in depth: skills.load already refuses this
         audit.log(con, actor=user, channel=channel, skill=skill.name, action="tool", tool=tool.name, outcome="not_permitted")
         return Reply(f"The {skill.name} skill may not use {tool.name}.", skill.name, tool.name, refused=True)
@@ -146,6 +153,25 @@ def handle(ctx: Context, user: str, text: str, channel: str = "cli") -> Reply:
     return Reply(f"Proposed {pid}: {tool.description} {args}. Nothing has changed yet. It needs approval from "
                  f"someone with the {tool.approver_role} role other than you: reply `approve {pid}` or `reject {pid}`.",
                  skill.name, tool.name, proposals=[pid])
+
+
+def _decide(ctx: Context, text: str):
+    """-> (skill, tool or None for the documents, args, reason it may not run or None, planner used).
+    The model plans when a runtime is attached and has an answer; otherwise the keyword router does."""
+    if ctx.runtime is not None:
+        from ..ai.planner import DOCS, REFUSE, plan
+        call, _, rejected = plan(ctx.runtime, text)
+        if call is not None:
+            if rejected:
+                return ctx.skills["knowledge_qa"], call.tool if call.tool in TOOLS else None, {}, rejected, "model"
+            if call.tool == REFUSE:
+                return ctx.skills["knowledge_qa"], None, {}, "that is outside what this agent does, or it names no exact id", "model"
+            if call.tool == DOCS:
+                return ctx.skills["knowledge_qa"], None, {}, None, "model"
+            skill = next(s for s in ctx.skills.values() if call.tool in s.tools)
+            return skill, call.tool, call.args, None, "model"
+    skill, intent, args = route(ctx.skills, text)
+    return skill, intent.tool if intent else None, args, None, "keywords"
 
 
 def _fmt_decision(r: dict) -> str:

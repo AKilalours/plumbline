@@ -17,7 +17,8 @@ REPO = Path(__file__).resolve().parents[3]
 # distribution name (as in pyproject.toml) -> module it installs
 IMPORT_NAME = {"numpy": "numpy", "pandas": "pandas", "pyarrow": "pyarrow", "faker": "faker", "duckdb": "duckdb",
                "pyyaml": "yaml", "splink": "splink", "dbt-core": "dbt", "dbt-duckdb": "dbt.adapters.duckdb",
-               "scikit-learn": "sklearn", "scipy": "scipy", "streamlit": "streamlit"}
+               "scikit-learn": "sklearn", "scipy": "scipy", "streamlit": "streamlit", "pydantic": "pydantic",
+               "sqlglot": "sqlglot"}
 
 
 def required(pyproject: Path = REPO / "pyproject.toml") -> list[str]:
@@ -40,7 +41,9 @@ def _found(module: str) -> bool:
 
 def missing(pyproject: Path = REPO / "pyproject.toml") -> list[str]:
     """Distributions whose module this Python cannot import."""
-    return [d for d in required(pyproject) if not _found(IMPORT_NAME[d])]
+    # A dependency missing from IMPORT_NAME is checked by its own name rather than crashing the page:
+    # a long-running server once read a new pyproject.toml with an old table and raised KeyError.
+    return [d for d in required(pyproject) if not _found(IMPORT_NAME.get(d, d.replace("-", "_")))]
 
 
 def advice(miss: list[str]) -> tuple[str, str, str]:

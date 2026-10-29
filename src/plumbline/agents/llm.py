@@ -54,26 +54,74 @@ class ChatModel:
         return cls(model, key, os.environ.get("PLUMBLINE_LLM_BASE_URL", "https://api.openai.com/v1"),
                    f("PLUMBLINE_LLM_COST_IN"), f("PLUMBLINE_LLM_COST_OUT"))
 
-    def complete(self, system: str, user: str, max_tokens: int = 500) -> Completion:
-        body = json.dumps({"model": self.model, "temperature": 0, "max_tokens": max_tokens,
-                           "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}).encode()
+    def _post(self, path: str, payload: dict) -> dict:
+        """POST with retries on 429 (honouring Retry-After), 5xx and network errors. 401/403/404 are
+        not retried. A 400 is returned to the caller with the endpoint's message, so it can adapt."""
+        body = json.dumps(payload).encode()
         for attempt in range(self.max_retries + 1):
-            req = urllib.request.Request(f"{self.base_url}/chat/completions", data=body, method="POST",
+            req = urllib.request.Request(f"{self.base_url}{path}", data=body, method="POST",
                                          headers={"Authorization": f"Bearer {self._key}", "Content-Type": "application/json"})
             try:
                 with self._open(req, timeout=self.timeout) as r:
-                    d = json.loads(r.read())
-                u = d.get("usage") or {}
-                i, o = int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
-                cost = (i * self.cost_in + o * self.cost_out) / 1000 if self.cost_in is not None and self.cost_out is not None else None
-                return Completion(d["choices"][0]["message"]["content"] or "", i, o, cost)
+                    return json.loads(r.read())
             except urllib.error.HTTPError as e:
-                if e.code in (400, 401, 403, 404):
+                if e.code == 400:
+                    try:
+                        msg = json.loads(e.read() or b"{}").get("error", {}).get("message", "")
+                    except Exception:  # noqa: BLE001 - a 400 body that is not JSON
+                        msg = ""
+                    raise _BadRequest(msg) from None
+                if e.code in (401, 403, 404):
                     raise LLMError(f"model endpoint refused the request (HTTP {e.code})") from None
                 wait = float(e.headers.get("Retry-After") or 2 ** attempt) if e.code == 429 else 2 ** attempt
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
                 wait = 2 ** attempt
             if attempt == self.max_retries:
                 raise LLMError("model endpoint unavailable after retries")
             self.sleep(wait)
         raise AssertionError("unreachable")
+
+    def complete(self, system: str, user: str, max_tokens: int = 500, json_mode: bool = False) -> Completion:
+        payload = {"model": self.model, "temperature": 0, "max_tokens": max_tokens,
+                   "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        try:
+            d = self._post("/chat/completions", payload)
+        except _BadRequest as e:
+            # Newer reasoning models refuse max_tokens and a fixed temperature; retry once in their
+            # dialect rather than failing every call. Any other 400 is a real error.
+            if "max_tokens" not in e.msg and "temperature" not in e.msg:
+                raise LLMError(f"model endpoint refused the request (HTTP 400): {e.msg[:120]}") from None
+            payload.pop("temperature", None)
+            payload["max_completion_tokens"] = payload.pop("max_tokens") * 4
+            try:
+                d = self._post("/chat/completions", payload)
+            except _BadRequest as e2:
+                raise LLMError(f"model endpoint refused the request (HTTP 400): {e2.msg[:120]}") from None
+        try:
+            u = d.get("usage") or {}
+            i, o = int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
+            text = d["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError):
+            raise LLMError("model endpoint returned an unexpected response") from None
+        cost = (i * self.cost_in + o * self.cost_out) / 1000 if self.cost_in is not None and self.cost_out is not None else None
+        return Completion(text, i, o, cost)
+
+    def embed(self, texts: list[str], model: str | None = None) -> list[list[float]]:
+        """Embeddings from the same OpenAI-compatible endpoint (PLUMBLINE_EMBED_MODEL)."""
+        name = model or os.environ.get("PLUMBLINE_EMBED_MODEL", "text-embedding-3-small")
+        out: list[list[float]] = []
+        for k in range(0, len(texts), 96):
+            try:
+                d = self._post("/embeddings", {"model": name, "input": texts[k:k + 96]})
+            except _BadRequest as e:
+                raise LLMError(f"embedding request refused (HTTP 400): {e.msg[:120]}") from None
+            out += [r["embedding"] for r in sorted(d["data"], key=lambda r: r["index"])]
+        return out
+
+
+class _BadRequest(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
+        self.msg = msg

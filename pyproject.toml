@@ -19,6 +19,8 @@ dependencies = [
   "dbt-duckdb>=1.9,<2",
   "scikit-learn>=1.4,<2",
   "scipy>=1.10",
+  "pydantic>=2.5,<3",
+  "sqlglot>=25,<31",
 ]
 
 [project.optional-dependencies]

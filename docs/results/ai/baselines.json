@@ -1,0 +1,29 @@
+{
+ "planner_keywords": {
+  "dev": "10/20",
+  "test": "12/20"
+ },
+ "answers_quoted": {
+  "dev": {
+   "answered_correctly": "18/25",
+   "refused_when_it_should": "9/9"
+  },
+  "test": {
+   "answered_correctly": "19/24",
+   "refused_when_it_should": "7/9"
+  }
+ },
+ "onboarding_rules": {
+  "dev": {
+   "types": "30/31",
+   "privacy_columns_found": "7/7",
+   "keys": "4/4"
+  },
+  "test": {
+   "types": "31/34",
+   "privacy_columns_found": "7/7",
+   "keys": "3/4"
+  }
+ },
+ "ask_data": "no rule-based way: without a model a question in English gets no SQL"
+}

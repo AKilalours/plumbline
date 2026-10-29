@@ -22,9 +22,11 @@ against the answer key, and the tests that hold each one are named.
 | Income estimate | for people the vendor never covered: within one band of the true income 83.6% of the time, against 79.8% for ZIP income alone; the vendor's own band, where it exists, gets 94.9% |
 | Campaign experiment | a holdout test of a reactivation email, checked against the answer key's true effect: inside the attribution-corrected 95% interval in 7 of 8 runs (20,000 to 1,000,000 people); the run that missed is the one whose readout marked itself untrustworthy; from 100,000 people up, an uplift model sends the next email to the 30% it changes most, for 32 to 39 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (at 20,000 it has too little to learn from and does not win) |
 | Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
-| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 44 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
+| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 45 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
+| AI features, measured | a model picks the agent's tool, drafts a contract for an unseen partner file, and turns English into SQL; code checks every output before anything runs (ids never invented, writes still need a second person, no contact column can be selected); each is scored on a held-out half against the way without a model, and recorded runs replay without a key |
+| Model release gate | on 100,000 people it held all three challengers, including one with the champion's AUC whose probabilities were off by 0.44 on average: an AUC-only gate would have shipped it |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 246 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 288 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 ## See it work
 
@@ -47,6 +49,9 @@ about a minute. Every button does real work on a private copy, and the city neve
   too small to test an email or train the home-buyer model on).
 - **Operations agent**: ask as any example role; a change needs a second admin to approve.
 - **Activity log**: every action above, by whom, with its result.
+- **AI scorecard, Ask the data, Source onboarding, Release gate**: the model features below, each next
+  to the way without a model; "Try to break it" sends attack SQL at the guardrails, and "Try the gate"
+  shapes a challenger and runs the real release decision on it.
 
 The styling borrows Minerva's palette and type as a nod to the job it was built for. Plumbline is an
 independent project, not Minerva's platform, and uses none of its data, name or logo in the app.
@@ -71,6 +76,57 @@ page anyone can spend it from.
 | 5 | Income estimate, home-seller assessment, access provisioning, security questionnaires, hours retired | Done |
 | 6 | CI, campaign experiment and uplift model, Iceberg lake, scale runs, bigger evals, Docker | Done |
 | 7 | Demo app (control room, failure lab, identity edits, replay, audiences, activity log); the last wrongly deleted record at 1,000,000 people traced and fixed; identity memory capped | Done |
+| 8 | AI features with held-out evals and recorded runs (tool planner, contract drafter, English to SQL); release gate; learned identity re-scorer measured and not shipped | Built; model results come from the recorded run |
+
+## AI, measured
+
+Each model feature has a way that works without a model, a held-out half the model never tuned on,
+and code that checks the model's output before anything happens. `python -m plumbline.ai.evals`
+runs all of them with the model named in `.env` (`PLUMBLINE_LLM_MODEL`, `PLUMBLINE_LLM_API_KEY`;
+any OpenAI-compatible endpoint), records every call by prompt hash in `docs/results/ai/`, and writes
+`summary.json`. The tests and the public app replay those recordings, so they never hold a key, and
+a replayed answer is always one the model really gave for exactly that prompt.
+
+| Feature | What code guarantees, whatever the model says | Without a model (held-out half) |
+| --- | --- | --- |
+| The agent picks the tool (`ai/planner.py`, 40 messages in `evals/routing_hard.yaml`: paraphrases, typos, injected "approvals are off") | a typed tool call; ids must appear in the message; roles must exist; writes are proposals a second person approves | keyword rules: 12/20 |
+| Answers from the docs (`agents/answer.py`, 67 questions) | every sentence cites a passage that was given, or the answer is replaced by quoted text | quoted: 19/24 right, 7/9 refusals |
+| A contract for a partner file nobody described (`ai/onboard.py`, 8 files in `evals/onboarding.yaml`) | the draft passes the same loader as every contract and is written to `sources/drafts/`, never applied | header and value rules: 7/7 email and phone columns, 31/34 types, 3/4 keys |
+| Questions in English become SQL (`ai/ask_data.py`, 34 questions with gold queries) | one SELECT, data products only, an allow-list of columns with no contact data, no file or URL readers, a row cap, read-only with a time limit | none: without a model there is no SQL |
+
+The model's column is filled from a recorded run, by the scorecard page and here, only from
+`docs/results/ai/summary.json`; until that file exists this README makes no claim about it. To record
+one, put two lines in `.env` (git-ignored; the command reads it and prints names, never values):
+
+    PLUMBLINE_LLM_MODEL=<a chat model your key can use>
+    PLUMBLINE_LLM_API_KEY=<your key>
+
+then `python -m plumbline.ai.evals` (a few hundred calls; it builds a 1,500-person city first) and
+commit `docs/results/ai/`.
+
+Three things were tried and measured, and two were not shipped:
+
+- **Meaning-based search for the agent**, offline (latent semantic analysis over the docs): the right
+  section was already in the top 3 for 23 of 25 dev questions with keywords, and the meaning scores of
+  answerable and unanswerable questions overlapped. The losses were in deciding and quoting, so the
+  model reads the passages instead.
+- **A learned identity re-scorer** (`identity/second_stage.py`): gradient boosting over Splink's
+  candidate pairs, trained on one city and scored once on another. F1 0.9903 against Splink's 0.9912: not
+  shipped. Of Splink's 82 missed pairs on that city, 47 were refused by the cluster rules and 7 were never
+  compared; a re-scorer can reach only the 28 scored below the line. The lever is the cluster rules,
+  and loosening them risks wrong merges.
+- **A release gate for the home-buyer model** (`ml/release.py`, `docs/results/release_gate.json`). The
+  champion is what production runs (logistic regression, chosen on validation; a first
+  version wrongly hard-coded gradient boosting). On the 100,000-person test snapshot (30,323 people,
+  660 buyers) it held gradient boosting (AUC -0.023, interval -0.037 to -0.009), the model
+  without property data (AUC -0.050), and "balanced classes", whose AUC was the champion's to
+  within 0.001 but whose probabilities were off by 0.44 on average. Agents read these scores as
+  probabilities. On a 10,000-person city with 66 buyers the gate held everything, because the AUC
+  intervals were too wide to call anything "not worse"; that is the gate working.
+
+Two mistakes in my own harness, caught before any number was reported: the onboarding baseline once
+listed words taken from the eval's partner headers (tuning on the test; removed), and the eval picked
+a five-row CRM change file as a partner sample (now the largest delivery).
 
 ## Receipts
 
@@ -500,7 +556,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 
 | | Result |
 | --- | --- |
-| Right section in the top 3 results | 44 of 49 answerable questions |
+| Right section in the top 3 results | 45 of 49 answerable questions |
 | Answered right, with the right source | 18 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only |
 | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |

@@ -1,0 +1,41 @@
+# New partner files nobody has written a contract for. Each is a real source's data with the headers a
+# different company would use, columns reordered, some dropped. The answer key is the original
+# contract. Written before any drafter was run on them. Alternate partners are dev and test.
+partners:
+  - name: acme_loyalty
+    base: crm
+    rename: {crm_id: member_no, first_name: FirstName, last_name: LastName, email: EmailAddr, phone: MobileNumber,
+             street_address: Address1, zip: PostalCode, created_at: JoinDate, updated_at: LastModified}
+  - name: brightdata_append
+    base: vendor
+    rename: {vendor_record_id: rec_id, full_name: CONSUMER_NAME, dob: BIRTH_DT, address_line: ADDR, zip: ZIP5,
+             phone: TEL, email: EMAIL, employer: EMPLOYER_NM, job_title: OCCUPATION_DESC,
+             est_income_band: INCOME_CD, homeowner_flag: OWN_RENT}
+    drop: [source_confidence]
+  - name: inbox_metrics
+    base: email
+    rename: {event_id: evt, email: recipient, event_type: action, campaign_id: blast_id, event_ts: occurred_at}
+  - name: northwind_members
+    base: crm
+    rename: {crm_id: account, first_name: given, last_name: surname, email: contact, phone: cell,
+             street_address: line1, zip: zip_code, created_at: opened, updated_at: changed}
+  - name: census_plus
+    base: vendor
+    rename: {vendor_record_id: id, full_name: name, dob: "DOB (MM/DD/YYYY)", address_line: street, zip: zipcode,
+             phone: "Phone #", email: "E-Mail Address", employer: company, job_title: title,
+             est_income_band: income_band, homeowner_flag: homeowner}
+    drop: [source_confidence, employer]
+  - name: sendloop_events
+    base: email
+    rename: {event_id: message_event_id, email: to_address, event_type: kind, campaign_id: campaign, event_ts: ts}
+  - name: harbor_rewards
+    base: crm
+    rename: {crm_id: CustomerRef, first_name: Fname, last_name: Lname, email: Email_Primary, phone: Phone_Home,
+             street_address: StreetLine, zip: Zip, created_at: Created, updated_at: Updated}
+    drop: [first_name]
+  - name: datalink_consumer
+    base: vendor
+    rename: {vendor_record_id: dl_key, full_name: individual, dob: birth, address_line: residence, zip: postcode,
+             phone: contact_no, email: e_addr, employer: works_at, job_title: role,
+             est_income_band: hh_income_tier, homeowner_flag: owner_occupied}
+    drop: [source_confidence]

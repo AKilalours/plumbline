@@ -118,7 +118,7 @@ def test_saved_results_are_the_numbers_in_the_readme():
 
 
 PAGES = ["control_room", "scale", "identity", "failure_lab", "deletion", "households_page", "audiences",
-         "experiment", "agent", "activity"]
+         "experiment", "agent", "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page"]
 
 
 def _app(world, monkeypatch, page):
@@ -265,3 +265,25 @@ def test_graphs_put_each_record_with_its_real_owner(world):
     assert "truth [" in body[0] and all("truth [" not in b for b in body[1:])     # the answer key sits outside every cluster
     assert dot.count("someone else") == len(strangers) and dot.count("-> truth") >= 1
     assert Q.household_dot(m, "1 TEST ST").count("home -> m") == len(m)
+
+
+def test_the_sql_guardrail_page_blocks_an_attack_and_runs_a_fair_question(world, monkeypatch):
+    at = _app(world, monkeypatch, "ask_data_page")
+    at.segmented_control(key="ask_view").set_value("Try to break it").run()
+    assert any("Blocked" in m.value and "contact data" in m.value for m in at.markdown)
+    at.pills(key="attack").set_value("A fair question").run()
+    assert not at.exception and any("Allowed" in m.value for m in at.markdown)
+
+
+def test_the_release_gate_page_holds_a_distorted_challenger(world, monkeypatch):
+    at = _app(world, monkeypatch, "release_page")
+    assert any("held" in m.value and "calibrated" in m.value for m in at.markdown)
+    at.slider(key="rg_bend").set_value(1.0).run()
+    assert not at.exception and any("not shown better" in m.value for m in at.markdown)
+
+
+def test_a_dependency_the_table_does_not_know_is_checked_by_name_not_a_crash(tmp_path):
+    from plumbline.app import preflight
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text('[project]\ndependencies = ["numpy>=1", "surely-not-installed-pkg>=1"]\n')
+    assert preflight.missing(pp) == ["surely-not-installed-pkg"]

@@ -51,7 +51,7 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 
 | The work | Where | Evidence |
 | --- | --- | --- |
-| A knowledge agent that answers with sources and that people trust | `agents/knowledge.py`, `agents/answer.py` | cites every claim; on 67 eval questions, 19 of 24 right on the held-out half and 7 of 9 unanswerable ones refused; README numbers checked by a test against the live eval |
+| A knowledge agent that answers with sources and that people trust | `agents/knowledge.py`, `agents/answer.py` | cites every claim; on 67 eval questions, 19 of 24 right on the held-out half and 7 of 9 unanswerable ones refused; published numbers checked by a test against the live eval |
 | A human approval before any agent writes to a system of record | `agents/approvals.py` | second person with the role; runs once; `test_a_write_needs_a_second_person_with_the_role` |
 | A model picks the tool; code decides if it may run | `ai/planner.py`, `evals/routing_hard.yaml` | typed tool calls; ids must appear in the message, roles must exist, writes stay proposals; 40 hard messages scored against keyword rules |
 | Model calls that can be audited and replayed | `ai/runtime.py`, `docs/results/ai/` | every call recorded by prompt hash; tests and the public app replay real outputs without a key |

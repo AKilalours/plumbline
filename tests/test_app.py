@@ -109,7 +109,7 @@ def test_the_agent_answers_works_on_its_own_copy_and_never_calls_a_model_unless_
 
 def test_saved_results_are_the_numbers_in_the_readme():
     res = Q.saved_results()["runs"]
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "docs" / "details.md").read_text()
     assert [r["people"] for r in res] == [20_000, 100_000, 300_000, 1_000_000]
     for r in res:
         assert f"{r['households_f1']:.3f}" in readme, r["people"]

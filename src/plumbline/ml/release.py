@@ -55,14 +55,15 @@ class Decision:
     reason: str
 
 
-def decide(y, champion, challenger, slices: dict[str, np.ndarray] | None = None, brings: str = "") -> Decision:
+def decide(y, champion, challenger, slices: dict[str, np.ndarray] | None = None, brings: str = "",
+           resamples: int = 1000) -> Decision:
     y, champion, challenger = (np.asarray(a, dtype=float) for a in (y, champion, challenger))
     gates = []
 
     def gate(name, ok, value, rule):
         gates.append({"name": name, "passed": bool(ok), "value": value, "rule": rule})
 
-    d, lo, hi = paired_auc_diff(y, champion, challenger)
+    d, lo, hi = paired_auc_diff(y, champion, challenger, n=resamples)
     gate("not_worse_auc", lo > -MARGIN, {"diff": round(d, 4), "ci95": [round(lo, 4), round(hi, 4)]},
          f"lower 95% bound of the AUC difference above -{MARGIN}")
     e = ece(y, challenger)
@@ -84,6 +85,25 @@ def decide(y, champion, challenger, slices: dict[str, np.ndarray] | None = None,
     if brings:
         return Decision(True, gates, f"released: not worse, and {brings}")
     return Decision(False, gates, f"held: not shown better (AUC {d:+.3f}, interval {lo:+.3f} to {hi:+.3f}) and brings nothing else")
+
+
+# ------------------------------------------------------------------ a toy for the app's "Try the gate"
+def toy(skill: float, bend: float, n: int, seed: int = 0) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """-> (outcomes, champion scores, challenger scores) for a shaped challenger.
+
+    Buying depends on a hidden signal. Both models see it through noise; skill shrinks the
+    challenger's noise (skill > 0) or grows it (skill < 0); bend distorts its probabilities without
+    changing their order (1 = honest). A first version used the true probability as the champion,
+    a perfect model nothing could beat, and its challenger formula cancelled out for any positive
+    skill, so the slider's better half did nothing."""
+    rng = np.random.default_rng(seed)
+    x = rng.normal(size=n)
+    y = (rng.random(n) < 1 / (1 + np.exp(-(1.4 * x - 3.2)))).astype(int)
+    e, base_noise = rng.normal(size=n), 0.9          # the same noise for both: skill 0 is the same model
+    champ = 1 / (1 + np.exp(-(1.4 * (x + base_noise * e) / np.sqrt(1 + base_noise ** 2) - 3.2)))
+    s = base_noise * float(np.clip(1 - 1.8 * skill, 0.0, 3.0))
+    raw = 1 / (1 + np.exp(-(1.4 * (x + s * e) / np.sqrt(1 + s ** 2) - 3.2)))
+    return y, champ, np.clip(raw ** bend, 0, 1)
 
 
 # ------------------------------------------------------------------ the gate on real challengers

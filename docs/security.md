@@ -16,7 +16,7 @@ A deletion request names an email hash and a phone hash. Matching rows are purge
 quarantine and blocked in every later load, including replays of old files. After identity
 resolution, the person's other records are deleted too, and cases with too little evidence go to a
 review queue decided by a person with the privacy role. Measured on the seed-7 run: 11 of 500
-deleted people still have some record, each with a known reason in the README.
+deleted people still have some record, each with a known reason in the details.
 
 ## Unsubscribes and contact suppression
 

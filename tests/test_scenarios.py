@@ -73,7 +73,7 @@ def test_a_clean_city_has_no_deletion_violations(world):
 def test_the_100k_leak_numbers_are_the_readme_numbers():
     import json
     leak = json.loads((D.REPO / "docs" / "results" / "leak_demo.json").read_text())
-    readme = (D.REPO / "README.md").read_text()
+    readme = (D.REPO / "docs" / "details.md").read_text()
     assert f"{leak['leaky_auc']:.3f}" in readme and f"{leak['ceiling_auc']:.3f}" in readme and f"{leak['honest_auc']:.3f}" in readme
 
 

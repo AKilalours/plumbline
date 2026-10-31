@@ -27,52 +27,52 @@ items:
     source: [docs/runbooks/ingestion.md#6-the-deletion-review-queue-is-not-empty]
     terms: [never delete both]
   - q: What F1 does identity resolution get compared with the exact email or phone baseline?
-    source: [README.md#identity-resolution-module-b]
+    source: [docs/details.md#identity-resolution-module-b]
     terms: ["0.991", "0.927"]
   - q: Why did the first identity model have such low precision?
-    source: [README.md#identity-resolution-module-b]
+    source: [docs/details.md#identity-resolution-module-b]
     terms: [famil]
   - q: How accurate is the golden person's current address?
-    source: [README.md#data-products-dbt]
+    source: [docs/details.md#data-products-dbt]
     terms: ["91.1"]
   - q: Why are vendor-only moves kept out of segments?
-    source: [README.md#data-products-dbt, README.md#home-buyer-model-module-c]
+    source: [docs/details.md#data-products-dbt, docs/details.md#home-buyer-model-module-c]
     terms: ["45%"]
   - q: What does "as of a date" mean in the dbt models?
-    source: [README.md#data-products-dbt]
+    source: [docs/details.md#data-products-dbt]
     terms: [end of that day]
   - q: Is consent point in time for an audience rebuilt for a past date?
-    source: [README.md#data-products-dbt]
+    source: [docs/details.md#data-products-dbt]
     terms: [unsubscribe]
   - q: What test AUC does the home-buyer model get?
-    source: [docs/model_card_home_buyer.md#results-on-2025-06-30, README.md#home-buyer-model-module-c]
+    source: [docs/model_card_home_buyer.md#results-on-2025-06-30, docs/details.md#home-buyer-model-module-c]
     terms: ["0.660"]
   - q: What is the ceiling AUC for the home-buyer model?
-    source: [docs/model_card_home_buyer.md#results-on-2025-06-30, README.md#home-buyer-model-module-c]
+    source: [docs/model_card_home_buyer.md#results-on-2025-06-30, docs/details.md#home-buyer-model-module-c]
     terms: ["0.797"]
   - q: Which vendor features does the home-buyer model leave out, and why?
-    source: [docs/model_card_home_buyer.md#features, README.md#home-buyer-model-module-c]
+    source: [docs/model_card_home_buyer.md#features, docs/details.md#home-buyer-model-module-c]
     terms: [november]
   - q: What checks must home-buyer scores pass before they are published?
     source: [docs/model_card_home_buyer.md#guardrails-before-publishing]
     terms: [population stability]
   - q: How many deleted people still have data left after person-level deletion?
-    source: [README.md#deletion-at-the-person-level, README.md]
+    source: [docs/details.md#deletion-at-the-person-level, docs/details.md]
     terms: ["11"]
   - q: What exactly is kept in a deletion tombstone?
-    source: [README.md#deletion-at-the-person-level]
+    source: [docs/details.md#deletion-at-the-person-level]
     terms: [hmac]
   - q: What real reference data does the synthetic world use?
     source: [docs/synthetic_data_card.md#real-inputs]
     terms: [pluto]
   - q: What command runs the whole pipeline end to end?
-    source: [README.md#run-it]
+    source: [docs/details.md#run-it]
     terms: [python -m plumbline]
   - q: Why is gradient boosting a five-seed ensemble?
-    source: [README.md#home-buyer-model-module-c, docs/model_card_home_buyer.md#model-card-home-buyer-propensity]
+    source: [docs/details.md#home-buyer-model-module-c, docs/model_card_home_buyer.md#model-card-home-buyer-propensity]
     terms: [seed]
   - q: How does the store connector handle a 429 throttle response?
-    source: [README.md#how-ingestion-works, README.md#receipts]
+    source: [docs/details.md#how-ingestion-works, docs/details.md#receipts]
     terms: [retry-after]
   - q: What is our parental leave policy?
     refuse: true
@@ -146,25 +146,25 @@ items:
     source: [docs/runbooks/agent.md#connect-a-language-model-optional]
     terms: [quoted answer]
   - q: Why does the campaign experiment randomize inboxes rather than people?
-    source: [README.md#campaign-experiment]
+    source: [docs/details.md#campaign-experiment]
     terms: [507 inboxes]
   - q: Which customers responded most to the reactivation email?
-    source: [README.md#campaign-experiment, docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]
+    source: [docs/details.md#campaign-experiment, docs/synthetic_data_card.md#planted-campaign-response-synth-campaign-py]
     terms: [lapsed]
   - q: Why did CUPED hardly narrow the interval for the campaign?
-    source: [README.md#campaign-experiment]
+    source: [docs/details.md#campaign-experiment]
     terms: [squared correlation]
   - q: Why are the vendor's income columns never used as features for the income estimate?
-    source: [README.md#income-estimate-and-home-seller-model]
+    source: [docs/details.md#income-estimate-and-home-seller-model]
     terms: [missing for exactly]
   - q: Why was the home seller model not published?
-    source: [README.md#income-estimate-and-home-seller-model]
+    source: [docs/details.md#income-estimate-and-home-seller-model]
     terms: ["0.55"]
   - q: How many people does the home-buyer model leave unscored?
-    source: [README.md#home-buyer-model-module-c, docs/model_card_home_buyer.md]
+    source: [docs/details.md#home-buyer-model-module-c, docs/model_card_home_buyer.md]
     terms: ["33,426"]
   - q: How is the home-buyer model version decided?
-    source: [README.md#home-buyer-model-module-c]
+    source: [docs/details.md#home-buyer-model-module-c]
     terms: [hash]
   - q: What is the Wi-Fi password for the Brooklyn office?
     refuse: true

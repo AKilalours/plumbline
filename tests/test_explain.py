@@ -41,4 +41,4 @@ def test_the_saved_100k_reasons_are_exact_and_the_readme_quotes_them():
     r = json.loads((root / "docs" / "results" / "reason_codes.json").read_text())
     assert r["faithfulness_max_gap"] < 1e-9 and len(r["examples"]) == 5
     first = next(iter(r["top_decile_first_reason"]))
-    assert first in (root / "README.md").read_text()
+    assert first in (root / "docs" / "details.md").read_text()

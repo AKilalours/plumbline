@@ -340,7 +340,7 @@ def test_the_readme_reports_the_eval_numbers_the_documents_give_today():
     """The README is one of the documents the agent searches, so editing it moves the eval. This
     keeps its table from going stale: a first draft said 19 of 24 after an edit had made it 18."""
     from plumbline.agents import questionnaire as Q
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "docs" / "details.md").read_text()
     kix, k = Index.from_repo(ROOT), evals.load(ROOT / "evals" / "knowledge.yaml")
     qix, q = Q.index(ROOT), evals.load(ROOT / "evals" / "questionnaire.yaml")
     kd, kt = evals.run(kix, k, split="dev"), evals.run(kix, k, split="test")

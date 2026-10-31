@@ -205,7 +205,7 @@ def test_not_worse_is_not_enough_without_a_reason():
 
 def test_saved_release_and_identity_results_say_what_the_readme_says():
     r = json.loads((ROOT / "docs" / "results" / "release_gate.json").read_text())
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "docs" / "details.md").read_text()
     assert r["champion_algorithm"] == "logistic" and not any(r[k]["release"] for k in ("other_algorithm", "no_property_data", "balanced_classes"))
     assert f"{r['balanced_classes']['gates'][1]['value']:.2f}" in readme
     s = json.loads((ROOT / "docs" / "results" / "identity_second_stage.json").read_text())
@@ -250,8 +250,22 @@ def test_the_recorded_run_replays_exactly_and_the_readme_reports_it(tmp_path):
         r = E.TASKS[task](rt)
         assert {k: v for k, v in r.items() if k not in ("rows", "seconds", "model_name")} == \
                {k: v for k, v in s[task].items() if k not in ("rows", "seconds", "model_name")}, task
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "docs" / "details.md").read_text()
     frac = lambda x: x.replace("/", " of ")
     for claim in (frac(s["planner"]["model"]["test"]), frac(s["ask_data"]["test"]["answered_right"]),
                   frac(s["answers"]["model"]["test"]["refused_when_it_should"]), frac(s["onboarding"]["test"]["model"]["types"])):
         assert claim in readme, claim
+    # the bare fraction also appears in other rows ("8 of 9 (dev)"), so pin the model's own refusal cell
+    assert f"**{frac(s['answers']['model']['test']['refused_when_it_should'])} refusals**" in readme
+
+
+def test_the_gate_toy_releases_a_better_challenger_and_holds_the_rest():
+    """The first toy used the true probability as champion (unbeatable) and cancelled positive skill,
+    so the slider's better half did nothing. Each setting must now tell its own story."""
+    from plumbline.ml.release import decide, toy
+    verdict = lambda sk, b: decide(*toy(sk, b, 10000), resamples=200)
+    assert verdict(0.3, 1.0).release and "better" in verdict(0.3, 1.0).reason
+    assert not verdict(0.0, 1.0).release and "not shown better" in verdict(0.0, 1.0).reason
+    assert not verdict(-0.3, 1.0).release
+    bent = verdict(0.0, 0.4)
+    assert not bent.release and not {g["name"]: g["passed"] for g in bent.gates}["calibrated"]

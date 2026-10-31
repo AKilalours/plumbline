@@ -59,6 +59,8 @@ h2, h3 {{ font-family: 'Geist', sans-serif !important; font-weight: 500 !importa
 .mono {{ font-family: 'Geist Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; color: {MUTED}; }}
 .big {{ font-size: 2.1rem; font-weight: 500; color: {INK}; line-height: 1.1; font-variant-numeric: tabular-nums; }}
 .big small {{ font-size: 0.95rem; color: {MUTED}; font-weight: 400; }}
+[class*="st-key-card_"] .big small {{ display: block; margin-top: 2px; }}
+[class*="st-key-band"] .big {{ white-space: nowrap; }}
 .dot {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }}
 .pass {{ background: {GREEN}; }} .warn {{ background: {GOLD}; }} .fail {{ background: {RED}; }}
 .note {{ color: {MUTED}; font-size: 0.86rem; margin-top: 0.3rem; }}
@@ -70,6 +72,7 @@ h2, h3 {{ font-family: 'Geist', sans-serif !important; font-weight: 500 !importa
 [class*="st-key-band"] [data-testid="stWidgetLabel"] p, [class*="st-key-band"] .mono, [class*="st-key-band"] .big,
 [class*="st-key-band"] .big small {{ color: #FFFFFF !important; }}
 [class*="st-key-band"] button p {{ color: {INK} !important; }}
+[class*="st-key-band"] button[aria-checked="true"] {{ background: {GOLD} !important; border-color: {GOLD} !important; }}
 .stButton button, .stDownloadButton button, [data-testid="stPopover"] button, [data-testid="stPageLink"] a {{ border-radius: 9999px !important; }}
 .stButton button[kind="primary"] {{ background: {INK}; border-color: {INK}; }}
 .stButton button[kind="primary"]:hover {{ background: {BLUE}; border-color: {BLUE}; }}
@@ -229,7 +232,7 @@ def verdict(ok: bool, text: str):
 def stat(label: str, value: str, small: str = "", status: str | None = None):
     dot = f'<span class="dot {status}"></span>' if status else ""
     st.markdown(f'<div class="mono">{dot}{html.escape(label)}</div><div class="big">{html.escape(value)} '
-                f'<small>{html.escape(small)}</small></div>', unsafe_allow_html=True)
+                f'<small>{html.escape(small) or "&nbsp;"}</small></div>', unsafe_allow_html=True)
 
 
 def log(action: str, result):
@@ -275,7 +278,7 @@ def scale():
                                     "Home-buyer AUC (ceiling)": f"{num(r['home_buyer_auc'])} ({num(r['home_buyer_ceiling_auc'])})",
                                     "Income within one band (zip only)": f"{pct(r['income_within_one_band'])} ({pct(r['income_zip_only'])})"}
                                    for r in res["runs"]]), hide_index=True, width="stretch")
-    how(res["note"] + " What broke on the way up, and how each break was fixed at its root, is in the README.")
+    how(res["note"] + " What broke on the way up, and how each break was fixed at its root, is in docs/details.md, under Scale.")
 
 
 # ----------------------------------------------------------------- Investigate
@@ -925,16 +928,11 @@ def release_page():
     n = cc.select_slider("People scored", [2_000, 10_000, 50_000], value=10_000, key="rg_n")
     import numpy as np
     from plumbline.ml.release import decide
-    rng = np.random.default_rng(0)
-    x = rng.normal(size=n)
-    champ = 1 / (1 + np.exp(-(x - 3.0)))
-    y = (rng.random(n) < champ).astype(int)
-    noise = rng.normal(size=n)
-    w = float(np.clip(1 + skill, 0.05, 2))
-    raw = 1 / (1 + np.exp(-((x * w + noise * max(0.0, -skill) * 2) / max(w, 0.5) - 3.0)))
-    chall = np.clip(raw ** bend, 0, 1)
-    dd = decide(y, champ, chall)
+    from plumbline.ml.release import toy
+    y, champ, chall = toy(skill, bend, n)
+    dd = decide(y, champ, chall, resamples=200)       # interactive: 200 resamples keep a slider move under 2 s
     verdict(dd.release, dd.reason)
+    st.caption("200 bootstrap resamples here; 1,000 for the real decision above")
     for g_ in dd.gates:
         st.markdown(f'<div class="step"><span class="dot {"pass" if g_["passed"] else "fail"}"></span>'
                     f'{g_["name"].replace("_", " ")}: {html.escape(gate_value(g_))}</div>', unsafe_allow_html=True)
@@ -987,7 +985,7 @@ def overview():
         with col.container(key=f"card_{c['id']}"):
             value = num(c["value"]) if isinstance(c["value"], float) else f"{c['value']:,}"
             stat(SHORT[c["id"]], value, f"/ {c['of']:,}" if c["of"] else "", c["status"])
-            with st.popover("Evidence", width="stretch"):
+            with st.popover("Rows", width="stretch"):
                 st.markdown(f"**{c['title']}**  \n{c['unit']}. {c['note']}.")
                 st.dataframe(c["evidence"].head(500), hide_index=True, width="stretch")
     st.write("")

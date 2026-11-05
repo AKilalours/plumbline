@@ -323,3 +323,11 @@ def test_the_suite_stops_with_one_clear_message_on_the_wrong_python(tmp_path):
     out = r.stdout + r.stderr
     assert r.returncode == 2, out[-800:]
     assert "missing: splink" in out and "source .venv/bin/activate" in out
+
+
+def test_the_footer_names_the_author_and_links_the_code_but_no_email():
+    st_testing = pytest.importorskip("streamlit.testing.v1")
+    at = st_testing.AppTest.from_string("import streamlit_app\nstreamlit_app.footer()", default_timeout=60).run()
+    text = next(m.value for m in at.markdown if "Built by" in m.value)
+    assert "Akila Lourdes Miriyala Francis" in text and "github.com/AKilalours/plumbline" in text
+    assert "@" not in text

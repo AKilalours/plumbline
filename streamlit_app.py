@@ -1250,5 +1250,17 @@ PAGES = {"home": st.Page(overview, title="Overview", icon="📊", default=True),
          "agent": st.Page(agent_page, title="Agent", icon="🛠️", url_path="agent"),
          "activity": st.Page(activity_page, title="Activity", icon="🧾", url_path="activity")}
 
+AUTHOR, REPO = "Akila Lourdes Miriyala Francis", "https://github.com/AKilalours/plumbline"
+
+
+def footer():
+    """Shown under every page. Name and code only: no email, so the public app is not a scraping target."""
+    st.markdown(f'<hr style="margin:2.5rem 0 0.8rem;border:none;border-top:1px solid {LINE}">'
+                f'<p class="note" style="text-align:center">Built by <b>{AUTHOR}</b> · '
+                f'<a href="{REPO}" target="_blank">Code on GitHub</a> · synthetic data, no real people</p>',
+                unsafe_allow_html=True)
+
+
 if __name__ == "__main__":
     st.navigation(list(PAGES.values())).run()
+    footer()

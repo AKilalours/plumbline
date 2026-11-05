@@ -357,3 +357,17 @@ def test_the_readme_reports_the_eval_numbers_the_documents_give_today():
                 f"{of(qd['refused_when_it_should'])} (dev), **{of(qt['refused_when_it_should'])} (test)**"]
     stale = [e for e in expected if e not in readme]
     assert not stale, stale
+
+
+@pytest.mark.parametrize("q,tool", [
+    ("How many records are in quarantine and why?", "ingest_status"),   # live, it got a model-feature passage
+    ("What's in quarantine?", "ingest_status"),
+    ("which files were rejected?", "ingest_status"),
+    ("did any loads fail?", "ingest_status"),                             # 'load' did not match 'loads'
+    ("Why does the loader reject a file with a missing column?", None),   # a runbook question stays with the docs
+    ("What does quarantine mean?", None),
+])
+def test_status_questions_about_quarantine_reach_the_live_tool_and_doc_questions_stay_with_docs(q, tool):
+    from plumbline.agents.agent import route
+    _, intent, _ = route(load_skills(ROOT), q)
+    assert (intent.tool if intent else None) == tool

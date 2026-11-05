@@ -14,5 +14,7 @@ intents:
            '\b(data products?|golden person|audience)\b.*\b(status|size|built|ok)\b']
   - tool: ingest_status
     when: ['\b(reject\w*|quarantin\w*|violations?)\b.*\b(today|now|last night|yesterday|currently|any|latest)\b',
-           '\b(did|has|is)\b.*\b(load|ingest\w*|delivery|deliveries|feed)\b',
+           '\b(how many|which)\b.*\b(reject\w*|quarantin\w*)\b',
+           '\b(in|from) (the )?quarantine\b',
+           '\b(did|has|is)\b.*\b(loads?|ingest\w*|delivery|deliveries|feeds?)\b',
            '\b(load|ingest\w*|pipeline)\b.*\b(status|ok|healthy|broken|fail\w*)\b']

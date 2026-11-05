@@ -16,7 +16,7 @@ import sqlglot
 from pydantic import BaseModel, Field
 from sqlglot import exp
 
-from .runtime import NotRecorded, Runtime, Trace
+from .runtime import Runtime, Trace, not_recorded
 
 SCHEMA = {
     "products.mart_activation_audience": {
@@ -155,7 +155,9 @@ def run_sql(warehouse, sql: str):
 def ask(rt: Runtime, warehouse, question: str) -> Result:
     try:
         ans, trace = rt.structured("ask_data", SYSTEM, f"Question: {question}", SqlAnswer, max_tokens=700)
-    except NotRecorded as e:
+    except LookupError as e:    # NotRecorded from any reload of runtime.py
+        if not not_recorded(e):
+            raise
         return Result("", "", None, [], f"model unavailable: {e}")
     if ans is None:
         return Result("", "", None, [], "the model did not return a valid answer", trace)

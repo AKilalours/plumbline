@@ -277,6 +277,16 @@ def test_the_sql_guardrail_page_blocks_an_attack_and_runs_a_fair_question(world,
     assert not at.exception and any("Allowed" in m.value for m in at.markdown)
 
 
+def test_unselecting_the_attack_shows_a_prompt_not_a_wrong_verdict(world, monkeypatch):
+    """Clicking the selected pill unselects it; the empty SQL then read "Blocked: exactly one statement
+    is allowed", which looked like the guard giving the phone-number attempt the wrong reason."""
+    at = _app(world, monkeypatch, "ask_data_page")
+    at.segmented_control(key="ask_view").set_value("Try to break it").run()
+    at.pills(key="attack").set_value(None).run()
+    assert not at.exception and not any("Blocked" in m.value for m in at.markdown)
+    assert any("Pick an attempt" in m.value for m in at.markdown)
+
+
 def test_the_release_gate_page_holds_a_distorted_challenger(world, monkeypatch):
     at = _app(world, monkeypatch, "release_page")
     assert any("held" in m.value and "calibrated" in m.value for m in at.markdown)

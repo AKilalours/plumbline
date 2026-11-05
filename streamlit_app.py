@@ -785,6 +785,9 @@ def ask_data_page():
                    "A fair question": "SELECT income_band, count(*) AS people FROM products.mart_activation_audience WHERE email_ok GROUP BY 1 ORDER BY 1"}
         pick = st.pills("Attempts a manipulated model might make", list(attacks), default="Read people's phone numbers", key="attack")
         sql = st.text_area("SQL", attacks.get(pick, ""), key=f"atk_{pick}", height=90)
+        if not sql.strip():     # clicking the selected pill unselects it; an empty box is not an attack to judge
+            st.markdown('<p class="note">Pick an attempt above, or write your own SQL.</p>', unsafe_allow_html=True)
+            return
         from plumbline.ai.ask_data import Rejected, check_sql, run_sql
         try:
             safe = check_sql(sql)
@@ -926,9 +929,7 @@ def release_page():
     skill = a.slider("Challenger's skill vs champion", -0.5, 0.5, 0.0, 0.05, key="rg_skill")
     bend = b.slider("Probability distortion (1 = honest)", 0.2, 2.0, 0.4, 0.1, key="rg_bend")
     n = cc.select_slider("People scored", [2_000, 10_000, 50_000], value=10_000, key="rg_n")
-    import numpy as np
-    from plumbline.ml.release import decide
-    from plumbline.ml.release import toy
+    from plumbline.ml.release import decide, toy
     y, champ, chall = toy(skill, bend, n)
     dd = decide(y, champ, chall, resamples=200)       # interactive: 200 resamples keep a slider move under 2 s
     verdict(dd.release, dd.reason)

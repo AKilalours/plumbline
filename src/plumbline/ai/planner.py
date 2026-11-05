@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..agents.tools import TOOLS
-from .runtime import NotRecorded, Runtime, Trace
+from .runtime import Runtime, Trace, not_recorded
 
 ROLES = ("admin", "data-platform", "docs", "privacy")
 DOCS, REFUSE = "answer_from_docs", "out_of_scope"
@@ -93,7 +93,9 @@ def plan(rt: Runtime, message: str) -> tuple[ToolCall | None, Trace | None, str 
     """-> (call, trace, rejection). call is None when the model is unavailable or gave nothing valid."""
     try:
         call, trace = rt.structured("planner", SYSTEM, f"Message: {message}", ToolCall, max_tokens=300)
-    except NotRecorded:
+    except LookupError as _e:    # NotRecorded from any reload of runtime.py
+        if not not_recorded(_e):
+            raise
         return None, None, None
     if call is None:
         return None, trace, "the model did not return a valid tool call"

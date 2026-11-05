@@ -17,7 +17,7 @@ from pathlib import Path
 import yaml
 
 from ..agents.llm import Completion
-from .runtime import RECORDINGS, ROOT, NotRecorded, Runtime
+from .runtime import RECORDINGS, ROOT, NotRecorded, Runtime, not_recorded
 
 
 def _halves(rows: list[dict], key: str = "ok") -> dict:
@@ -313,7 +313,9 @@ def main(argv: list[str] | None = None) -> int:
         t0 = time.time()
         try:
             r = TASKS[name](rt)
-        except NotRecorded as e:
+        except LookupError as e:    # NotRecorded from any reload of runtime.py
+            if not not_recorded(e):
+                raise
             print(f"{name}: skipped ({e})")
             continue
         finally:

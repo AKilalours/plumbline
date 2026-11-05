@@ -20,7 +20,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from ..ingest.contracts import TYPES, load_contract
-from .runtime import NotRecorded, Runtime, Trace
+from .runtime import Runtime, Trace, not_recorded
 
 Type = Literal[tuple(sorted(TYPES))]                                            # type: ignore[valid-type]
 Identity = Literal["first_name", "last_name", "full_name", "street", "zip", "dob"]
@@ -155,7 +155,9 @@ def model_draft(rt: Runtime, prof: list[dict]) -> tuple[Draft | None, Trace | No
     view = [{k: c[k] for k in ("name", "fill", "distinct", "samples", "distinct_values")} for c in prof]
     try:
         return rt.structured("onboarding", SYSTEM, yaml.safe_dump({"columns": view}, sort_keys=False), Draft, max_tokens=1500)
-    except NotRecorded:
+    except LookupError as _e:    # NotRecorded from any reload of runtime.py
+        if not not_recorded(_e):
+            raise
         return None, None
 
 

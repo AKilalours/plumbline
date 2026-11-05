@@ -28,7 +28,14 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class NotRecorded(LookupError):
-    pass
+    """Callers catch LookupError, not this class. When Streamlit reloads a changed module, a second
+    NotRecorded class appears; `except NotRecorded` then misses the one actually raised and the page
+    crashes (it did, on five Agent questions). The built-in base class is the same object either way."""
+
+
+def not_recorded(e: BaseException) -> bool:
+    """True for NotRecorded from any copy of this module; a KeyError or IndexError (also LookupErrors) is a bug."""
+    return type(e).__name__ == "NotRecorded"
 
 
 def _sha(*parts: str) -> str:

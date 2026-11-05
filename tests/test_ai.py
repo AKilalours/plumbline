@@ -269,3 +269,21 @@ def test_the_gate_toy_releases_a_better_challenger_and_holds_the_rest():
     assert not verdict(-0.3, 1.0).release
     bent = verdict(0.0, 0.4)
     assert not bent.release and not {g["name"]: g["passed"] for g in bent.gates}["calibrated"]
+
+
+def test_a_question_the_recording_never_saw_goes_to_the_keyword_rules_even_after_a_module_reload():
+    """Live, five of the nine Agent buttons crashed with NotRecorded although plan() catches it: after
+    Streamlit reloaded runtime.py, the raised class was a new NotRecorded that the old `except` missed."""
+    import importlib
+    from types import SimpleNamespace
+    import plumbline.ai.runtime as R
+    from plumbline.agents.agent import _decide
+    from plumbline.agents.skills import load
+    R2 = importlib.reload(R)                     # what Streamlit does to a changed module
+    try:
+        ctx = SimpleNamespace(skills=load(ROOT), runtime=R2.Runtime(None, mode="replay"))
+        skill, tool, _, why, planner = _decide(ctx, "Is the pipeline healthy?")
+        assert planner == "keywords" and skill.name == "pipeline_status" and why is None
+        assert _decide(ctx, "did anything bounce off the loader overnight?")[4] == "model"   # recorded: replays
+    finally:
+        importlib.reload(R)

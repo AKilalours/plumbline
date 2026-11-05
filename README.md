@@ -33,7 +33,7 @@ Ingest · resolve · predict · act</p>
 <table>
 <tr>
 <td align="center"><h2>0.991</h2>identity F1<br><sub>exact matching: 0.927</sub></td>
-<td align="center"><h2>0</h2>innocent people deleted<br><sub>at 1,000,000 people</sub></td>
+<td align="center"><h2>0</h2>innocent people deleted<br><sub>at 1M people, after the last fix</sub></td>
 <td align="center"><h2>100</h2>injected faults<br><sub>0 changes to the data</sub></td>
 <td align="center"><h2>19/20</h2>right tool, agent<br><sub>keyword rules: 12/20</sub></td>
 <td align="center"><h2>6 min</h2>whole pipeline<br><sub>100,000 people, 2 cores</sub></td>

@@ -270,7 +270,7 @@ def scale():
     c = st.columns(len(timed))
     for col, r in zip(c, timed):
         with col:
-            stat(f"{r['people']:,} people", f"{r['timing']['pipeline_minutes']} min", f"{r['timing']['peak_memory_gb']} GB peak")
+            stat(f"{r['people']:,} people", f"{r['timing']['pipeline_minutes']} min", f"{r['timing']['peak_memory_gb']} GB peak · {r['machine']}")
     with st.expander("Quality at every size"):
         st.dataframe(pd.DataFrame([{"People": f"{r['people']:,}", "Identity P / R (pairs)": f"{pct(r['identity']['precision'])} / {pct(r['identity']['recall'])}",
                                     "Deleted people with data left": f"{r['deletion']['people_with_data_left']} of {r['deletion']['requested']:,}",
@@ -909,14 +909,14 @@ def release_page():
     header("Release gate", "Should a new model replace the one in production? Four gates, every one must pass.")
     rg = json.loads((Path(__file__).parent / "docs/results/release_gate.json").read_text())
     st.markdown(f'<span class="chip">city: 100,000 people</span><span class="chip">test: {rg["test_rows"]:,} people, {rg["test_buyers"]} buyers</span>'
-                f'<span class="chip blue">champion: {rg["champion_algorithm"]}, AUC {rg["auc"]["champion"]}</span>', unsafe_allow_html=True)
+                f'<span class="chip blue">champion: {rg["champion_algorithm"]}, AUC {rg["auc"]["champion"]:.3f}</span>', unsafe_allow_html=True)
     names = {"other_algorithm": f"The fancier model ({rg['challenger_algorithm'].replace('_', ' ')})",
              "no_property_data": "Without property data", "balanced_classes": "Balanced classes"}
     c = st.columns(3)
     for col, (k, label) in zip(c, names.items()):
         with col, st.container(key=f"card_rel_{k}"):
             r = rg[k]
-            stat(label, "released" if r["release"] else "held", f"AUC {rg['auc'][k]}", "pass" if r["release"] else "fail")
+            stat(label, "released" if r["release"] else "held", f"AUC {rg['auc'][k]:.3f}", "pass" if r["release"] else "fail")
             for gte in r["gates"]:
                 st.markdown(f'<div class="step"><span class="dot {"pass" if gte["passed"] else "fail"}"></span>'
                             f'{gte["name"].replace("_", " ")}: {html.escape(gate_value(gte))}</div>', unsafe_allow_html=True)
@@ -987,7 +987,8 @@ def overview():
             stat(SHORT[c["id"]], value, f"/ {c['of']:,}" if c["of"] else "", c["status"])
             with st.popover("Rows", width="stretch"):
                 st.markdown(f"**{c['title']}**  \n{c['unit']}. {c['note']}.")
-                st.dataframe(c["evidence"].head(500), hide_index=True, width="stretch")
+                ev = c["evidence"].head(500)      # mixed-type columns (a number here, a JSON object there) shown as text
+                st.dataframe(ev.astype({k: str for k in ev.columns[ev.dtypes == object]}), hide_index=True, width="stretch")
     st.write("")
     left, right = st.columns([3, 2], gap="large")
     with left:
@@ -1006,10 +1007,14 @@ def overview():
         b = st.columns(2)
         with b[0]:
             stat("Identity F1", num(r["identity"]["f1"]))
-            stat("Wrongly deleted", "0" if size == "1M" else str(r["deletion"]["records_of_people_who_never_asked"]), "records")
+            wrong = r["deletion"]["records_of_people_who_never_asked"]
+            if size == "1M":    # measured 1; the fix found on this run was replayed on its saved state (docs/details.md, Scale item 7)
+                stat("Wrongly deleted", "0", f"records (measured {wrong}, then fixed)")
+            else:
+                stat("Wrongly deleted", str(wrong), "records")
         with b[1]:
             stat("Household F1", num(r["households_f1"]))
-            stat("Pipeline", f"{r['timing']['pipeline_minutes']} min" if "timing" in r else "n/a")
+            stat("Pipeline", f"{r['timing']['pipeline_minutes']} min" if "timing" in r else "n/a", r.get("machine", ""))
     how("A synthetic city with an answer key the pipeline never sees. The six checks run live on it; the band shows "
         "the same pipeline measured at 20,000 to 1,000,000 people. At 1M, wrongly deleted records went 85 → 1 → 0. "
         f"[Source code]({REPO_URL})")
@@ -1090,7 +1095,7 @@ def reasons_page():
     a, b = st.columns([1, 2], gap="large")
     with a:
         stat("Home-buyer score", f"{e['score']:.1%}", f"base rate {rc['base_rate']:.1%}")
-        stat("Bought within 180 days", "yes" if e["bought"] else "no", "answer key", "pass" if e["bought"] else None)
+        stat("Bought within 180 days", "yes" if e["bought"] else "no", "per the answer key", "pass" if e["bought"] else None)
     with b:
         df = pd.DataFrame(e["reasons"], columns=["Reason", "Push"])
         st.altair_chart(alt.Chart(df).mark_bar(cornerRadiusEnd=4).encode(
@@ -1257,7 +1262,8 @@ def footer():
     """Shown under every page. Name and code only: no email, so the public app is not a scraping target."""
     st.markdown(f'<hr style="margin:2.5rem 0 0.8rem;border:none;border-top:1px solid {LINE}">'
                 f'<p class="note" style="text-align:center">Built by <b>{AUTHOR}</b> · '
-                f'<a href="{REPO}" target="_blank">Code on GitHub</a> · synthetic data, no real people</p>',
+                f'<a href="{REPO}" target="_blank">Code on GitHub</a> · real NYC buildings and Census income, '
+                f'invented people, so every number can be checked</p>',
                 unsafe_allow_html=True)
 
 

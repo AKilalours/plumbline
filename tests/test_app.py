@@ -392,3 +392,13 @@ print("same_module", after is before, "has_new", hasattr(after, "unused_words"))
                        env={**os.environ, "PLUMBLINE_DEMO_DIR": str(tmp_path / "demo")})
     out = r.stdout
     assert "unchanged False" in out and "changed True" in out and "same_module False has_new True" in out, r.stderr[-2000:]
+
+
+def test_clicking_the_open_tab_again_keeps_it_open(world, monkeypatch):
+    """Streamlit unselects the active option on a second click; every tabbed page then jumped back to its
+    first view with nothing highlighted (the Agent's Ask view lost its nine sample questions)."""
+    at = _app(world, monkeypatch, "agent_page")
+    at.segmented_control(key="agent_dest").set_value("Ask").run()
+    at.segmented_control(key="agent_dest").set_value(None).run()           # the second click
+    assert not at.exception
+    assert at.segmented_control(key="agent_dest").value == "Ask" and len(at.pills(key="agent_pill").options) == 9

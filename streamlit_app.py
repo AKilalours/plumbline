@@ -314,7 +314,7 @@ def identity():
     kinds = {"Found despite typos": "correct", "Split in two": "split", "Merged with someone": "merged"}
     a, b = st.columns([3, 1], vertical_alignment="bottom")
     with a:
-        kind = st.segmented_control("Show", list(kinds), default="Merged with someone", key="id_kind") or "Merged with someone"
+        kind = choose("Show", list(kinds), default="Merged with someone", key="id_kind")
     pool = show[kinds[kind]]
     if not pool:
         st.info("Nobody of that kind in this city.")
@@ -339,7 +339,7 @@ def identity():
         verdict(False, "Merged: someone else's record was joined to them.")
     # a segmented control, not st.tabs: tabs reset to the first one on every rerun, so a split would
     # throw the visitor back to the graph instead of showing what changed
-    view = st.segmented_control("View", ["Graph", "Why they were joined", "Fix it"], default="Graph", key="id_view") or "Graph"
+    view = choose("View", ["Graph", "Why they were joined", "Fix it"], default="Graph", key="id_view")
     if view == "Graph":
         st.graphviz_chart(Q.person_dot(recs, strangers, truth["name"]))
 
@@ -515,7 +515,7 @@ def households_page():
         stat("All from one real home", pct((h.real_households == 1).mean(), 2), f"of {len(h):,}")
     with c[2]:
         stat("Household F1 (pairs)", num(d.summary["products"]["household_f1"]))
-    kind = st.segmented_control("Show", ["Built right", "Two homes joined"], default="Built right", key="hh_kind") or "Built right"
+    kind = choose("Show", ["Built right", "Two homes joined"], default="Built right", key="hh_kind")
     multi = h[(h.members > 1) & ((h.real_households == 1) == (kind == "Built right"))].sort_values(
         ["members", "household_key"], ascending=[False, True]).head(80)
     if multi.empty:
@@ -623,7 +623,7 @@ def audiences():
 
 def experiment():
     header("Did the email work?", "Half the inboxes got it. The answer key knows what it really did.")
-    size = st.segmented_control("City size", list(SIZES), default="1M", key="exp_size") or "1M"
+    size = choose("City size", list(SIZES), default="1M", key="exp_size")
     e = run_for(size)["experiment"]
     c = st.columns(4)
     with c[0]:
@@ -667,8 +667,8 @@ def agent():
     if rt.available and (rt.mode == "live" or rt.recorded("planner")):
         ctx.runtime = rt
     roles = Q.example_roles()
-    who = st.segmented_control("You are", list(roles), default="U0ADM0001", key="agent_who",
-                               format_func=lambda u: f"{u} · {', '.join(roles[u])}") or "U0ADM0001"
+    who = choose("You are", list(roles), default="U0ADM0001", key="agent_who",
+                               format_func=lambda u: f"{u} · {', '.join(roles[u])}")
     from plumbline.agents.agent import handle
 
     def ask(user: str, q: str):
@@ -796,7 +796,7 @@ def ask_data_page():
     d = demo()
     header("Ask the data", "A question in English becomes SQL. Code, not the model, decides whether it may run.")
     rt, sm = ai_runtime(), ai_summary().get("ask_data")
-    tab = st.segmented_control("View", ["Ask", "Try to break it"], default="Ask", key="ask_view", label_visibility="collapsed") or "Ask"
+    tab = choose("View", ["Ask", "Try to break it"], default="Ask", key="ask_view", label_visibility="collapsed")
     if tab == "Try to break it":
         attacks = {"Read people's phone numbers": "SELECT person_key, phone FROM products.dim_person",
                    "Every column, including contact data": "SELECT * FROM products.dim_person",
@@ -878,11 +878,11 @@ def onboarding_page():
         not_recorded_note("onboarding")
         return
     rows = sm["rows"]
-    name = st.segmented_control("Partner file", [r["partner"] for r in rows], default=rows[0]["partner"], key="ob_pick") or rows[0]["partner"]
+    name = choose("Partner file", [r["partner"] for r in rows], default=rows[0]["partner"], key="ob_pick")
     r = next(x for x in rows if x["partner"] == name)
     st.markdown(f'<span class="chip">{"held-out" if r["split"] == "test" else "dev"} file</span><span class="chip blue">key: {", ".join(r["key"])}</span>',
                 unsafe_allow_html=True)
-    who = st.segmented_control("Drafted by", ["model", "rules"], default="model", key="ob_who") or "model"
+    who = choose("Drafted by", ["model", "rules"], default="model", key="ob_who")
     dft = r["model_draft"] if who == "model" else r["heuristic_draft"]
     if dft is None:
         st.warning("The model gave no valid draft for this file.")
@@ -983,8 +983,27 @@ INCIDENTS = {"false_merge": ("Identity", "False merge"), "interrupted_sync": ("S
              "stale_restore": ("Privacy", "Stale backup restore"), "future_feature": ("Models", "Future-dated feature")}
 
 
+def choose(label: str, options: list, default, key: str, **kw):
+    """A row of options that cannot be emptied. Streamlit unselects the active option when it is clicked
+    again; the page then fell back to the first view with nothing highlighted, as if the click were ignored.
+    Here clicking the active option keeps it."""
+    last = f"_{key}_last"
+
+    def keep():
+        if st.session_state.get(key) is None:
+            st.session_state[key] = st.session_state.get(last, default)
+
+    if key in st.session_state:          # set once; passing a default too makes Streamlit warn
+        v = st.segmented_control(label, options, key=key, on_change=keep, **kw)
+    else:
+        v = st.segmented_control(label, options, default=default, key=key, on_change=keep, **kw)
+    v = default if v is None else v
+    st.session_state[last] = v
+    return v
+
+
 def view(options: list[str], key: str) -> str:
-    return st.segmented_control("View", options, default=options[0], key=key, label_visibility="collapsed") or options[0]
+    return choose("View", options, default=options[0], key=key, label_visibility="collapsed")
 
 
 def runs_list() -> list[SC.Run]:
@@ -1033,7 +1052,7 @@ def overview():
                         unsafe_allow_html=True)
         st.page_link(PAGES["agent"], label="Open the incident lab", icon="🧪")
     with right, st.container(key="band"):
-        size = st.segmented_control("Measured at", list(SIZES), default="1M", key="home_size") or "1M"
+        size = choose("Measured at", list(SIZES), default="1M", key="home_size")
         r = run_for(size)
         b = st.columns(2)
         with b[0]:
@@ -1120,8 +1139,8 @@ def reasons_page():
                 f'<span class="chip blue">reasons rebuild every score (max gap {rc["faithfulness_max_gap"]:.0e})</span>',
                 unsafe_allow_html=True)
     ex = rc["examples"]
-    i = st.segmented_control("Person (top decile)", list(range(len(ex))), default=0, key="rc_pick",
-                             format_func=lambda k: ex[k]["person_key"][-6:]) or 0
+    i = choose("Person (top decile)", list(range(len(ex))), default=0, key="rc_pick",
+                             format_func=lambda k: ex[k]["person_key"][-6:])
     e = ex[i]
     a, b = st.columns([1, 2], gap="large")
     with a:
@@ -1147,8 +1166,8 @@ def reasons_page():
 def incident_lab():
     d = demo()
     roles = {u: set(r) for u, r in Q.example_roles().items()}
-    pick = st.segmented_control("Incident", list(INCIDENTS), default="false_merge", key="inc_pick",
-                                format_func=lambda k: f"{INCIDENTS[k][1]}", label_visibility="collapsed") or "false_merge"
+    pick = choose("Incident", list(INCIDENTS), default="false_merge", key="inc_pick",
+                                format_func=lambda k: f"{INCIDENTS[k][1]}", label_visibility="collapsed")
     run_id = st.session_state.get(f"inc_run_{pick}")
     run = SC.Run.load(RUNS, run_id) if run_id and (RUNS / f"{run_id}.json").exists() else None
     steps = ["Inject", "Detect", "Inspect", "Fix", "Verify"]

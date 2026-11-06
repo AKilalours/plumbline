@@ -372,15 +372,20 @@ class ActivityLog:
                 tmp.write_text("".join(lines[-self.keep:]))
                 tmp.replace(self.path)
 
-    def recent(self, n: int = 50) -> pd.DataFrame:
+    def recent(self, n: int = 50, who: str | None = None) -> pd.DataFrame:
+        """Newest first. With `who`, only that actor's entries: on a public page the log holds what
+        each visitor typed, and one visitor's text must not be shown to the next."""
+        empty = pd.DataFrame(columns=["at", "who", "action", "result"])
         if not self.path.exists():
-            return pd.DataFrame(columns=["at", "who", "action", "result"])
+            return empty
         rows = []
-        for x in self.path.read_text().splitlines()[-n:]:
+        for x in reversed(self.path.read_text().splitlines()):
             try:
-                rows.append(json.loads(x))
+                row = json.loads(x)
             except json.JSONDecodeError:
                 continue
-        if not rows:
-            return pd.DataFrame(columns=["at", "who", "action", "result"])
-        return pd.DataFrame(rows[::-1])
+            if who is None or row.get("who") == who:
+                rows.append(row)
+                if len(rows) == n:
+                    break
+        return pd.DataFrame(rows) if rows else empty

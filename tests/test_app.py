@@ -277,6 +277,17 @@ def test_the_sql_guardrail_page_blocks_an_attack_and_runs_a_fair_question(world,
     assert not at.exception and any("Allowed" in m.value for m in at.markdown)
 
 
+def test_sql_that_passes_the_guard_but_fails_in_the_database_is_reported_not_a_crash(world, monkeypatch):
+    """An ambiguous column (or the 10-second limit) raised a database error the page did not catch."""
+    at = _app(world, monkeypatch, "ask_data_page")
+    at.segmented_control(key="ask_view").set_value("Try to break it").run()
+    at.pills(key="attack").set_value("A fair question").run()
+    box = next(t for t in at.text_area if t.key.startswith("atk_"))
+    box.set_value("SELECT person_key FROM products.dim_person, products.dim_person AS b").run()
+    assert not at.exception, at.exception
+    assert any("the query failed" in m.value and "Ambiguous" in m.value for m in at.markdown)
+
+
 def test_unselecting_the_attack_shows_a_prompt_not_a_wrong_verdict(world, monkeypatch):
     """Clicking the selected pill unselects it; the empty SQL then read "Blocked: exactly one statement
     is allowed", which looked like the guard giving the phone-number attempt the wrong reason."""
@@ -341,3 +352,43 @@ def test_the_footer_names_the_author_and_links_the_code_but_no_email():
     text = next(m.value for m in at.markdown if "Built by" in m.value)
     assert "Akila Lourdes Miriyala Francis" in text and "github.com/AKilalours/plumbline" in text
     assert "@" not in text
+
+
+def test_the_activity_log_shows_a_visitor_only_their_own_actions(world, monkeypatch):
+    """The log is one file for the whole public app and holds what visitors typed (agent questions,
+    SQL); the page showed everyone's, so one stranger's text reached the next visitor."""
+    import json as _json
+    d, _ = world
+    log = d.root.parent / f"{d.root.name}-activity.jsonl"
+    with open(log, "a") as f:
+        f.write(_json.dumps({"at": "2026-01-01 00:00:00 UTC", "who": "visitor-zzzz", "action": "agent: answer",
+                             "result": {"asked": "SOMEONE ELSE TYPED THIS"}}) + "\n")
+    at = _app(world, monkeypatch, "activity")
+    shown = " ".join(str(df.value.to_dict()) for df in at.dataframe)
+    assert "SOMEONE ELSE TYPED THIS" not in shown and "visitor-zzzz" not in shown
+
+
+def test_changed_code_under_a_running_app_is_loaded_fresh_all_together(tmp_path):
+    """Live, after a push the page called O.unused_words while the old ops module, imported before the
+    push, was still loaded: AttributeError. Changed files must replace every plumbline module at once.
+    Run in its own process: reloading plumbline here would leave this session's tests holding old modules."""
+    import os
+    import subprocess
+    pytest.importorskip("streamlit")
+    script = f"""
+import os, sys, pathlib
+sys.path.insert(0, {str(ROOT)!r})
+import streamlit_app
+import plumbline.app.ops as before
+d = pathlib.Path({str(tmp_path)!r}); f = d / "x.py"; f.write_text("")
+streamlit_app.fresh_code(d)                       # first look at d: records its stamp
+print("unchanged", streamlit_app.fresh_code(d))
+os.utime(f, ns=(1, 10**19))                        # the push: a file changed on disk
+print("changed", streamlit_app.fresh_code(d))
+import plumbline.app.ops as after
+print("same_module", after is before, "has_new", hasattr(after, "unused_words"))
+"""
+    r = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120,
+                       env={**os.environ, "PLUMBLINE_DEMO_DIR": str(tmp_path / "demo")})
+    out = r.stdout
+    assert "unchanged False" in out and "changed True" in out and "same_module False has_new True" in out, r.stderr[-2000:]

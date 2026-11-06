@@ -25,6 +25,28 @@ os.environ.setdefault("PLUMBLINE_DUCKDB_MEMORY", "1GB")
 
 import streamlit as st  # noqa: E402
 
+
+def fresh_code(src: Path = Path(__file__).resolve().parent / "src" / "plumbline") -> bool:
+    """Load all of plumbline again, together, when its files changed under a running app.
+
+    A push to a hosted app pulls new files into the live process. This script re-runs, but modules it
+    imported stay as they were: the new page called O.unused_words, which the old ops module lacked, and
+    an earlier half-reload left two NotRecorded classes. Dropping every plumbline module at once (and the
+    caches built from them) means the next import is one consistent version. True when it reloaded."""
+    stamp = max((f.stat().st_mtime_ns for f in src.rglob("*.py")), default=0)
+    seen = getattr(sys, "_plumbline_code_stamp", None)
+    sys._plumbline_code_stamp = stamp
+    if seen is None or seen == stamp:
+        return False
+    for name in [m for m in sys.modules if m == "plumbline" or m.startswith("plumbline.")]:
+        del sys.modules[name]
+    st.cache_resource.clear()
+    st.cache_data.clear()
+    return True
+
+
+fresh_code()
+
 from plumbline.app import preflight  # noqa: E402  (standard library only)
 
 st.set_page_config(page_title="Plumbline", page_icon="📏", layout="wide")
@@ -690,8 +712,8 @@ def agent():
 
 
 def activity():
-    header("Activity log", "Everything done in this app, by whom, and what it found.")
-    r = LOG.recent(200)
+    header("Activity log", "Everything you did in this app, and what it found. Other visitors' actions stay private.")
+    r = LOG.recent(200, who=st.session_state.setdefault("visitor", f"visitor-{uuid.uuid4().hex[:4]}"))
     if r.empty:
         st.info("Nothing yet. Run a sync, fix an identity, forget someone or save an audience.")
         return
@@ -791,6 +813,7 @@ def ask_data_page():
         if not sql.strip():     # clicking the selected pill unselects it; an empty box is not an attack to judge
             st.markdown('<p class="note">Pick an attempt above, or write your own SQL.</p>', unsafe_allow_html=True)
             return
+        import duckdb
         from plumbline.ai.ask_data import Rejected, check_sql, run_sql
         try:
             safe = check_sql(sql)
@@ -801,6 +824,10 @@ def ask_data_page():
         except Rejected as e:
             verdict(False, f"Blocked: {e}.")
             log_change("attack", "ask data: blocked attempt", {"sql": sql[:200], "why": str(e)})
+        except duckdb.Error as e:          # passed the guard, failed in the database: a typo, or the 10-second limit
+            why = ("stopped at the 10-second limit" if "interrupt" in str(e).lower()
+                   else str(e).splitlines()[0][:160])
+            verdict(False, f"Allowed by the guard, but the query failed: {why}.")
         how("The SQL is parsed (sqlglot) before it runs. One SELECT only; tables must be data products; columns are an "
             "allow-list (DuckDB can select columns by pattern, or a whole row through a table alias, which a block-list misses); "
             "no table functions; a row cap; a read-only connection with a 10-second limit.")

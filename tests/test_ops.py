@@ -132,3 +132,12 @@ def test_the_activity_log_stays_bounded_and_survives_a_torn_line(tmp_path):
         f.write('{"at": "2026-01-01", "who": "v", "act')
     r = log.recent()
     assert r.action.iloc[0] == "a11"
+
+
+def test_the_activity_log_can_be_read_for_one_visitor_only(tmp_path):
+    log = O.ActivityLog(tmp_path / "a.jsonl")
+    for i in range(30):
+        log.add("visitor-aaaa" if i % 3 == 0 else "visitor-bbbb", f"step {i}", {})
+    mine = log.recent(5, who="visitor-aaaa")
+    assert list(mine.who.unique()) == ["visitor-aaaa"] and len(mine) == 5 and mine.action.iloc[0] == "step 27"
+    assert len(log.recent(50)) == 30

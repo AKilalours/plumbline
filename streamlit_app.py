@@ -540,6 +540,9 @@ def audiences():
     if rules["channel"]:
         chips += f'<span class="chip">{O.CHANNELS[rules["channel"]]} only</span>'
     st.markdown(f'<div class="mono">Interpreted as</div>{chips or "<span class=chip>everyone</span>"}', unsafe_allow_html=True)
+    if dropped := O.unused_words(text or ""):
+        st.markdown(f'<p class="note">Not understood, so not used: <b>{html.escape(", ".join(dropped))}</b>. '
+                    'The segment below ignores these words.</p>', unsafe_allow_html=True)
     with st.expander("Edit the rules"):
         flags = st.pills("Must be", list(O.FLAGS), default=[f for f, v in rules["flags"].items() if v],
                          format_func=O.FLAGS.get, selection_mode="multi", key=f"flags_{text}")

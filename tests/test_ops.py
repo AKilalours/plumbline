@@ -72,6 +72,24 @@ def test_a_sentence_becomes_rules_that_are_shown_before_they_run(text, flags, ch
     assert rules["flags"] == flags and rules["channel"] == channel and understood
 
 
+@pytest.mark.parametrize("text", ["income band at least 4", "income 4+", "income band 4", "income of at least 4"])
+def test_an_income_floor_is_read_however_it_is_phrased(text):
+    assert O.parse_audience(text)[0]["income_min"] == 4          # "at least" used to be dropped silently
+
+
+@pytest.mark.parametrize("text,dropped", [
+    ("people in Brooklyn who bought shoes", ["brooklyn", "shoes"]),      # live, this became "customers" silently
+    ("homeowners who moved recently, reach by mail", []),
+    ("lapsed high-value customers we can email", []),
+    ("people who never bought, by mail", []),
+    ("affluent renters", []),
+    ("income band at least 4 who can be emailed", []),
+    ("lapsed high-value customers by email", []), ("customers who moved, by mail", []), ("affluent prospects by email", []),
+])
+def test_words_that_change_nothing_are_named_not_silently_dropped(text, dropped):
+    assert O.unused_words(text) == dropped
+
+
 def test_an_audience_never_reaches_someone_who_opted_out_and_says_why_others_were_left_out(world):
     with Q.connect(world) as con:
         a = O.audience(con, {"flags": {"is_customer": True}, "income_min": None, "channel": "email_ok"})

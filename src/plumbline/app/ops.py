@@ -227,6 +227,9 @@ _WORDS = [  # phrase -> (field, value); checked in order, longest first, so "not
 ]
 
 
+_INCOME = r"income (band )?(at least |of at least |>= ?|above )?(?P<band>\d)\+?"
+
+
 def parse_audience(text: str) -> tuple[dict, list[str]]:
     """A sentence -> typed rules {flags: {field: bool}, income_min: int|None, channel: str|None}, and the
     phrases it understood. Nothing is guessed: words it does not know change nothing, and the rules
@@ -249,11 +252,29 @@ def parse_audience(text: str) -> tuple[dict, list[str]]:
             continue
         understood.append(m.group(0))
         t = t[:m.start()] + " " * (m.end() - m.start()) + t[m.end():]
-    m = re.search(r"income (band )?(\d)\+?", text.lower())
+    m = re.search(_INCOME, text.lower())
     if m:
-        rules["income_min"] = int(m.group(2))
+        rules["income_min"] = int(m.group("band"))
         understood.append(m.group(0))
     return rules, understood
+
+
+_FILLER = set("""a an the and or but of in on at to by via for from with without who whom which that this those these
+is are was were be been have has had do does did can could we us our you your they them their i me my it its
+people person persons everyone anyone all any some users folks ones only also just please want need find show list get
+give send target reach contact recently recent lately new last days day weeks months year years ago 90 180 who've
+we'd""".split())
+
+
+def unused_words(text: str) -> list[str]:
+    """Words in the sentence that changed nothing: no rule matched them and they are not filler.
+    "people in Brooklyn who bought shoes" became "customers" with Brooklyn and shoes silently dropped;
+    naming them tells the reader the audience is broader than the sentence."""
+    t = text.lower()
+    for pat, _ in _WORDS:
+        t = re.sub(pat, " ", t)
+    t = re.sub(_INCOME, " ", t)
+    return [w for w in re.findall(r"[a-z0-9']+", t) if w not in _FILLER]
 
 
 def audience(con, rules: dict) -> dict:

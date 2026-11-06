@@ -65,15 +65,29 @@ def _ts(v: str) -> str:
     return v.rstrip("Z")
 
 
+def _literal(v: str) -> str:
+    """A full timestamp for a SoQL comparison, in the form the API returns ('2026-10-01T00:00:00.000').
+    Accepts a date, a timestamp, or one ending in Z; anything else is refused before a request is made."""
+    v = v.strip().rstrip("Z")
+    try:
+        d = datetime.fromisoformat(v)
+    except ValueError:
+        raise SocrataError(f"not a date or timestamp: {v!r}") from None
+    return d.strftime("%Y-%m-%dT%H:%M:%S") + f".{d.microsecond // 1000:03d}"
+
+
 def _query(dataset: str, cursor: tuple[str, str] | None, since: str | None, limit: int) -> str:
     if cursor:
         t, rid = cursor
+        t = _literal(t)
         where = f":updated_at > '{t}' OR (:updated_at = '{t}' AND :id > '{rid}')"
     elif since:
-        where = f":updated_at >= '{since}'"
+        where = f":updated_at >= '{_literal(since)}'"
     else:
         where = None
-    q = {"$select": ":id,:updated_at,*", "$order": ":updated_at,:id", "$limit": limit}
+    # The star must come first: NYC's API refused ":id,:updated_at,*" with HTTP 400 ("Star selections must
+    # come at the start of the select-list"), checked against data.cityofnewyork.us on 2026-11-06.
+    q = {"$select": "*, :id, :updated_at", "$order": ":updated_at,:id", "$limit": limit}
     if where:
         q["$where"] = where
     return f"/resource/{dataset}.json?" + urllib.parse.urlencode(q, quote_via=urllib.parse.quote)
@@ -81,8 +95,11 @@ def _query(dataset: str, cursor: tuple[str, str] | None, since: str | None, limi
 
 def _flat(row: dict) -> dict:
     """Scalars only: nested values (map points, links) are dropped, not stringified."""
-    return {SYSTEM.get(k, k): v for k, v in row.items()
-            if (k in SYSTEM or not k.startswith(":")) and not isinstance(v, (dict, list))}
+    out = {SYSTEM.get(k, k): v for k, v in row.items()
+           if (k in SYSTEM or not k.startswith(":")) and not isinstance(v, (dict, list))}
+    if "source_updated_at" in out:     # landed as the cursor compares it; Python 3.10 cannot parse a trailing Z
+        out["source_updated_at"] = _ts(out["source_updated_at"])
+    return out
 
 
 def _to_csv(rows: list[dict], columns: list[str]) -> str:
@@ -91,6 +108,18 @@ def _to_csv(rows: list[dict], columns: list[str]) -> str:
     w.writeheader()
     w.writerows(rows)
     return buf.getvalue()
+
+
+def bulk_rewrite(stamps: dict, page_size: int, share: float = 0.9) -> dict | None:
+    """Did one update time cover most of this sync? NYC's DOB permit issuance (ipu4-2q9a) stamped 3,898,188
+    of its 3,991,259 rows with one time on 2026-11-05: the publisher reloaded the table, so "changed since
+    the last sync" means nearly everything. Reported, so the cost is a decision, not a surprise; the loader's
+    row hashes still store an unchanged row only once."""
+    n = sum(stamps.values())
+    if not n:
+        return None
+    t, k = max(stamps.items(), key=lambda kv: kv[1])
+    return {"timestamp": t, "rows": k, "of": n, "share": round(k / n, 4)} if k >= 2 * page_size and k / n >= share else None
 
 
 def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *, name: str, page_size: int = 1000,
@@ -110,7 +139,7 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
     else:
         start = (datetime.fromisoformat(state["watermark"]) - overlap).strftime("%Y-%m-%dT%H:%M:%S") \
             if state["watermark"] else since
-        run = {"sync_id": state["next_sync"], "page": 0, "since": start, "cursor": None, "max_seen": state["watermark"]}
+        run = {"sync_id": state["next_sync"], "page": 0, "since": start, "cursor": None, "max_seen": state["watermark"], "stamps": {}}
     pages = 0
     while True:
         body, _ = client.get(_query(dataset, tuple(run["cursor"]) if run["cursor"] else None, run["since"], page_size), stats)
@@ -135,11 +164,18 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
             run["cursor"] = cursor
             top = max(_ts(r["source_updated_at"]) for r in rows)
             run["max_seen"] = max(run["max_seen"] or top, top)
+            stamps = run.setdefault("stamps", {})
+            for r in rows:
+                t = _ts(r["source_updated_at"])
+                stamps[t] = stamps.get(t, 0) + 1
+            if len(stamps) > 50:                       # keep the state small: only the largest groups matter
+                run["stamps"] = dict(sorted(stamps.items(), key=lambda kv: -kv[1])[:50])
         stats.pages += 1
         stats.orders += len(rows)                 # rows, in the store's counter
         done = len(rows) < page_size or (max_pages is not None and pages >= max_pages)
         state["in_progress"] = None if done else run
         if done:
+            state["bulk_rewrite"] = bulk_rewrite(run.get("stamps", {}), page_size)
             state["watermark"] = run["max_seen"]
             state["next_sync"] = run["sync_id"] + 1
             state["last_sync_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

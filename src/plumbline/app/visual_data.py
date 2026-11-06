@@ -156,3 +156,55 @@ def why(truth: bool, matcher: bool, p: float) -> str:
     if p < 0.5 and matcher:
         return "A weak pair, joined rightly through the person's other records."
     return ""
+
+
+def city(con, run: Path, k: int = 140, seed: int = 11) -> dict:
+    """The live pipeline view: real totals for the whole city, and a sample of resolved people with the
+    records each was built from, checked against the answer key (a person holding a stranger's record is
+    marked, not hidden)."""
+    from .queries import links
+    ledger = con.execute("""SELECT source, sum(rows_in), sum(rows_loaded), sum(coalesce(rows_quarantined, 0)),
+                                   sum(coalesce(rows_suppressed, 0)), sum(coalesce(rows_already_present, 0))
+                            FROM ingest_ledger GROUP BY 1""").fetchall()
+    totals = {"rows_in": {}, "loaded": 0, "quarantined": 0, "suppressed": 0, "already": 0}
+    for src, rin, lo, q, sup, al in ledger:
+        totals["rows_in"][src] = int(rin)
+        totals["loaded"] += int(lo)
+        totals["quarantined"] += int(q)
+        totals["suppressed"] += int(sup)
+        totals["already"] += int(al)
+    totals["records"], totals["people"] = (int(x) for x in con.execute(
+        "SELECT count(*), count(DISTINCT person_key) FROM identity_records").fetchone())
+    totals["households"] = int(con.execute("SELECT count(*) FROM products.dim_household").fetchone()[0])
+    totals["audience"] = int(con.execute("SELECT count(*) FROM products.mart_activation_audience").fetchone()[0])
+    reasons = [{"source": s, "reason": r, "rows": int(n)} for s, r, n in con.execute(
+        "SELECT source, reason, count(*) FROM quarantine GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 6").fetchall()]
+
+    recs = con.execute("""SELECT person_key, source, record_id, first_name, last_name, email, house, street, zip
+                          FROM identity_records""").df()
+    owner = links(run).assign(uid=lambda d: d.source + ":" + d.record_id).set_index("uid").person_id
+    recs["truth"] = (recs.source + ":" + recs.record_id).map(owner)
+    g = recs.groupby("person_key")
+    n_src = g.source.nunique()
+    rnd = random.Random(seed)
+    # More multi-source people than their share: that is where the joining happens. A few mistakes on purpose.
+    mixed = [p for p, t in g.truth.nunique().items() if t > 1]
+    pools = [list(n_src[n_src == 3].index), list(n_src[n_src == 2].index), list(n_src[n_src == 1].index)]
+    want = [int(k * 0.45), int(k * 0.35), k]
+    chosen = rnd.sample(mixed, min(4, len(mixed)))
+    for pool, w in zip(pools, want):
+        pool = [p for p in pool if p not in chosen]
+        chosen += rnd.sample(pool, min(len(pool), max(0, min(w, k - len(chosen)))))
+    people = []
+    for p in chosen[:k]:
+        rows = g.get_group(p)
+        clean = lambda v: "" if pd.isna(v) else str(v)
+        first = rows.first_name.dropna().astype(str).str.title().mode()
+        last = rows.last_name.dropna().astype(str).str.title().mode()
+        people.append({"name": f"{first.iloc[0] if len(first) else ''} {last.iloc[0] if len(last) else ''}".strip() or "unnamed",
+                       "mixed": bool(rows.truth.nunique() > 1),
+                       "records": [{"source": r.source, "name": f"{clean(r.first_name)} {clean(r.last_name)}".strip(),
+                                    "email": clean(r.email), "address": f"{clean(r.house)} {clean(r.street)} {clean(r.zip)}".strip()}
+                                   for r in rows.itertuples()]})
+    return {"totals": totals, "reasons": reasons, "people": people,
+            "sources": {s: {"label": SOURCE.get(s, (s, GREY))[0], "color": SOURCE.get(s, (s, GREY))[1]} for s in totals["rows_in"]}}

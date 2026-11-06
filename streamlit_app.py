@@ -165,8 +165,10 @@ def _already_built() -> bool:
 def demo():
     """Built once per server (the first viewer watches each stage run), then read from disk by all.
     The lock keeps two first viewers from building into one folder."""
-    if "demo" in st.session_state:
-        return st.session_state.demo
+    from plumbline.app.demo import reference_fingerprint
+    held = st.session_state.get("demo")
+    if held is not None and getattr(held, "reference", None) == reference_fingerprint():
+        return held                      # a session opened before a rebuild must not keep the old world
     if _already_built():
         with _build_lock():
             st.session_state.demo = build(ROOT, N_PEOPLE, SEED)
@@ -211,7 +213,10 @@ def base_scores(_d, key):
 
 
 def key(d) -> str:
-    return f"{d.n_people}-{d.seed}"
+    """What the page caches are keyed on. Size and seed alone once kept the Overview drawing the old
+    test-fixture city after the live app rebuilt on real buildings: a cache filled from the old world
+    answered for the new one."""
+    return f"{d.n_people}-{d.seed}-{d.reference}"
 
 
 def num(x, digits: int = 3) -> str:
@@ -1039,6 +1044,12 @@ def flows(_d, key):
 
 
 @st.cache_data(show_spinner=False)
+def city_data(_d, key):
+    with Q.connect(_d) as con:
+        return VD.city(con, _d.run)
+
+
+@st.cache_data(show_spinner=False)
 def game_pairs(_d, key):
     with Q.connect(_d) as con:
         return VD.game(con, _d.run)
@@ -1047,7 +1058,9 @@ def game_pairs(_d, key):
 def overview():
     d = demo()
     header("Overview")
-    viz("flow", {"views": flows(d, key(d))[::-1]}, 120)
+    viz("city", city_data(d, key(d)), 120)
+    with st.expander("The same city as a flow chart"):
+        viz("flow", {"views": flows(d, key(d))[::-1]}, 120)
     rows = checks(d, key(d))
     cols = st.columns(6)
     for col, c in zip(cols, rows):
@@ -1094,17 +1107,26 @@ def worth_buying():
         "cutoffs, so this model cannot measure its fields yet; its value today is reach. `python -m plumbline.ml.source_value`.")
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def open_data_runs() -> list[dict]:
+    from plumbline.ingest import open_data_daily as OD
+    return OD.history(url=OD.HISTORY_URL)
+
+
 def open_data():
-    """A real public source: NYC Open Data, through the same connector rules as the store API."""
+    """A real public source: NYC Open Data, synced every day by a scheduled job, every run on the record."""
+    from plumbline.ingest import open_data_daily as OD
+    runs = open_data_runs()
+    st.markdown(f'<span class="chip blue">NYC Open Data · {OD.DATASET}</span><span class="chip">{OD.TITLE}</span>'
+                '<span class="chip">synced daily</span>', unsafe_allow_html=True)
+    viz("history", {"runs": runs[-60:], "summary": OD.summary(runs), "title": OD.TITLE}, 120)
     od = json.loads((Path(__file__).parent / "docs/results/onboarding_time.json").read_text())
     real = od.get("where") != "local"
-    st.markdown(f'<span class="chip blue">dataset {html.escape(od["dataset"])}</span>'
-                f'<span class="chip">{"NYC Open Data" if real else "local test API"} · {html.escape(od["measured_at"][:10])}</span>',
-                unsafe_allow_html=True)
-    viz("onboard", {"run": od}, 120)
-    if not real:
-        st.caption("Measured against the local test API. On a machine with internet: "
-                   "`python -m plumbline.ingest.onboard_source ipu4-2q9a --name permits --since 2026-10-01` replaces it with a real run.")
+    with st.expander(f"Time to onboard a new dataset ({'NYC Open Data' if real else 'local test API'}, {od['measured_at'][:10]})"):
+        viz("onboard", {"run": od}, 120)
+        if not real:
+            st.caption("Measured against the local test API. `python -m plumbline.ingest.onboard_source rbx6-tga4 --name dob_now_permits "
+                       "--since 2026-11-01` on a machine with internet replaces it with a real run.")
     st.markdown('<div class="mono" style="margin-top:1rem">Try it: onboard a dataset nobody has described</div>', unsafe_allow_html=True)
     c = st.columns(3)
     p429 = c[0].slider("Throttled (429)", 0, 40, 15, 5, format="%d%%", key="od_429")
@@ -1133,7 +1155,9 @@ def open_data():
         viz("onboard", {"run": r}, 120)
         with st.expander("The drafted contract (goes to sources/drafts/ for a person to read)"):
             st.code(last["draft"], language="yaml")
-    how("The connector pulls only rows changed since the last sync (by the city's own update time, with a 5-minute overlap), pages by "
+    how("Every morning a scheduled job (.github/workflows/open_data.yml) pulls the permits NYC changed since its last cursor and "
+        "loads them under a reviewed contract (sources/open_data/); each run, failed ones included, is one line of history on the "
+        "open-data-history branch. The connector pulls only rows changed since the last sync (by the city's own update time, with a 5-minute overlap), pages by "
         "(update time, row id) so a row corrected mid-sync is not skipped, retries throttles and server errors, saves each page before "
         "its cursor, and drops columns that name or contact a person before anything is written. A new public dataset onboards with one "
         "command: sync the first delivery, draft its contract, check it with the loader every contract goes through, load it. The draft "

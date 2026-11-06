@@ -170,3 +170,26 @@ def test_a_new_public_dataset_onboards_end_to_end_and_every_step_is_timed(api, t
     assert "street_name" not in r["dropped_personal"] and "owner_s_first_name" in r["dropped_personal"]
     draft = (tmp_path / "drafts" / "permits.yaml").read_text()
     assert "key:\n- source_row_id" in draft and "latest_by:\n- source_updated_at" in draft
+
+
+def test_the_query_puts_the_star_first_as_the_real_api_requires(api, tmp_path):
+    """NYC's API refused "$select=:id,:updated_at,*" with HTTP 400 on the first real run; the local server
+    accepted it. The server now refuses it too, so this fails if the order comes back."""
+    ds, url = api(rows=300)
+    first = min(r[":updated_at"] for r in ds.rows.values())[:10]           # a bare date, which NYC accepts
+    st = sync_dataset(_client(url), "rbx6-tga4", tmp_path / "land", name="permits", page_size=100, since=first)
+    assert st.orders == 300
+
+
+def test_a_refused_query_reports_the_apis_reason_not_just_the_status(api, tmp_path):
+    from urllib.parse import urlencode
+    from plumbline.ingest.connectors.store_api import StoreAPIError, SyncStats
+    _, url = api(rows=10)
+    with pytest.raises(StoreAPIError, match="HTTP 400 .*Star selections must come at the start"):
+        _client(url).get("/resource/x.json?" + urlencode({"$select": ":id,:updated_at,*"}), SyncStats())
+
+
+def test_a_since_that_is_not_a_date_is_refused_before_any_request(api, tmp_path):
+    _, url = api(rows=10)
+    with pytest.raises(SocrataError, match="not a date"):
+        sync_dataset(_client(url), "x", tmp_path / "l", name="x", since="last tuesday")

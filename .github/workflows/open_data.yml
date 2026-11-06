@@ -1,0 +1,50 @@
+# Every morning: pull what NYC changed in DOB NOW approved permits since the last cursor, load it under the
+# reviewed contract, and record the run (failed runs too) on the open-data-history branch. Only that branch
+# gets these commits, so main's history and contributors stay the author's own.
+name: open data
+on:
+  schedule:
+    - cron: "23 11 * * *"        # 06:23 New York time in winter
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: open-data
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e .
+      - name: Bring back the cursor and the run history
+        run: |
+          git fetch origin open-data-history || true
+          if git rev-parse --verify -q origin/open-data-history >/dev/null; then
+            git worktree add /tmp/hist origin/open-data-history
+          else
+            git worktree add --detach /tmp/hist
+            cd /tmp/hist && git switch --orphan open-data-history-new && cd -
+          fi
+          mkdir -p docs/results/open_data
+          cp -r /tmp/hist/state docs/results/open_data/ 2>/dev/null || true
+          cp /tmp/hist/runs.jsonl docs/results/open_data/ 2>/dev/null || true
+      - name: Sync from NYC Open Data
+        env:
+          SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
+        run: python -m plumbline.ingest.open_data_daily
+      - name: Save the cursor and the run history (after a failed run too)
+        if: always()
+        run: |
+          cp -r docs/results/open_data/state /tmp/hist/ 2>/dev/null || true
+          cp docs/results/open_data/runs.jsonl /tmp/hist/ 2>/dev/null || true
+          cd /tmp/hist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "open data run $(date -u +%Y-%m-%d)" || exit 0
+          git push origin HEAD:refs/heads/open-data-history

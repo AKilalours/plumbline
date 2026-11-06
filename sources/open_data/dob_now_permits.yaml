@@ -1,0 +1,42 @@
+# DOB NOW: Build, Approved Permits (NYC Open Data rbx6-tga4), synced daily by the Socrata connector.
+# Written from the dataset's published columns and checked against real rows on 2026-11-06. Columns
+# that name or contact a person (applicant, filing representative, owner, permittee) never reach this
+# contract: the connector drops them before anything is written. The API leaves out a field that is
+# empty on every row of a page, so all but the key, version and permit columns are optional.
+name: dob_now_permits
+kind: api
+files: "sources/dob_now_permits/*.csv"
+key: [source_row_id]
+latest_by: [source_updated_at]
+columns:
+  source_row_id:       {type: string, required: true, pattern: '^row-[\w.~-]+$'}
+  source_updated_at:   {type: timestamp, required: true}
+  job_filing_number:   {type: string, required: true}
+  work_permit:         {type: string, required: true}
+  sequence_number:     {type: int, min: 0, optional: true}
+  filing_reason:       {type: string, optional: true}
+  permit_status:       {type: string, optional: true}
+  work_type:           {type: string, optional: true}
+  work_on_floor:       {type: string, optional: true}
+  job_description:     {type: string, optional: true}
+  estimated_job_costs: {type: float, min: 0, optional: true}
+  approved_date:       {type: timestamp, optional: true}
+  issued_date:         {type: timestamp, optional: true}
+  expired_date:        {type: timestamp, optional: true}
+  tracking_number:     {type: string, optional: true}
+  house_no:            {type: string, optional: true}
+  street_name:         {type: string, optional: true}
+  apt_condo_no_s:      {type: string, optional: true}
+  borough:             {type: string, optional: true}
+  zip_code:            {type: zip, optional: true}
+  block:               {type: string, optional: true}
+  lot:                 {type: string, optional: true}
+  bin:                 {type: string, optional: true}
+  bbl:                 {type: string, pattern: '^[1-5]\d{9}$', optional: true}     # borough digit, then block and lot
+  c_b_no:              {type: string, optional: true}
+  community_board:     {type: string, optional: true}
+  council_district:    {type: string, optional: true}
+  census_tract:        {type: string, optional: true}
+  nta:                 {type: string, optional: true}
+  latitude:            {type: float, min: 40.47, max: 40.93, optional: true}      # inside New York City
+  longitude:           {type: float, min: -74.27, max: -73.68, optional: true}

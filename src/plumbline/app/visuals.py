@@ -7,13 +7,13 @@ caller, which reads it from the warehouse or a saved result, so a test can check
 
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
-Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard.
+Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -328,6 +328,168 @@ R.onboard = () => {
     <div style="margin-top:14px"><div class="mono">Columns that name a person, never written</div>${r.dropped_personal.map(c => `<span class="chip gone">${esc(c)}</span>`).join('') || '<span class="cap">none</span>'}</div>
     ${r.drift.length ? `<div style="margin-top:10px"><div class="mono">New columns, reported and held back</div>${r.drift.map(c => `<span class="chip new">${esc(c)}</span>`).join('')}</div>` : ''}`;
   app.appendChild(t);
+};
+
+// Every scheduled run against the live API: rows pulled, and the whole record on hover. Failed runs stay red.
+R.history = () => {
+  const runs = D.runs, S = D.summary;
+  if (!runs.length) {
+    app.innerHTML = `<div class="card fade"><div class="mono">Scheduled sync</div>
+      <div style="font-size:22px;font-weight:600;margin:8px 0">The first daily run has not happened yet</div>
+      <div class="cap" style="margin:0">Each morning the job pulls what NYC changed since its last cursor and records the run here, failures included.</div></div>`;
+    return;
+  }
+  const last = S.last, days = Math.max(1, Math.round((Date.parse(last.run_at) - Date.parse(S.first)) / 864e5) + 1);
+  app.appendChild(tiles([
+    {label: 'On schedule since', value: S.first.slice(0, 10), fmt: 'raw', sub: `${days} day${days > 1 ? 's' : ''}`, tone: 'info'},
+    {label: 'Runs that succeeded', value: S.succeeded, fmt: 'int', sub: `of ${S.runs}`, tone: S.succeeded === S.runs ? 'pass' : 'warn'},
+    {label: 'Rows pulled from NYC', value: S.rows, fmt: 'int', sub: `${F.int(S.retries)} requests retried`, tone: 'info'},
+    {label: 'Behind the source', value: last.hours_behind_source ?? 0, fmt: 'raw', sub: 'hours, at the last run', tone: (last.hours_behind_source ?? 99) <= 30 ? 'pass' : 'warn'}]));
+  if (last.bulk_rewrite) {
+    const b = document.createElement('div'); b.className = 'card fade'; b.style.marginTop = '12px'; b.style.borderColor = 'var(--gold)';
+    b.innerHTML = `<div class="mono">Publisher reloaded the table</div><div style="margin-top:6px;font-size:14px">${F.int(last.bulk_rewrite.rows)} of ${F.int(last.bulk_rewrite.of)} rows
+      carry one update time (${esc(last.bulk_rewrite.timestamp)}). Unchanged rows are stored once by their hash; the run is flagged, not hidden.</div>`;
+    app.appendChild(b);
+  }
+  const W = Math.max(320, app.clientWidth || 800), H = 150, n = runs.length, bw = Math.max(4, Math.min(28, (W - 20) / n - 4));
+  const mx = Math.max(1, ...runs.map(r => r.rows || 0));
+  const box = document.createElement('div'); box.style.marginTop = '14px';
+  let svg = `<div class="mono">Each run</div><svg width="${W}" height="${H + 22}" style="display:block;max-width:100%">`;
+  runs.forEach((r, i) => { const h = r.ok ? Math.max(3, (H - 10) * Math.sqrt((r.rows || 0) / mx)) : H - 10, x = 10 + i * (bw + 4);
+    svg += `<rect class="hr" data-i="${i}" x="${x}" y="${H - h}" width="${bw}" height="${h}" rx="3" fill="${r.ok ? (r.rows_quarantined ? 'var(--gold)' : 'var(--blue)') : 'var(--red)'}"
+      style="cursor:pointer;transform-origin:${x}px ${H}px;animation:rise .5s ${i * 25}ms both"/>`; });
+  svg += `<line x1="0" x2="${W}" y1="${H}" y2="${H}" stroke="#E6E6E6"/>
+    <text x="10" y="${H + 16}" font-size="11" fill="#6B6B6B">${esc(runs[0].run_at.slice(0, 10))}</text>
+    <text x="${W - 10}" y="${H + 16}" font-size="11" fill="#6B6B6B" text-anchor="end">${esc(last.run_at.slice(0, 10))}</text></svg>`;
+  box.innerHTML = svg; app.appendChild(box);
+  const cap = document.createElement('div'); cap.className = 'cap';
+  const tell = r => r.ok ? `${r.run_at.slice(0, 16).replace('T', ' ')} UTC: ${F.int(r.rows)} rows in ${r.pages} pages, ${r.retries} retried`
+      + (Object.keys(r.retries_by_cause || {}).length ? ` (${Object.entries(r.retries_by_cause).map(([k, v]) => v + '×' + k).join(', ')})` : '')
+      + (r.rows_loaded !== undefined ? `; ${F.int(r.rows_loaded)} loaded, ${F.int(r.rows_quarantined)} quarantined` : '') + `; ${r.seconds} s`
+      + (r.drift && r.drift.length ? `; new columns held back: ${r.drift.join(', ')}` : '')
+    : `${r.run_at.slice(0, 16).replace('T', ' ')} UTC: failed. ${r.error || ''}`;
+  cap.textContent = tell(last); app.appendChild(cap);
+  box.querySelectorAll('.hr').forEach(e => { e.onmouseenter = () => cap.textContent = tell(runs[+e.dataset.i]); e.onmouseleave = () => cap.textContent = tell(last); });
+};
+
+// The city's data, live: rows leave the sources, pass the contract gate (or drop into quarantine, or hit
+// the wall of people who asked to be forgotten), and the records of one person snap together into one node.
+// The animation plays a sample of real people; the counters are the whole city's totals.
+R.city = () => {
+  const T = D.totals, P = D.people, SRC = D.sources;
+  const order = ['crm', 'vendor', 'store', 'email', 'privacy'].filter(k => SRC[k]);
+  const head = document.createElement('div'); head.className = 'grid'; head.style.gridTemplateColumns = 'repeat(auto-fit,minmax(118px,1fr))';
+  const SHORT = {crm: 'CRM', vendor: 'Vendor', store: 'Store', email: 'Email', privacy: 'Privacy'};
+  const counters = [['Rows in', () => Object.values(T.rows_in).reduce((a, b) => a + b, 0), 'info'], ['Loaded', () => T.loaded, 'pass'],
+    ['Already had', () => T.already, 'info'], ['Quarantined', () => T.quarantined, 'warn'], ['Blocked: forgotten', () => T.suppressed, 'fail'],
+    ['People', () => T.people, 'pass']];
+  const cEls = counters.map(([l, , tone]) => { const d = document.createElement('div'); d.className = 'tile tone-' + tone; d.style.padding = '12px 14px';
+    d.innerHTML = `<span class="bar"></span><div class="mono">${l}</div><div class="v num" style="font-size:26px">0</div>`; head.appendChild(d); return d.querySelector('.v'); });
+  const ctl = document.createElement('div'); ctl.className = 'row'; ctl.style.margin = '12px 0 6px';
+  const play = document.createElement('button'); play.className = 'btn blue'; play.style.padding = '7px 16px'; play.textContent = 'Pause';
+  const again = document.createElement('button'); again.className = 'btn'; again.style.padding = '7px 16px'; again.textContent = 'Replay';
+  let speed = 1; const sp = seg(['1×', '3×', '10×'], '1×', v => speed = parseFloat(v));
+  const note = document.createElement('span'); note.className = 'cap'; note.style.margin = '0';
+  note.textContent = `Animated: ${P.length} real people of ${F.int(T.people)}. Counters: the whole city. Click a person.`;
+  ctl.append(play, again, sp, note);
+  const cv = document.createElement('canvas'); cv.style.width = '100%'; cv.style.display = 'block'; cv.style.borderRadius = '18px';
+  cv.style.background = 'linear-gradient(180deg,#FBFCFF 0%,#F3F5FC 100%)'; cv.style.border = '1px solid var(--line)'; cv.style.cursor = 'pointer';
+  const panel = document.createElement('div'); panel.className = 'cap'; panel.style.minHeight = '22px';
+  app.append(head, ctl, cv, panel);
+  const ctx = cv.getContext('2d'); let W = 0, H = 0, narrow = false;
+  let nodes = [], parts = [], t = 0, running = true, last = performance.now(), pick = null, hover = null;
+  const DUR = 26;                                  // seconds of story at 1x
+  function layout() {
+    W = Math.max(320, cv.clientWidth); narrow = W < 620; H = narrow ? 520 : 470;
+    const dpr = window.devicePixelRatio || 1; cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + 'px'; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const gx = narrow ? W * 0.30 : W * 0.25, zx0 = gx + (narrow ? 26 : 50), zx1 = W - 16, zy0 = 44, zy1 = H - (narrow ? 110 : 96);
+    const cols = Math.max(6, Math.round(Math.sqrt(P.length * (zx1 - zx0) / (zy1 - zy0)))), rows = Math.ceil(P.length / cols);
+    const dx = (zx1 - zx0) / cols, dy = (zy1 - zy0) / rows;
+    const rnd = mulberry(7), slot = P.map((_, i) => i);
+    for (let i = slot.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [slot[i], slot[j]] = [slot[j], slot[i]]; }   // organic, not sorted by type
+    nodes = P.map((p, k) => ({p, i: slot[k], x: 0, y: 0, got: [], r: 0})).map(n => ({...n, x: zx0 + dx * (n.i % cols + .5) + (rnd() - .5) * dx * .45, y: zy0 + dy * (Math.floor(n.i / cols) + .5) + (rnd() - .5) * dy * .45}));
+    const srcY = {}; order.forEach((k, i) => srcY[k] = 54 + i * ((H - 150) / Math.max(1, order.length - 1)));
+    geo = {gx, srcX: narrow ? 12 : 24, srcY, zy1, binX: narrow ? 14 : 24, binY: H - 52, wallX: gx + 6};
+    build();
+  }
+  let geo = {};
+  function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function build() {
+    const rnd = mulberry(11); parts = [];
+    nodes.forEach(n => n.p.records.forEach((r, j) => parts.push({kind: 'rec', src: r.source, node: n, rec: r, t0: rnd() * 0.72 + j * 0.01})));
+    const q = Math.min(T.quarantined, 10), sup = Math.min(T.suppressed, 10), em = Math.min(60, Math.round(P.length * 0.6));
+    for (let i = 0; i < q; i++) parts.push({kind: 'q', src: (D.reasons[i % Math.max(1, D.reasons.length)] || {}).source || 'email', t0: 0.1 + rnd() * 0.7});
+    for (let i = 0; i < sup; i++) parts.push({kind: 'sup', src: order[Math.floor(rnd() * Math.min(3, order.length))], t0: 0.1 + rnd() * 0.7});
+    if (SRC.privacy) for (let i = 0; i < Math.min(8, T.rows_in.privacy || 0); i++) parts.push({kind: 'sup', req: true, src: 'privacy', t0: 0.02 + rnd() * 0.6});
+    for (let i = 0; i < em && SRC.email; i++) parts.push({kind: 'email', src: 'email', node: nodes[Math.floor(rnd() * nodes.length)], t0: 0.05 + rnd() * 0.8});
+    parts.sort((a, b) => a.t0 - b.t0); nodes.forEach(n => { n.got = []; n.r = 0; });
+  }
+  const ease = x => x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+  const col = k => (SRC[k] || {color: '#9A9A9A'}).color;
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // sources
+    ctx.font = `500 ${narrow ? 11 : 12.5}px Geist, sans-serif`; ctx.textBaseline = 'middle';
+    order.forEach(k => { const y = geo.srcY[k]; ctx.fillStyle = col(k); ctx.beginPath(); ctx.roundRect(geo.srcX, y - 15, narrow ? 58 : 116, 30, 9); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(narrow ? SHORT[k] || k : SRC[k].label, geo.srcX + 8, y); });
+    // the contract gate
+    ctx.strokeStyle = 'rgba(41,65,185,.35)'; ctx.setLineDash([4, 6]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(geo.gx, 26); ctx.lineTo(geo.gx, geo.zy1 + 8); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#2941B9'; ctx.font = `500 10.5px 'Geist Mono', monospace`; ctx.fillText('CONTRACTS', geo.gx - 30, 16);
+    // quarantine and forgotten bins
+    ctx.fillStyle = 'rgba(229,183,77,.16)'; ctx.strokeStyle = 'rgba(229,183,77,.7)'; ctx.beginPath(); ctx.roundRect(geo.binX, geo.binY - 18, narrow ? 70 : 104, 40, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#7A5A06'; ctx.font = `500 10px 'Geist Mono', monospace`; ctx.fillText('QUARANTINE', geo.binX + 8, geo.binY - 6);
+    const wx = geo.binX + (narrow ? 80 : 118);
+    ctx.fillStyle = 'rgba(194,65,45,.12)'; ctx.strokeStyle = 'rgba(194,65,45,.6)'; ctx.beginPath(); ctx.roundRect(wx, geo.binY - 18, narrow ? 70 : 104, 40, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#8E2A1B'; ctx.fillText('FORGOTTEN', wx + 8, geo.binY - 6);
+    ctx.fillStyle = '#6B6B6B'; ctx.font = `500 10.5px 'Geist Mono', monospace`; ctx.fillText('PEOPLE, RESOLVED', geo.gx + 18, 30);
+    if (!narrow) { ctx.font = `400 11.5px Geist, sans-serif`; ctx.textAlign = 'right';
+      ctx.fillText('ring: each record, colored by its source  ·  red center: a stranger\'s record was joined (answer key)', W - 18, H - 18); ctx.textAlign = 'left'; }
+    // people
+    nodes.forEach(n => { if (!n.got.length) { ctx.fillStyle = 'rgba(17,25,111,.07)'; ctx.beginPath(); ctx.arc(n.x, n.y, 2.2, 0, 7); ctx.fill(); return; }
+      const R = 3.5 + 1.8 * Math.sqrt(n.got.length) * (narrow ? .8 : 1.15); n.r += (R - n.r) * .15;
+      const per = (Math.PI * 2) / n.got.length; n.got.forEach((s, j) => { ctx.strokeStyle = col(s); ctx.lineWidth = narrow ? 2.5 : 3.2;
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.r, j * per - Math.PI / 2, (j + 1) * per - Math.PI / 2 - .12); ctx.stroke(); });
+      ctx.fillStyle = n.p.mixed && n.got.length === n.p.records.length ? 'rgba(194,65,45,.85)' : (n === pick ? '#2941B9' : '#fff');
+      ctx.beginPath(); ctx.arc(n.x, n.y, Math.max(1.5, n.r - 2.6), 0, 7); ctx.fill();
+      if (n === hover || n === pick) { ctx.strokeStyle = '#050505'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 4, 0, 7); ctx.stroke(); } });
+    // moving rows
+    parts.forEach(p => { const age = t - p.t0; if (age < 0) return;
+      const sx = geo.srcX + (narrow ? 58 : 116), sy = geo.srcY[p.src] ?? geo.srcY[order[0]];
+      if (p.kind === 'rec' || p.kind === 'email') {
+        const a1 = .07, a2 = .11, tx = p.node.x, ty = p.node.y;
+        let x, y; if (age < a1) { const e = ease(age / a1); x = sx + (geo.gx - sx) * e; y = sy; }
+        else if (age < a1 + a2) { const e = ease((age - a1) / a2); x = geo.gx + (tx - geo.gx) * e; y = sy + (ty - sy) * e - Math.sin(e * Math.PI) * 22; }
+        else { if (!p.done) { p.done = true; if (p.kind === 'rec') p.node.got.push(p.src); else p.node.pulse = 1; } return; }
+        ctx.fillStyle = col(p.src); ctx.globalAlpha = p.kind === 'email' ? .5 : .95; ctx.beginPath(); ctx.arc(x, y, p.kind === 'email' ? 2 : 3.2, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      } else {
+        const a1 = .07, a2 = .09, tx = p.kind === 'q' ? geo.binX + 20 + (p.t0 * 997 % 60) : wx + 20 + (p.t0 * 991 % 60), ty = geo.binY + 4;
+        let x, y, alpha = 1; if (age < a1) { const e = ease(age / a1); x = sx + (geo.gx - 6 - sx) * e; y = sy; }
+        else if (age < a1 + a2) { const e = ease((age - a1) / a2); x = geo.gx - 6 + (tx - geo.gx + 6) * e; y = sy + (ty - sy) * e * e; }
+        else { x = tx; y = ty; alpha = p.kind === 'sup' ? Math.max(.25, 1 - (age - a1 - a2) * 4) : 1; }
+        ctx.globalAlpha = alpha; ctx.fillStyle = p.kind === 'q' ? '#E5B74D' : p.req ? '#9A9A9A' : '#C2412D'; ctx.beginPath(); ctx.arc(x, y, 3.4, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+        if (age > a1 - .004 && age < a1 + .012) { ctx.strokeStyle = p.kind === 'q' ? '#E5B74D' : '#C2412D'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(geo.gx, sy, 10, 0, 7); ctx.stroke(); }
+      } });
+    nodes.forEach(n => { if (n.pulse > 0) { ctx.strokeStyle = `rgba(124,143,224,${n.pulse})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 6 * (1 - n.pulse) + 2, 0, 7); ctx.stroke(); n.pulse -= .04; } });
+    // counters follow the story's progress; the totals are the whole city's
+    const prog = Math.min(1, t / 0.92);
+    counters.forEach(([, f], i) => cEls[i].textContent = F.int(f() * prog));
+  }
+  function loop(now) { const dt = Math.min(.05, (now - last) / 1000); last = now;
+    if (running && !reduce) t = Math.min(1.25, t + dt * speed / DUR); draw(); requestAnimationFrame(loop); }
+  function at(e) { const b = cv.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top; let best = null, d = 1e9;
+    nodes.forEach(n => { if (!n.got.length) return; const dd = Math.hypot(n.x - x, n.y - y); if (dd < d && dd < n.r + 8) { d = dd; best = n; } }); return best; }
+  function show(n) { if (!n) { panel.textContent = 'Click a person to see the records they were built from.'; return; }
+    panel.innerHTML = `<b>${esc(n.p.name)}</b> · ${n.p.records.length} records${n.p.mixed ? ' · <span class="differ">the answer key says one of these belongs to someone else: a matcher mistake, shown on purpose</span>' : ''}<br>` +
+      n.p.records.map(r => `<span class="chip" style="border-color:${col(r.source)}"><b style="color:${col(r.source)}">${esc(SRC[r.source] ? SRC[r.source].label : r.source)}</b> ${esc(r.name)} · ${esc(r.email || 'no email')} · ${esc(r.address)}</span>`).join(''); }
+  cv.onmousemove = e => { hover = at(e); cv.title = hover ? `${hover.p.name}: ${hover.got.length} of ${hover.p.records.length} records joined` : ''; };
+  cv.onmouseleave = () => hover = null;
+  cv.onclick = e => { pick = at(e); show(pick); };
+  play.onclick = () => { running = !running; play.textContent = running ? 'Pause' : 'Play'; };
+  again.onclick = () => { t = 0; build(); pick = null; show(null); running = true; play.textContent = 'Pause'; };
+  layout(); show(null); if (reduce) t = 1.25;
+  let lw = W; new ResizeObserver(() => { if (Math.abs(cv.clientWidth - lw) > 20) { lw = cv.clientWidth; const keep = t; layout(); t = 0; build(); t = keep;
+    parts.forEach(p => { if (t - p.t0 > .18 && p.kind === 'rec') { p.done = true; p.node.got.push(p.src); } }); } }).observe(cv);
+  requestAnimationFrame(loop);
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

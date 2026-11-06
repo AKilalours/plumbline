@@ -872,18 +872,42 @@ the row's own update time minus a 5-minute overlap, keyset paging on (update tim
 corrected mid-sync is not skipped, a page saved before its cursor, retries, and a stop rather than a
 loop if the API ignores the cursor. The first page fixes the delivery's columns; a column that appears
 later is reported as drift and not written. Columns that name or contact a person (owner, applicant,
-phone, email...) are dropped before anything is written; building addresses stay. Each deliberate
-break of these rules (no tie-break, no overlap, no privacy filter, cursor not saved, wrong page shape)
-fails a test in `tests/test_socrata.py`.
+permittee, filing representative, phone, email) are dropped before anything is written; building
+addresses stay.
 
-`python -m plumbline.ingest.onboard_source ipu4-2q9a --name permits --since 2026-10-01` onboards a
+**What the real API taught it** (checked against data.cityofnewyork.us on 2026-11-06):
+
+- The first real run failed with HTTP 400. The API's own message, which the connector used to throw
+  away, said why: `Star selections must come at the start of the select-list`. The query listed
+  `:id,:updated_at,*`. The local test server accepted it, so 15 tests passed and the bug reached a real
+  run. Now the server refuses it as the API does (12 of 15 connector tests fail if the order comes back),
+  and every refused request reports the API's reason.
+- Row ids compare in the API's own order, not alphabetically, and only with a real id; the cursor
+  always stores a real one.
+- Bursts of requests got 503s (three of five back to back); the retry path is the normal path.
+- DOB permit issuance (ipu4-2q9a) stamped 3,898,188 of its 3,991,259 rows with one update time on
+  2026-11-05: the publisher reloads the table, so "changed since yesterday" means nearly everything.
+  A sync now reports a bulk rewrite (one update time on 90% or more of its rows) instead of quietly
+  pulling millions of rows; the loader's row hashes still store an unchanged row once.
+- DOB NOW: Build, Approved Permits (rbx6-tga4) changes a few hundred to a few thousand rows a day, each
+  day's batch under one update time (7,524 rows on 2026-11-05), which is exactly the case the row-id
+  tie-break exists for. It is the dataset the daily job syncs; its contract
+  (`sources/open_data/dob_now_permits.yaml`) was written from the published columns and loads real rows
+  with nothing quarantined.
+
+**Every day, on the record.** `.github/workflows/open_data.yml` runs
+`python -m plumbline.ingest.open_data_daily` each morning: read the cursor, pull what changed, load it
+under the contract into a scratch warehouse, and append one line to the run history (rows, pages,
+retries by cause, seconds, hours behind the source, rows loaded and quarantined, new columns, bulk
+rewrites; a failed run is recorded with the API's reason). The cursor and history live on the
+`open-data-history` branch; the app's Sources, Open data page reads them. The records themselves stay
+with the city.
+
+`python -m plumbline.ingest.onboard_source rbx6-tga4 --name dob_now_permits --since 2026-11-01` onboards a
 dataset nobody has described: sync the first delivery, draft its contract (types, privacy, key), check
 the draft with the loader every contract goes through, and load it into a scratch warehouse, timing each
 step (`docs/results/onboarding_time.json`). The draft goes to `sources/drafts/` for a person to read;
-it is never applied on its own. The saved result says where it ran: the build machine cannot reach the
-city's API, so the committed number is from the local test API (`src/plumbline/store/socrata_server.py`)
-until a run on a machine with internet replaces it. Sources, Open data in the app runs the onboarding
-live with the failure rates you pick.
+it is never applied on its own.
 
 Details and the reasons behind each choice are in `src/plumbline/ingest/engine.py`.
 Recovery steps are in [the runbook](runbooks/ingestion.md).

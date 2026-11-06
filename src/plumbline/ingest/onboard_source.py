@@ -1,6 +1,6 @@
 """Onboard a source nobody has described, end to end, and time every step.
 
-    python -m plumbline.ingest.onboard_source ipu4-2q9a --name permits --since 2026-10-01
+    python -m plumbline.ingest.onboard_source rbx6-tga4 --name dob_now_permits --since 2026-11-01
 
 1. sync      the first delivery through the Socrata connector (retries, cursor, privacy filter)
 2. draft     a contract from what arrived: types, privacy, key (the model when one is configured,

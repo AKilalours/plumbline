@@ -41,3 +41,15 @@ def test_the_ai_eval_city_stays_on_the_data_its_recordings_were_made_on():
     and the replay scored the model 5 of 31 instead of 29 of 31."""
     from plumbline.ai import evals as E
     assert E.EVAL_REFERENCE != D.REFERENCE and (E.EVAL_REFERENCE / "REFERENCE_SOURCE").read_text().startswith("fixture")
+
+
+def test_the_page_caches_are_keyed_on_the_world_not_just_its_size():
+    """Keyed on size and seed, the live Overview showed the fixture city's numbers after the rebuild."""
+    import ast
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text()
+    fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef) and n.name == "key")
+    assert "reference" in ast.unparse(fn)
+    a = D.Demo(Path("r"), Path("r"), Path("w"), 4000, 11, {}, "aaa")
+    b = D.Demo(Path("r"), Path("r"), Path("w"), 4000, 11, {}, "bbb")
+    assert a != b

@@ -92,8 +92,8 @@ class StoreClient:
                     reason = "429"
                 elif 500 <= e.code < 600:
                     wait, reason = self._backoff(attempt), str(e.code)
-                else:
-                    raise StoreAPIError(f"HTTP {e.code} for {path_and_query.split('?')[0]}") from None
+                else:      # not retryable: say what the server said, or the cause is lost (a bare "HTTP 400" was)
+                    raise StoreAPIError(f"HTTP {e.code} for {path_and_query.split('?')[0]}: {_reason(e)}") from None
             except TRANSIENT as e:
                 wait, reason = self._backoff(attempt), type(e).__name__
             if attempt == self.max_retries:
@@ -106,6 +106,20 @@ class StoreClient:
 
     def _backoff(self, attempt: int) -> float:
         return min(self.max_delay, self.base_delay * 2 ** attempt) * (0.5 + self.rand.random() / 2)
+
+
+def _reason(e: urllib.error.HTTPError) -> str:
+    """The server's own explanation of a refused request, shortened; never the request's headers."""
+    try:
+        raw = e.read(2000).decode("utf-8", "replace")
+    except Exception:
+        return "no reason given"
+    try:
+        j = json.loads(raw)
+        raw = j.get("message") or j.get("error") or raw if isinstance(j, dict) else raw
+    except ValueError:
+        pass
+    return " ".join(str(raw).split())[:300] or "no reason given"
 
 
 def _next_link(link: str | None) -> str | None:

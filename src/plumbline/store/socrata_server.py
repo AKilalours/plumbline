@@ -44,6 +44,10 @@ def make_rows(n: int, seed: int = 0) -> list[dict]:
     return rows
 
 
+class BadQuery(ValueError):
+    """A query the real API refuses with HTTP 400."""
+
+
 class Dataset:
     def __init__(self, rows: list[dict], *, p429=0.0, p503=0.0, p_drop=0.0, p_half=0.0, seed=0,
                  change_after_requests: int | None = None):
@@ -71,13 +75,29 @@ class Dataset:
 
     def query(self, q: dict) -> list[dict]:
         where = q.get("$where", "")
-        rows = sorted(self.rows.values(), key=lambda r: (r[":updated_at"], r[":id"]))
+        # As strict as NYC's API where it was found to refuse (checked on data.cityofnewyork.us, 2026-11-06):
+        # a star selection that is not first, and a timestamp or row id that does not parse. This server
+        # once accepted ":id,:updated_at,*", so the connector's first real run failed with HTTP 400.
+        sel = [c.strip() for c in q.get("$select", "*").split(",")]
+        if "*" in sel and sel[0] != "*":
+            raise BadQuery("Star selections must come at the start of the select-list")
+        for lit in re.findall(r":updated_at [<>=]+ '([^']*)'", where):
+            try:
+                datetime.fromisoformat(lit.rstrip("Z"))
+            except ValueError:
+                raise BadQuery(f"Type mismatch: '{lit}' is not a fixed timestamp") from None
+        for lit in re.findall(r":id [<>=]+ '([^']*)'", where):
+            if lit not in self.rows and not re.fullmatch(r"row-[\w.~-]+", lit):
+                raise BadQuery("Type mismatch for op$>, is text")
+        at = lambda v: datetime.fromisoformat(v.rstrip("Z"))      # compared as times, as the API does, not as text
+        rows = sorted(self.rows.values(), key=lambda r: (at(r[":updated_at"]), r[":id"]))
         m = re.fullmatch(r":updated_at > '([^']+)' OR \(:updated_at = '([^']+)' AND :id > '([^']+)'\)", where)
         if m:
             t, _, rid = m.groups()
-            rows = [r for r in rows if r[":updated_at"] > t or (r[":updated_at"] == t and r[":id"] > rid)]
+            t = at(t)
+            rows = [r for r in rows if at(r[":updated_at"]) > t or (at(r[":updated_at"]) == t and r[":id"] > rid)]
         elif (m := re.fullmatch(r":updated_at >= '([^']+)'", where)):
-            rows = [r for r in rows if r[":updated_at"] >= m.group(1)]
+            rows = [r for r in rows if at(r[":updated_at"]) >= at(m.group(1))]
         elif where:
             raise ValueError(f"unexpected $where {where!r}")
         out = []
@@ -113,8 +133,17 @@ def serve(ds: Dataset) -> tuple[ThreadingHTTPServer, str]:
             if roll < ds.p429 + ds.p503 + ds.p_drop:
                 self.close_connection = True
                 return
-            with ds.lock:
-                body = json.dumps(ds.query(q)).encode()
+            try:
+                with ds.lock:
+                    body = json.dumps(ds.query(q)).encode()
+            except BadQuery as e:
+                err = json.dumps({"code": "query.soql.type-mismatch", "error": True, "message": str(e)}).encode()
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err)))
+                self.end_headers()
+                self.wfile.write(err)
+                return
             half = ds.rnd.random() < ds.p_half
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

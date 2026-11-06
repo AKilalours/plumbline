@@ -465,3 +465,16 @@ def test_the_matcher_game_scores_against_the_answer_key(world):
         assert set(p["agree"]) == set(g["fields"]) and 0 <= p["p"] <= 1
         if p["truth"] != p["matcher"]:
             assert p["why"]
+
+
+def test_the_live_city_counts_the_whole_warehouse_and_marks_the_matchers_mistakes(world):
+    from plumbline.app import visual_data as VD
+    d, _ = world
+    with Q.connect(d) as con:
+        c = VD.city(con, d.run)
+        sent = con.execute("SELECT sum(rows_in) FROM ingest_ledger").fetchone()[0]
+        people = con.execute("SELECT count(DISTINCT person_key) FROM identity_records").fetchone()[0]
+    t = c["totals"]
+    assert sum(t["rows_in"].values()) == sent == t["loaded"] + t["quarantined"] + t["suppressed"] + t["already"]
+    assert t["people"] == people and 0 < len(c["people"]) <= 140
+    assert any(p["mixed"] for p in c["people"])          # mistakes are shown, not filtered out

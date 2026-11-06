@@ -48,6 +48,7 @@ class Demo:
     n_people: int
     seed: int
     summary: dict
+    reference: str = ""          # fingerprint of the reference files the world was built from
 
 
 class _Progress(io.TextIOBase):
@@ -82,7 +83,7 @@ def build(root: str | Path, n_people: int = 4000, seed: int = 11,
     if done.exists() and wh.exists():
         s = json.loads(done.read_text())
         if (s.get("n_people"), s.get("seed"), s.get("reference")) == (n_people, seed, reference_fingerprint(reference)):
-            return Demo(root, run, wh, n_people, seed, s["pipeline"])
+            return Demo(root, run, wh, n_people, seed, s["pipeline"], s["reference"])
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True)
     report("generate")
@@ -96,4 +97,4 @@ def build(root: str | Path, n_people: int = 4000, seed: int = 11,
         raise RuntimeError(f"the pipeline stopped (exit {code}): {text[-1500:]}")
     summary = json.loads(text[text.index("{"):])
     done.write_text(json.dumps({"n_people": n_people, "seed": seed, "reference": reference_fingerprint(reference), "pipeline": summary}, indent=2))
-    return Demo(root, run, wh, n_people, seed, summary)
+    return Demo(root, run, wh, n_people, seed, summary, reference_fingerprint(reference))

@@ -119,7 +119,8 @@ def test_saved_results_are_the_numbers_in_the_readme():
 
 DESTINATIONS = ["overview", "sources_page", "identity_page", "audiences_page", "models_page", "agent_page", "activity_page"]
 VIEWS = ["scale", "identity", "failure_lab", "deletion", "households_page", "audiences", "experiment", "agent",
-         "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page", "reasons_page"]
+         "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page", "reasons_page",
+         "worth_buying", "open_data", "matcher_game"]
 PAGES = DESTINATIONS + VIEWS
 
 
@@ -402,3 +403,65 @@ def test_clicking_the_open_tab_again_keeps_it_open(world, monkeypatch):
     at.segmented_control(key="agent_dest").set_value(None).run()           # the second click
     assert not at.exception
     assert at.segmented_control(key="agent_dest").value == "Ask" and len(at.pills(key="agent_pill").options) == 9
+
+
+def test_worth_buying_prices_a_record_only_where_the_loss_is_measured():
+    import json
+    from plumbline.app import visual_data as VD
+    sv = json.loads((ROOT / "docs/results/source_value.json").read_text())
+    w = {x["label"].split()[0]: x for x in VD.worth(sv)["sources"]}
+    m = sv["model"]
+    assert w["Property"]["lost_per_person"] * 2_000 == pytest.approx(31 / m["test_people"] * 2_000)   # $2.045 a person
+    assert w["Data"]["lost_per_person"] == 0 and not w["Data"]["measured"]       # the vendor's interval spans zero
+    assert all(x["hi"] < 0 for x in w.values() if x["measured"])
+
+
+def test_open_data_onboards_a_live_dataset_through_failures_and_drops_people(world, monkeypatch):
+    at = _app(world, monkeypatch, "open_data")
+    at.slider(key="od_429").set_value(25).run()
+    _button(at, lambda l: l == "Onboard it now").click().run()
+    assert not at.exception, at.exception
+    r = at.session_state["od_last"]["r"]
+    assert r["rows_landed"] >= 5_000 and r["rows_quarantined"] == 0 and r["retries"] > 0
+    assert r["rows_loaded"] == 5_000                                   # corrected rows kept once
+    assert "owner_s_first_name" in r["dropped_personal"] and "filing_status" in r["drift"]
+    assert "owner" not in at.session_state["od_last"]["draft"]
+
+
+def test_the_scale_projection_offers_only_stages_it_can_project():
+    """The picker drew "NaN h" for a stage the plan has no projection for."""
+    import json
+    from plumbline.app import visual_data as VD
+    plan = json.loads((ROOT / "docs/results/scale_plan.json").read_text())
+    d = VD.scale(plan, {})
+    for size in d["targets"]:
+        assert set(d["projected"][size]) <= {s["key"] for s in d["stages"]}
+    assert {s["key"] for s in d["stages"]} - set(d["projected"]["1 TB"])     # some stage has none: the browser must skip it
+
+
+def test_the_flows_account_for_every_row_and_every_record(world):
+    from plumbline.app import visual_data as VD
+    d, _ = world
+    with Q.connect(d) as con:
+        rows, ppl = VD.row_flow(con), VD.people_flow(con)
+        sent = con.execute("SELECT sum(rows_in) FROM ingest_ledger").fetchone()[0]
+        recs, persons = con.execute("SELECT count(*), count(DISTINCT person_key) FROM identity_records").fetchone()
+    for f in (rows, ppl):
+        for n in f["left"]:
+            assert sum(k["value"] for k in f["links"] if k["from"] == n["key"]) == n["value"]
+        for n in f["right"]:
+            assert sum(k["value"] for k in f["links"] if k["to"] == n["key"]) == n["value"]
+    assert sum(n["value"] for n in rows["left"]) == sum(n["value"] for n in rows["right"]) == sent
+    assert sum(n["value"] for n in ppl["left"]) == recs and ppl["people"] == persons
+
+
+def test_the_matcher_game_scores_against_the_answer_key(world):
+    from plumbline.app import visual_data as VD
+    d, _ = world
+    with Q.connect(d) as con:
+        g = VD.game(con, d.run)
+    assert len(g["pairs"]) == 12 and any(p["truth"] != p["matcher"] for p in g["pairs"])
+    for p in g["pairs"]:
+        assert set(p["agree"]) == set(g["fields"]) and 0 <= p["p"] <= 1
+        if p["truth"] != p["matcher"]:
+            assert p["why"]

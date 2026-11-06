@@ -129,6 +129,7 @@ def _answer_examples(idx, items, chat, mc) -> list[dict]:
 
 # ------------------------------------------------------------------ the world the data tasks run on
 _WORLD = None
+EVAL_REFERENCE = ROOT / "tests" / "fixtures" / "reference"
 
 
 def eval_world(root: Path | None = None):
@@ -136,7 +137,10 @@ def eval_world(root: Path | None = None):
     global _WORLD
     if _WORLD is None:
         from ..app import demo as D
-        _WORLD = D.build(root or ROOT / "data" / "ai_eval", n_people=1500, seed=11, progress=lambda s: None)
+        # Pinned to the files the recorded model calls were made on: a different city writes different partner
+        # files, so the prompts change and no recording matches (the app's switch to real buildings did exactly that).
+        _WORLD = D.build(root or ROOT / "data" / "ai_eval", n_people=1500, seed=11, progress=lambda s: None,
+                         reference=EVAL_REFERENCE)
     return _WORLD
 
 

@@ -9,6 +9,7 @@ and the experiment need a larger world to mean anything, so the app shows those 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import shutil
@@ -17,8 +18,18 @@ from pathlib import Path
 from typing import Callable
 
 REPO = Path(__file__).resolve().parents[3]
-# Invented tax lots and zip incomes: the same files the tests use, safe to ship with a public app.
-REFERENCE = REPO / "tests" / "fixtures" / "reference"
+# Real NYC tax lots (a fixed sample of MapPLUTO, owner fields never loaded) and real Census ZIP incomes;
+# REFERENCE_SOURCE says how the sample was drawn. The people living in them are invented.
+REFERENCE = Path(__file__).resolve().parent / "reference"
+
+
+def reference_fingerprint(ref: Path = REFERENCE) -> str:
+    """Which reference files a world was built from. Size and seed alone are not enough: a running app
+    once kept serving a world built from the test fixtures after the reference changed under it."""
+    h = hashlib.sha256()
+    for f in ("REFERENCE_SOURCE", "pluto_lots.csv", "acs_income.csv"):
+        h.update((ref / f).read_bytes())
+    return h.hexdigest()[:16]
 CONTRACTS = REPO / "sources"
 STAGES = {"generate": "Generating the city and its answer key",
           "store_build": "Opening the online store",
@@ -58,7 +69,7 @@ class _Progress(io.TextIOBase):
 
 
 def build(root: str | Path, n_people: int = 4000, seed: int = 11,
-          progress: Callable[[str], None] | None = None) -> Demo:
+          progress: Callable[[str], None] | None = None, reference: Path = REFERENCE) -> Demo:
     """Generate and process the demo world under root, or reuse the one already there."""
     from ..__main__ import main
     from ..synth.config import SynthConfig
@@ -70,19 +81,19 @@ def build(root: str | Path, n_people: int = 4000, seed: int = 11,
     report = progress or (lambda _: None)
     if done.exists() and wh.exists():
         s = json.loads(done.read_text())
-        if (s.get("n_people"), s.get("seed")) == (n_people, seed):
+        if (s.get("n_people"), s.get("seed"), s.get("reference")) == (n_people, seed, reference_fingerprint(reference)):
             return Demo(root, run, wh, n_people, seed, s["pipeline"])
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True)
     report("generate")
-    generate(load_reference(REFERENCE), SynthConfig(seed=seed, n_people=n_people), run)
+    generate(load_reference(reference), SynthConfig(seed=seed, n_people=n_people), run)
     out = _Progress(report)
     with contextlib.redirect_stdout(out):
         code = main(["--run-dir", str(run), "--warehouse", str(wh), "--contracts", str(CONTRACTS),
-                     "--ref", str(REFERENCE), "--models", str(root / "models"), "--score", "--fresh", "--no-model"])
+                     "--ref", str(reference), "--models", str(root / "models"), "--score", "--fresh", "--no-model"])
     text = out.text()
     if code != 0 or "{" not in text:
         raise RuntimeError(f"the pipeline stopped (exit {code}): {text[-1500:]}")
     summary = json.loads(text[text.index("{"):])
-    done.write_text(json.dumps({"n_people": n_people, "seed": seed, "pipeline": summary}, indent=2))
+    done.write_text(json.dumps({"n_people": n_people, "seed": seed, "reference": reference_fingerprint(reference), "pipeline": summary}, indent=2))
     return Demo(root, run, wh, n_people, seed, summary)

@@ -1,0 +1,247 @@
+{
+ "machine": "2-core cloud, 7 GB",
+ "growth": {
+  "people": [
+   20000,
+   100000,
+   300000
+  ],
+  "stages": {
+   "store_build": {
+    "seconds": {
+     "20000": 4,
+     "100000": 19,
+     "300000": 56
+    },
+    "fixed_seconds": 0.4,
+    "seconds_per_100k": 18.56,
+    "marginal_per_100k": [
+     18.8,
+     18.5
+    ],
+    "marginal_rising": false
+   },
+   "store_sync": {
+    "seconds": {
+     "20000": 6,
+     "100000": 36,
+     "300000": 99
+    },
+    "fixed_seconds": 1.0,
+    "seconds_per_100k": 32.88,
+    "marginal_per_100k": [
+     37.5,
+     31.5
+    ],
+    "marginal_rising": false
+   },
+   "ingest": {
+    "seconds": {
+     "20000": 7,
+     "100000": 29,
+     "300000": 93
+    },
+    "fixed_seconds": 0.0,
+    "seconds_per_100k": 30.96,
+    "marginal_per_100k": [
+     27.5,
+     32.0
+    ],
+    "marginal_rising": false
+   },
+   "identity": {
+    "seconds": {
+     "20000": 24,
+     "100000": 38,
+     "300000": 97
+    },
+    "fixed_seconds": 15.6,
+    "seconds_per_100k": 26.73,
+    "marginal_per_100k": [
+     17.5,
+     29.5
+    ],
+    "marginal_rising": true
+   },
+   "person_deletion": {
+    "seconds": {
+     "20000": 2,
+     "100000": 8,
+     "300000": 25
+    },
+    "fixed_seconds": 0.1,
+    "seconds_per_100k": 8.27,
+    "marginal_per_100k": [
+     7.5,
+     8.5
+    ],
+    "marginal_rising": false
+   },
+   "products": {
+    "seconds": {
+     "20000": 21,
+     "100000": 43,
+     "300000": 86
+    },
+    "fixed_seconds": 18.0,
+    "seconds_per_100k": 22.88,
+    "marginal_per_100k": [
+     27.5,
+     21.5
+    ],
+    "marginal_rising": false
+   },
+   "model": {
+    "seconds": {
+     "20000": 70,
+     "100000": 118,
+     "300000": 243
+    },
+    "fixed_seconds": 57.0,
+    "seconds_per_100k": 61.92,
+    "marginal_per_100k": [
+     60.0,
+     62.5
+    ],
+    "marginal_rising": false
+   },
+   "more_models": {
+    "seconds": {
+     "20000": 32,
+     "100000": 58,
+     "300000": 170
+    },
+    "fixed_seconds": 15.9,
+    "seconds_per_100k": 50.58,
+    "marginal_per_100k": [
+     32.5,
+     56.0
+    ],
+    "marginal_rising": true
+   },
+   "experiment": {
+    "seconds": {
+     "20000": 7,
+     "100000": 13,
+     "300000": 35
+    },
+    "fixed_seconds": 4.1,
+    "seconds_per_100k": 10.19,
+    "marginal_per_100k": [
+     7.5,
+     11.0
+    ],
+    "marginal_rising": true
+   }
+  }
+ },
+ "bytes_per_person": 1826,
+ "people_per_tb": 547539640,
+ "targets": {
+  "1M": 1000000,
+  "10M": 10000000,
+  "100M": 100000000,
+  "1 TB": 547539640
+ },
+ "projected_minutes": {
+  "1M": {
+   "store_sync": 5.3,
+   "ingest": 5.3,
+   "identity": 5.1,
+   "person_deletion": 1.4,
+   "products": 3.9,
+   "model": 11.3,
+   "more_models": 9.4,
+   "experiment": 1.9
+  },
+  "10M": {
+   "store_sync": 52.6,
+   "ingest": 53.3,
+   "identity": 49.3,
+   "person_deletion": 14.2,
+   "products": 36.2,
+   "model": 105.1,
+   "more_models": 93.4,
+   "experiment": 18.4
+  },
+  "100M": {
+   "store_sync": 525.1,
+   "ingest": 533.3,
+   "identity": 491.8,
+   "person_deletion": 141.7,
+   "products": 358.7,
+   "model": 1042.6,
+   "more_models": 933.4,
+   "experiment": 183.4
+  },
+  "1 TB": {
+   "store_sync": 2874.7,
+   "ingest": 2920.2,
+   "identity": 2692.2,
+   "person_deletion": 775.7,
+   "products": 1962.4,
+   "model": 5704.5,
+   "more_models": 5110.4,
+   "experiment": 1003.9
+  }
+ },
+ "order_to_move": [
+  {
+   "stage": "model",
+   "label": "home-buyer model",
+   "minutes_at_1tb_one_machine": 5704.5,
+   "marginal_rising": false,
+   "next": "features computed in Spark, training on a sample; scoring is embarrassingly parallel"
+  },
+  {
+   "stage": "more_models",
+   "label": "income and seller models",
+   "minutes_at_1tb_one_machine": 5110.4,
+   "marginal_rising": true,
+   "next": "same as the home-buyer model"
+  },
+  {
+   "stage": "ingest",
+   "label": "file ingestion",
+   "minutes_at_1tb_one_machine": 2920.2,
+   "marginal_rising": false,
+   "next": "parallel loaders writing Iceberg; the file ledger and row hashes keep reruns safe"
+  },
+  {
+   "stage": "store_sync",
+   "label": "store API sync",
+   "minutes_at_1tb_one_machine": 2874.7,
+   "marginal_rising": false,
+   "next": "one sync per shard of the keyspace; cursors already make each resumable"
+  },
+  {
+   "stage": "identity",
+   "label": "identity resolution",
+   "minutes_at_1tb_one_machine": 2692.2,
+   "marginal_rising": true,
+   "next": "Splink on Spark: blocking keeps comparisons near linear; the clustering is a graph job"
+  },
+  {
+   "stage": "products",
+   "label": "dbt data products",
+   "minutes_at_1tb_one_machine": 1962.4,
+   "marginal_rising": false,
+   "next": "dbt on Spark or Trino over Iceberg tables: the SQL stays, the engine changes"
+  },
+  {
+   "stage": "experiment",
+   "label": "experiment readout",
+   "minutes_at_1tb_one_machine": 1003.9,
+   "marginal_rising": true,
+   "next": "an aggregate; trivially parallel"
+  },
+  {
+   "stage": "person_deletion",
+   "label": "deletion",
+   "minutes_at_1tb_one_machine": 775.7,
+   "marginal_rising": false,
+   "next": "a join of requests against the identity map; partition by person key"
+  }
+ ],
+ "caveat": "Fitted on three runs on one 2-core machine; beyond 300,000 people it is extrapolation, not measurement."
+}

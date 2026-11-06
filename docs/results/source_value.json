@@ -1,0 +1,138 @@
+{
+ "city": "seed 7, 100000 people",
+ "groups": {
+  "property": {
+   "label": "Property and census (NYC PLUTO, ACS)",
+   "cost": "free public data"
+  },
+  "vendor": {
+   "label": "Data vendor append",
+   "cost": "paid per record"
+  },
+  "store": {
+   "label": "Online store orders",
+   "cost": "first party"
+  },
+  "email": {
+   "label": "Email engagement",
+   "cost": "first party"
+  }
+ },
+ "model": {
+  "champion": "logistic",
+  "test_people": 30323,
+  "test_buyers": 660,
+  "auc": 0.661,
+  "top_decile_buyers": 151,
+  "without": {
+   "property": {
+    "inputs": [
+     "bldg_A",
+     "bldg_B",
+     "bldg_C",
+     "bldg_D",
+     "bldg_E",
+     "bldg_F",
+     "bldg_G",
+     "bldg_H",
+     "bldg_I",
+     "bldg_K",
+     "bldg_M",
+     "bldg_N",
+     "bldg_O",
+     "bldg_Q",
+     "bldg_R",
+     "bldg_S",
+     "bldg_W",
+     "bldg_Y",
+     "bldg_Z",
+     "log_units",
+     "log_zip_income",
+     "property_matched",
+     "small_building",
+     "unitsres",
+     "yearbuilt"
+    ],
+    "auc": 0.6114,
+    "auc_change": -0.0496,
+    "ci95": [
+     -0.0706,
+     -0.0261
+    ],
+    "top_decile_buyers": 120
+   },
+   "vendor": {
+    "inputs": [
+     "new_job_window",
+     "work_emails_seen"
+    ],
+    "auc": 0.6613,
+    "auc_change": 0.0004,
+    "ci95": [
+     -0.0008,
+     0.0015
+    ],
+    "top_decile_buyers": 153
+   },
+   "store": {
+    "inputs": [
+     "avg_order_value",
+     "days_since_last_order_in_window",
+     "orders_window",
+     "revenue_window"
+    ],
+    "auc": 0.6398,
+    "auc_change": -0.0211,
+    "ci95": [
+     -0.0304,
+     -0.0121
+    ],
+    "top_decile_buyers": 133
+   },
+   "email": {
+    "inputs": [],
+    "auc": 0.661,
+    "auc_change": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ],
+    "top_decile_buyers": 151
+   }
+  }
+ },
+ "vendor_vs_answer_key": {
+  "people": 68813,
+  "homeowner": {
+   "covered": 49269,
+   "share_covered": 0.716,
+   "accuracy": 0.8454,
+   "said_owner": 15824,
+   "said_owner_but_rents": 5718
+  },
+  "income_band": {
+   "covered": 51834,
+   "share_covered": 0.7533,
+   "exact": 0.6862,
+   "within_one": 0.9475
+  }
+ },
+ "identity_coverage": {
+  "people": 73912,
+  "crm": {
+   "reaches": 34745,
+   "share": 0.4701,
+   "only_source": 4485
+  },
+  "vendor": {
+   "reaches": 59566,
+   "share": 0.8059,
+   "only_source": 38778
+  },
+  "store": {
+   "reaches": 24670,
+   "share": 0.3338,
+   "only_source": 278
+  }
+ }
+}

@@ -1,0 +1,29 @@
+{
+ "dataset": "ipu4-2q9a",
+ "name": "permits",
+ "host": "local test API (src/plumbline/store/socrata_server.py): 5,000 rows, throttling and failures on",
+ "measured_at": "2026-11-06T05:56:34Z",
+ "seconds": {
+  "sync": 0.11,
+  "draft": 0.01,
+  "validate": 0.0,
+  "load": 0.32
+ },
+ "total_seconds": 0.44,
+ "rows_landed": 5000,
+ "requests": 7,
+ "retries": 1,
+ "rows_loaded": 5000,
+ "rows_quarantined": 0,
+ "quarantine_reasons": {},
+ "columns": 9,
+ "drafted_by": "rules",
+ "dropped_personal": [
+  "owner_s_first_name",
+  "owner_s_phone__",
+  "permittee_s_business_name"
+ ],
+ "drift": [],
+ "unsure": [],
+ "where": "local"
+}

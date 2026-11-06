@@ -69,5 +69,7 @@ python -m streamlit run streamlit_app.py      # a live city in about a minute
 <a href="docs/details.md#operations-agent-module-e">🛠️ Agent</a> ·
 <a href="docs/details.md#scale">⚡ Scale</a> ·
 <a href="docs/details.md#how-ingestion-works">🔁 Ingestion</a> ·
+<a href="docs/details.md#should-we-buy-this-data">💵 Worth buying?</a> ·
+<a href="docs/details.md#a-real-public-source">🏙️ Open data</a> ·
 <a href="docs/role_map.md">🗺️ Role map</a>
 </p>

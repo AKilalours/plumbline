@@ -107,7 +107,11 @@ h2, h3 {{ font-family: 'Geist', sans-serif !important; font-weight: 500 !importa
 .card b {{ display: block; font-family: 'Geist Mono', monospace; font-size: 0.68rem; text-transform: uppercase; color: {MUTED}; font-weight: 500; }}
 .card.gone {{ background: #F1F8F4; border-color: {GREEN}; color: {MUTED}; text-decoration: line-through; }}
 .card.left, .card.innocent {{ border-color: {RED}; background: #FBEDEA; }}
-.verdict {{ font-size: 1.1rem; font-weight: 500; margin: 0.3rem 0 0.8rem 0; }}
+.verdict {{ font-size: 1rem; font-weight: 500; margin: 0.4rem 0 0.9rem 0; padding: 12px 16px 12px 18px; border-radius: 14px;
+            position: relative; overflow: hidden; }}
+.verdict::before {{ content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }}
+.verdict.ok {{ background: #F1F8F4; color: #14603F; }} .verdict.ok::before {{ background: {GREEN}; }}
+.verdict.bad {{ background: #FBEDEA; color: #8E2A1B; }} .verdict.bad::before {{ background: {RED}; }}
 .ok {{ color: {GREEN}; }} .bad {{ color: {RED}; }}
 .chip {{ display: inline-block; border: 1px solid {INK}; border-radius: 9999px; padding: 3px 12px; margin: 0 6px 6px 0;
         font-family: 'Geist Mono', monospace; font-size: 0.74rem; text-transform: uppercase; }}
@@ -131,6 +135,9 @@ import pandas as pd  # noqa: E402
 from plumbline.app import ops as O  # noqa: E402
 from plumbline.app import queries as Q  # noqa: E402
 from plumbline.app.demo import STAGES, build  # noqa: E402
+from plumbline.app import visual_data as VD  # noqa: E402
+from plumbline.app import visuals as V  # noqa: E402
+import streamlit.components.v1 as components  # noqa: E402
 
 N_PEOPLE = int(os.environ.get("PLUMBLINE_DEMO_PEOPLE", "4000"))
 SEED = 11
@@ -247,8 +254,12 @@ def how(text: str):
 
 
 def verdict(ok: bool, text: str):
-    st.markdown(f'<div class="verdict {"ok" if ok else "bad"}">{"✓" if ok else "✗"} {html.escape(text)}</div>',
-                unsafe_allow_html=True)
+    st.markdown(f'<div class="verdict {"ok" if ok else "bad"}">{html.escape(text)}</div>', unsafe_allow_html=True)
+
+
+def viz(kind: str, data: dict, height: int):
+    """An interactive visual computed in the browser (plumbline.app.visuals); it resizes itself to fit."""
+    components.html(V.page(kind, data), height=height)
 
 
 def stat(label: str, value: str, small: str = "", status: str | None = None):
@@ -300,6 +311,8 @@ def scale():
                                     "Home-buyer AUC (ceiling)": f"{num(r['home_buyer_auc'])} ({num(r['home_buyer_ceiling_auc'])})",
                                     "Income within one band (zip only)": f"{pct(r['income_within_one_band'])} ({pct(r['income_zip_only'])})"}
                                    for r in res["runs"]]), hide_index=True, width="stretch")
+    plan = json.loads((Path(__file__).parent / "docs/results/scale_plan.json").read_text())
+    viz("scale", VD.scale(plan, label), 120)
     how(res["note"] + " What broke on the way up, and how each break was fixed at its root, is in docs/details.md, under Scale.")
 
 
@@ -945,14 +958,7 @@ def release_page():
                 f'<span class="chip blue">champion: {rg["champion_algorithm"]}, AUC {rg["auc"]["champion"]:.3f}</span>', unsafe_allow_html=True)
     names = {"other_algorithm": f"The fancier model ({rg['challenger_algorithm'].replace('_', ' ')})",
              "no_property_data": "Without property data", "balanced_classes": "Balanced classes"}
-    c = st.columns(3)
-    for col, (k, label) in zip(c, names.items()):
-        with col, st.container(key=f"card_rel_{k}"):
-            r = rg[k]
-            stat(label, "released" if r["release"] else "held", f"AUC {rg['auc'][k]:.3f}", "pass" if r["release"] else "fail")
-            for gte in r["gates"]:
-                st.markdown(f'<div class="step"><span class="dot {"pass" if gte["passed"] else "fail"}"></span>'
-                            f'{gte["name"].replace("_", " ")}: {html.escape(gate_value(gte))}</div>', unsafe_allow_html=True)
+    viz("gate", VD.gate(rg, names, gate_value), 120)
     st.subheader("Try the gate")
 
     a, b, cc = st.columns(3)
@@ -1026,9 +1032,22 @@ def status_pill(r: SC.Run) -> str:
     return f'<span class="pill info">{r.status}</span>'
 
 
+@st.cache_data(show_spinner=False)
+def flows(_d, key):
+    with Q.connect(_d) as con:
+        return [VD.row_flow(con), VD.people_flow(con)]
+
+
+@st.cache_data(show_spinner=False)
+def game_pairs(_d, key):
+    with Q.connect(_d) as con:
+        return VD.game(con, _d.run)
+
+
 def overview():
     d = demo()
     header("Overview")
+    viz("flow", {"views": flows(d, key(d))[::-1]}, 120)
     rows = checks(d, key(d))
     cols = st.columns(6)
     for col, c in zip(cols, rows):
@@ -1051,28 +1070,85 @@ def overview():
             st.markdown(f'<div class="step">{status_pill(r)} <b>{name}</b> <span class="note">· {area} · {r.id}</span></div>',
                         unsafe_allow_html=True)
         st.page_link(PAGES["agent"], label="Open the incident lab", icon="🧪")
-    with right, st.container(key="band"):
-        size = choose("Measured at", list(SIZES), default="1M", key="home_size")
-        r = run_for(size)
-        b = st.columns(2)
-        with b[0]:
-            stat("Identity F1", num(r["identity"]["f1"]))
-            wrong = r["deletion"]["records_of_people_who_never_asked"]
-            if size == "1M":    # measured 1; the fix found on this run was replayed on its saved state (docs/details.md, Scale item 7)
-                stat("Wrongly deleted", "0", f"records (measured {wrong}, then fixed)")
-            else:
-                stat("Wrongly deleted", str(wrong), "records")
-        with b[1]:
-            stat("Household F1", num(r["households_f1"]))
-            stat("Pipeline", f"{r['timing']['pipeline_minutes']} min" if "timing" in r else "n/a", r.get("machine", ""))
+    with right:     # at 1M one wrongly deleted record was measured, then fixed on its saved state (docs/details.md, Scale item 7)
+        viz("sizes", VD.sizes_band(Q.saved_results()["runs"]), 120)
     how("A synthetic city with an answer key the pipeline never sees. The six checks run live on it; the band shows "
         "the same pipeline measured at 20,000 to 1,000,000 people. At 1M, wrongly deleted records went 85 → 1 → 0. "
         f"[Source code]({REPO_URL})")
 
 
+def worth_buying():
+    """Should we buy this data? Each source taken out of the model, and the vendor's claims checked."""
+    sv = json.loads((Path(__file__).parent / "docs/results/source_value.json").read_text())
+    viz("worth", VD.worth(sv), 120)
+    m = sv["model"]
+    with st.expander("The numbers"):
+        st.dataframe(pd.DataFrame([{"Source": sv["groups"][g]["label"], "AUC without it": w["auc_change"], "95% low": w["ci95"][0],
+                                    "95% high": w["ci95"][1], "Top-decile buyers": w["top_decile_buyers"], "Inputs": len(w["inputs"])}
+                                   for g, w in m["without"].items()]), hide_index=True, width="stretch")
+    how(f"Each source's inputs are taken out of the home-buyer model, which is refit the same way production fits it and scored on the "
+        f"same held-out test snapshot ({m['test_people']:,} people, {m['test_buyers']} buyers; seed 7, 100,000 people). The interval is a "
+        "paired bootstrap; a loss is claimed only when the whole interval is below zero. The vendor's homeowner flag and income band "
+        "are checked against the answer key. Worth per record is the buyers a source adds to the top decile, per person scored, times "
+        "the value you set: the most a record is worth paying for this model. The vendor's file arrives after the training "
+        "cutoffs, so this model cannot measure its fields yet; its value today is reach. `python -m plumbline.ml.source_value`.")
+
+
+def open_data():
+    """A real public source: NYC Open Data, through the same connector rules as the store API."""
+    od = json.loads((Path(__file__).parent / "docs/results/onboarding_time.json").read_text())
+    real = od.get("where") != "local"
+    st.markdown(f'<span class="chip blue">dataset {html.escape(od["dataset"])}</span>'
+                f'<span class="chip">{"NYC Open Data" if real else "local test API"} · {html.escape(od["measured_at"][:10])}</span>',
+                unsafe_allow_html=True)
+    viz("onboard", {"run": od}, 120)
+    if not real:
+        st.caption("Measured against the local test API. On a machine with internet: "
+                   "`python -m plumbline.ingest.onboard_source ipu4-2q9a --name permits --since 2026-10-01` replaces it with a real run.")
+    st.markdown('<div class="mono" style="margin-top:1rem">Try it: onboard a dataset nobody has described</div>', unsafe_allow_html=True)
+    c = st.columns(3)
+    p429 = c[0].slider("Throttled (429)", 0, 40, 15, 5, format="%d%%", key="od_429")
+    p503 = c[1].slider("Server errors (503)", 0, 40, 10, 5, format="%d%%", key="od_503")
+    n = c[2].select_slider("Rows", [1_000, 5_000, 20_000], value=5_000, key="od_rows")
+    if st.button("Onboard it now", type="primary", key="od_go"):
+        from plumbline.ingest.onboard_source import onboard
+        from plumbline.store.socrata_server import Dataset, make_rows, serve
+        ds = Dataset(make_rows(n, seed=n), p429=p429 / 100, p503=p503 / 100, seed=7, change_after_requests=3)
+        srv, url = serve(ds)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                r = onboard("ipu4-2q9a", "permits", host=url, since=None, workdir=Path(tmp), drafts=Path(tmp) / "drafts",
+                            page_size=1000, max_pages=None,
+                            client_kw=dict(base_delay=0.0, max_delay=0.0, max_retries=20, sleep=lambda s: None))
+                draft = (Path(tmp) / "drafts" / "permits.yaml").read_text()
+        finally:
+            srv.shutdown()
+        st.session_state.od_last = {"r": r, "draft": draft, "changed": len(ds.changed)}
+        log("open data: onboarded", {k_: r[k_] for k_ in ("total_seconds", "rows_landed", "rows_loaded", "rows_quarantined", "retries")})
+    last = st.session_state.get("od_last")
+    if last:
+        r = last["r"]
+        verdict(not r["rows_quarantined"], f"{r['rows_loaded']:,} current rows from {r['rows_landed']:,} landed, through {r['retries']} "
+                f"retries; {last['changed']} rows corrected mid-sync, each kept once at its latest version.")
+        viz("onboard", {"run": r}, 120)
+        with st.expander("The drafted contract (goes to sources/drafts/ for a person to read)"):
+            st.code(last["draft"], language="yaml")
+    how("The connector pulls only rows changed since the last sync (by the city's own update time, with a 5-minute overlap), pages by "
+        "(update time, row id) so a row corrected mid-sync is not skipped, retries throttles and server errors, saves each page before "
+        "its cursor, and drops columns that name or contact a person before anything is written. A new public dataset onboards with one "
+        "command: sync the first delivery, draft its contract, check it with the loader every contract goes through, load it. The draft "
+        "is never applied on its own. Tests: tests/test_socrata.py.")
+
+
 def sources_page():
     header("Sources")
-    v = view(["Health", "Failure lab", "Onboarding"], "src_view")
+    v = view(["Health", "Failure lab", "Onboarding", "Open data", "Worth buying?"], "src_view")
+    if v == "Open data":
+        open_data()
+        return
+    if v == "Worth buying?":
+        worth_buying()
+        return
     if v == "Health":
         d = demo()
         with Q.connect(d) as con:
@@ -1080,13 +1156,13 @@ def sources_page():
                                         count(*) FILTER (WHERE status = 'rejected') AS Rejected, max(loaded_at) AS "Last load"
                                  FROM ingest_ledger GROUP BY 1 ORDER BY 1""").df()
             qu = con.execute("SELECT source AS Source, reason AS Reason, count(*) AS Rows FROM quarantine GROUP BY 1, 2 ORDER BY 3 DESC").df()
-        k = st.columns(3)
-        with k[0]:
-            stat("Deliveries loaded", f"{int(led.Loaded.sum()):,}", "", "pass")
-        with k[1]:
-            stat("Rejected files", f"{int(led.Rejected.sum()):,}", "", "pass" if not led.Rejected.sum() else "warn")
-        with k[2]:
-            stat("Quarantined rows", f"{int(qu.Rows.sum()) if len(qu) else 0:,}", "", "warn" if len(qu) else "pass")
+        viz("tiles", {"items": [
+            {"label": "Deliveries loaded", "value": int(led.Loaded.sum()), "fmt": "int", "tone": "pass", "sub": "files, each once"},
+            {"label": "Rejected files", "value": int(led.Rejected.sum()), "fmt": "int", "tone": "fail" if led.Rejected.sum() else "pass",
+             "sub": "missing a required column"},
+            {"label": "Quarantined rows", "value": int(qu.Rows.sum()) if len(qu) else 0, "fmt": "int", "tone": "warn" if len(qu) else "pass",
+             "sub": "held with a reason"}]}, 120)
+        viz("flow", {"views": [flows(d, key(d))[0]]}, 120)
         a, b = st.columns(2, gap="large")
         a.dataframe(led, hide_index=True, width="stretch")
         if len(qu):
@@ -1104,9 +1180,17 @@ def sources_page():
 
 def identity_page():
     header("Identity")
-    v = view(["People", "Households", "Deletion"], "id_dest")
+    v = view(["People", "You vs the matcher", "Households", "Deletion"], "id_dest")
     with embedded():
-        {"People": identity, "Households": households_page, "Deletion": deletion}[v]()
+        {"People": identity, "You vs the matcher": matcher_game, "Households": households_page, "Deletion": deletion}[v]()
+
+
+def matcher_game():
+    d = demo()
+    viz("game", game_pairs(d, key(d)), 120)
+    how("Pairs of records the matcher scored, drawn from its hardest calls and its mistakes in this city. Decide, then see the "
+        "matcher's score, its final call and the answer key. A pair can score high and still be kept apart: a safety rule refuses a "
+        "join when, for example, two dates of birth disagree. Keys: S same, D different, Enter next.")
 
 
 def audiences_page():

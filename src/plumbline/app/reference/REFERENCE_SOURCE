@@ -1,0 +1,9 @@
+real
+A fixed random sample (seed 20261025) of 25,000 of the 767,326 residential NYC tax lots (MapPLUTO, owner fields never loaded) whose ZIP has a Census median income, for the public demo app.
+full download: fetched_at=2026-10-25T05:00:26Z
+full download: pluto=reused rows=767563
+full download: acs=acs5/2023/B19013 zctas=184
+full download: pluto_lots.csv sha256=00382780596d382a025b6bb2170f74926cfbe588c478951e1fd146c984afb834
+full download: acs_income.csv sha256=59aaa83244f80d2ed71f81ceb4f2183fe29aa9f9d3eaa115dfc14d45cf062526
+pluto_lots.csv sha256=5899153ac441e4d129c4526634dedb9b0be173b8a260c18baae32b136dcd558a
+acs_income.csv sha256=bd6f6246c38fb6d3a11667dc2cea40e423bcc253116fd89c7d5ac63437854431

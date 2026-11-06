@@ -69,14 +69,17 @@ class StoreClient:
         self.rand = random.Random(jitter_seed)
 
     def __repr__(self) -> str:  # never show the token
-        return f"StoreClient({self.base_url!r}, token=***)"
+        return f"{type(self).__name__}({self.base_url!r}, token=***)"
+
+    def _headers(self) -> dict:
+        return {"X-Store-Token": self._token, "Accept": "application/json"}
 
     def get(self, path_and_query: str, stats: SyncStats) -> tuple[dict, str | None]:
         url = self.base_url + path_and_query
         for attempt in range(self.max_retries + 1):
             stats.requests += 1
             try:
-                req = urllib.request.Request(url, headers={"X-Store-Token": self._token, "Accept": "application/json"})
+                req = urllib.request.Request(url, headers=self._headers())
                 with urllib.request.urlopen(req, timeout=self.timeout) as r:
                     body = json.loads(r.read())
                     return body, _next_link(r.headers.get("Link"))

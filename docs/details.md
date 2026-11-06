@@ -25,12 +25,15 @@ against the answer key, and the tests that hold each one are named.
 | Income estimate | for people the vendor never covered: within one band of the true income 83.6% of the time, against 79.8% for ZIP income alone; the vendor's own band, where it exists, gets 94.9% |
 | Campaign experiment | a holdout test of a reactivation email, checked against the answer key's true effect: inside the attribution-corrected 95% interval in 7 of 8 runs (20,000 to 1,000,000 people); the run that missed is the one whose readout marked itself untrustworthy; from 100,000 people up, an uplift model sends the next email to the 30% it changes most, for 32 to 39 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (at 20,000 it has too little to learn from and does not win) |
 | Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
-| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 45 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
+| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 44 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | AI features, measured | with gpt-4.1-mini, on held-out halves: the agent picks the right tool for 19 of 20 hard messages (keyword rules: 12 of 20); questions in English answered right 14 of 14 with no contact data ever returned; doc answers refuse what the docs do not say 8 of 9 (quoted: 7 of 9). Where it did not win (doc answers tie, contract types one worse) is in [AI, measured](#ai-measured). Code checks every model output before anything runs, and recorded runs replay without a key |
 | Reason codes | every home-buyer score splits exactly into its reasons, checked for all 30,323 test people (largest gap 5e-17); in the top decile the leading reason is ZIP income for 2,574 people and average order value for 333 |
 | Model release gate | on 100,000 people it held all three challengers, including one with the champion's AUC whose probabilities were off by 0.44 on average: an AUC-only gate would have shipped it |
+| Should we buy this data? | each source taken out of the home-buyer model and refit: without property data AUC falls 0.050 (95% -0.071 to -0.026) and the top decile finds 31 fewer buyers; the vendor's inputs change nothing measurable, because its file arrives after the training cutoffs; its homeowner flag is wrong for 5,718 of the 15,824 people it calls owners; it is the only source for 38,778 of 73,912 people. See [Should we buy this data?](#should-we-buy-this-data) |
+| A public source nobody here controls | NYC Open Data (Socrata) through the same connector rules as the store API, plus a privacy filter that drops columns naming a person; onboarding a new dataset (sync, draft a contract, check it, load) is one command, timed. 12 tests, and 5 of 5 deliberate breaks caught. See [A real public source](#a-real-public-source) |
+| Past one machine | fixed cost plus cost per extra person, from same-machine runs: identity gets dearer per person (17.5 to 29.5 s per 100,000), so it grows faster than the data; the warehouse takes 1,826 bytes a person. See [Past one machine](#past-one-machine) |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 312 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 364 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 
 ## See it work
@@ -38,17 +41,26 @@ against the answer key, and the tests that hold each one are named.
 *Seven places, four incidents you can inject, every number one click from its evidence*
 
 `python -m pip install -e ".[app]"` then `python -m streamlit run streamlit_app.py`. The app builds a city of 4,000
-people with the real pipeline (generator, store API sync, ingestion, identity, deletion, dbt) in
-about a minute. Every button does real work on a private copy, and the city never changes. Seven
+invented people living in real NYC buildings (a fixed sample of 25,000 MapPLUTO tax lots with real Census
+ZIP incomes, `src/plumbline/app/reference/`) with the real pipeline (generator, store API sync, ingestion,
+identity, deletion, dbt) in about a minute. Every button does real work on a private copy, and the city never changes. Seven
 places, almost no text; every number has its evidence one click away:
 
-- **Overview**: six live checks (clean, current, conflicts, identity, consent, deletion) and open incidents.
-- **Sources**: delivery health, a failure lab that throttles and crashes the store API, and AI-drafted
-  contracts for partner files nobody described.
-- **Identity**: every person's records against the answer key, with split, merge and undo; households;
+- **Overview**: an animated flow of every record from its source into resolved people (and every row
+  into loaded, resent, quarantined or blocked), six live checks, and the pipeline at four sizes.
+- **Sources**: delivery health, a failure lab that throttles and crashes the store API, AI-drafted
+  contracts for partner files nobody described, onboarding a public dataset live, and "Worth buying?",
+  where the value of a buyer is a slider and each source's worth per record is recomputed at once.
+- **Identity**: every person's records against the answer key, with split, merge and undo; "You vs the
+  matcher", a game on the matcher's hardest pairs and its mistakes, scored by the answer key; households;
   person-level deletion with a replay that proves nobody comes back.
 - **Audiences**: typed rules from a sentence, English to guarded SQL, and the email experiment.
-- **Models**: the release gate, why each person got their score (reason codes that add back up to it), the AI scorecard, and the scale runs.
+- **Models**: the release gate, why each person got their score (reason codes that add back up to it), the AI scorecard, and the scale runs with a projection past one machine.
+
+The interactive pieces (`src/plumbline/app/visuals.py`) are SVG and plain JavaScript that do their arithmetic in
+the browser, so a slider or a card answers at once instead of rerunning the page. They draw numbers the
+app reads from the warehouse or a saved result (`src/plumbline/app/visual_data.py`); the tests check those
+numbers against their source and draw every visual in a real browser at desktop and phone width.
 - **Agent**: the incident lab and the operations agent. Inject one of four real incidents (a false
   identity merge, an interrupted store sync, a warehouse restored from a backup older than a deletion
   request, a training snapshot filled with values from the future). Checks a team would run detect it
@@ -294,6 +306,37 @@ known, and the vendor sends one. A missing date of birth in a source that sends 
 requester whose date of birth is known, now goes to a person (`keys_match_but_dob_unknown`): 1 → 0,
 with no requester's record kept at any size (item 7 under [Scale](#scale)). A test plants this father
 and son too.
+
+
+## Should we buy this data?
+
+*What each source is worth, measured before anyone pays for it*
+
+`python -m plumbline.ml.source_value` (results in `docs/results/source_value.json`; Sources, Worth buying?
+in the app). Each source's inputs are taken out of the home-buyer model, which is refit the way
+production fits it and scored on the same held-out test snapshot (30,323 people,
+660 buyers). A loss is claimed only when the paired-bootstrap 95% interval is below zero.
+
+| Source | AUC without it | 95% interval | Top-decile buyers (of 151) |
+| --- | --- | --- | --- |
+| Property and census (NYC PLUTO, ACS) | -0.0496 | -0.0706 to -0.0261 | 120 |
+| Data vendor append | +0.0004 | -0.0008 to +0.0015 | 153 |
+| Online store orders | -0.0211 | -0.0304 to -0.0121 | 133 |
+| Email engagement | +0.0000 | +0.0000 to +0.0000 | 151 |
+
+The vendor's claims, checked against the answer key on 68,813 matched people: its homeowner
+flag covers 72% of them and is right 84.5% of the time, but
+5,718 of the 15,824 people it calls owners rent. Its income band is exact
+68.6% of the time and within one band 94.8%. Of 73,912 resolved people,
+the vendor is the only source for 38,778; the CRM for 4,485; the store for 278.
+
+So: keep the free property data. Do not target homeowners on the vendor's flag alone. The vendor's file
+arrives in December, after every training cutoff, so most of its fields cannot be used without leaking
+the future, and this model cannot price them; what the vendor buys today is reach. The question to put
+to the vendor is timing: the what-if in [Home-buyer model](#home-buyer-model-module-c) with the same
+fields delivered on time reaches 0.714. The value of a buyer is the reader's assumption, not a
+measurement: the app has a slider, and the most a record is worth is buyers gained per person scored
+times that value.
 
 
 ## Data products (dbt)
@@ -607,12 +650,14 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 
 | | Result |
 | --- | --- |
-| Right section in the top 3 results | 45 of 49 answerable questions |
+| Right section in the top 3 results | 44 of 49 answerable questions |
 | Answered right, with the right source | 19 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
 | Refused when the documents have no answer | 8 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
 | Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **13 of 20 (test half)**; 16 of 20 before the threshold moved (below) |
 | Security questionnaire, left for a person when the controls page does not settle it | 7 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer) |
+
+The top-3 count was 45 until a later section began to outrank a labelled one that it also answers; the labels were left as they were, because changing an answer key after seeing a result is grading your own test.
 
 The eval sets were tripled (from 32 to 67 knowledge questions, 18 to 53 questionnaire items),
 written before any of the new ones was run, and each expected answer was checked to exist in its
@@ -771,6 +816,27 @@ What scale found, in order, each fixed at its root and held by a test:
 
 Nothing here claims terabytes: everything runs on one machine.
 
+### Past one machine
+
+`python -m plumbline.ml.scale_plan` (results in `docs/results/scale_plan.json`; Models, Scale in the app
+has a size picker). Each stage's time is split into a fixed cost and a cost per extra person, using only
+the runs on one machine (2-core cloud, 7 GB: 20,000, 100,000 and 300,000 people; the 1,000,000 run
+was on a different laptop and would mix two clocks). A stage whose cost per extra person rises from one
+size to the next grows faster than the data.
+
+| Stage | One machine at 1 TB (548M people) | Cost per extra person | Moves to |
+| --- | --- | --- | --- |
+| home-buyer model | 95 h | flat | features computed in Spark, training on a sample; scoring is embarrassingly parallel |
+| income and seller models | 85 h | rising | same as the home-buyer model |
+| file ingestion | 49 h | flat | parallel loaders writing Iceberg; the file ledger and row hashes keep reruns safe |
+| store API sync | 48 h | flat | one sync per shard of the keyspace; cursors already make each resumable |
+| identity resolution | 45 h | rising | Splink on Spark: blocking keeps comparisons near linear; the clustering is a graph job |
+| dbt data products | 33 h | flat | dbt on Spark or Trino over Iceberg tables: the SQL stays, the engine changes |
+| experiment readout | 17 h | rising | an aggregate; trivially parallel |
+| deletion | 13 h | flat | a join of requests against the identity map; partition by person key |
+
+Fitted on three runs on one 2-core machine; beyond 300,000 people it is extrapolation, not measurement.
+
 
 ## How ingestion works
 
@@ -796,6 +862,28 @@ and lands each page as a CSV atomically before saving its cursor. Landing as fil
 promise above applies to API data with no extra code. The store itself is a local mock
 (`src/plumbline/store/server.py`) that throttles, fails, cuts responses in half and refunds orders
 while you page through it.
+
+### A real public source
+
+The store API is ours to break. NYC Open Data is not: the city adds and corrects rows daily, a dataset
+can grow a column without notice, the API throttles, and JSON rows leave out empty fields.
+`src/plumbline/ingest/connectors/socrata.py` applies the store connector's rules to it: incremental by
+the row's own update time minus a 5-minute overlap, keyset paging on (update time, row id) so a row
+corrected mid-sync is not skipped, a page saved before its cursor, retries, and a stop rather than a
+loop if the API ignores the cursor. The first page fixes the delivery's columns; a column that appears
+later is reported as drift and not written. Columns that name or contact a person (owner, applicant,
+phone, email...) are dropped before anything is written; building addresses stay. Each deliberate
+break of these rules (no tie-break, no overlap, no privacy filter, cursor not saved, wrong page shape)
+fails a test in `tests/test_socrata.py`.
+
+`python -m plumbline.ingest.onboard_source ipu4-2q9a --name permits --since 2026-10-01` onboards a
+dataset nobody has described: sync the first delivery, draft its contract (types, privacy, key), check
+the draft with the loader every contract goes through, and load it into a scratch warehouse, timing each
+step (`docs/results/onboarding_time.json`). The draft goes to `sources/drafts/` for a person to read;
+it is never applied on its own. The saved result says where it ran: the build machine cannot reach the
+city's API, so the committed number is from the local test API (`src/plumbline/store/socrata_server.py`)
+until a run on a machine with internet replaces it. Sources, Open data in the app runs the onboarding
+live with the failure rates you pick.
 
 Details and the reasons behind each choice are in `src/plumbline/ingest/engine.py`.
 Recovery steps are in [the runbook](runbooks/ingestion.md).

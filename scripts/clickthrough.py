@@ -118,28 +118,37 @@ class Walker:
             if b.count() and b.first.is_visible():
                 self.click(b.first, f"{name} › button {label!r}")
 
+    def type_into(self, loc, text: str, where: str, wait: float = 240, submit: str = "Enter"):
+        """Type and submit, the way clicks are done: wait for the box to be usable (Streamlit disables a chat box
+        while the app is still answering, which on a busy shared host can take a while), and record a box that
+        never comes back as a problem instead of crashing the whole walk. On 2026-11-07 one disabled box after a
+        400-character question ended the live check with a traceback, and every later check went unreported."""
+        try:
+            loc.wait_for(state="visible", timeout=wait * 1000)
+            end = time.time() + wait
+            while loc.is_disabled() and time.time() < end:
+                time.sleep(0.5)
+            loc.fill(text, timeout=max(1000, min(30_000, wait * 1000)))
+            loc.press(submit)
+        except Exception as e:
+            self.problems.append(f"{where}: could not type ({type(e).__name__}: the box stayed disabled or vanished)")
+            return
+        self.idle()
+        self.check(where)
+
     def typing(self, name: str):
         chat = self.p.locator('[data-testid="stChatInputTextArea"]')
         if chat.count() and chat.first.is_visible():
             for text in TYPED["chat"]:
-                chat.first.fill(text)
-                chat.first.press("Enter")
-                self.idle()
-                self.check(f"{name} › typed {text[:40]!r}")
+                self.type_into(chat.first, text, f"{name} › typed {text[:40]!r}")
         box = self.main().get_by_label("Describe the audience")
         if box.count() and box.first.is_visible():
             for text in TYPED["Describe the audience"]:
-                box.first.fill(text)
-                box.first.press("Enter")
-                self.idle()
-                self.check(f"{name} › audience {text[:40]!r}")
+                self.type_into(box.first, text, f"{name} › audience {text[:40]!r}")
         sql = self.main().get_by_label("SQL")
         if sql.count() and sql.first.is_visible():
             for text in TYPED["SQL"]:
-                sql.first.fill(text)
-                sql.first.press("Control+Enter")
-                self.idle()
-                self.check(f"{name} › SQL {text[:40]!r}")
+                self.type_into(sql.first, text, f"{name} › SQL {text[:40]!r}", submit="Control+Enter")
 
     def run(self) -> list[str]:
         for href in self.pages():

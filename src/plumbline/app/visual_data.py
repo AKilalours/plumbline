@@ -284,3 +284,91 @@ def _zip_borough() -> dict:
     lots = pd.read_csv(REFERENCE / "pluto_lots.csv", dtype=str, usecols=["zipcode", "borough"])
     lots = lots.assign(z=lots.zipcode.str[:5]).dropna(subset=["z", "borough"])
     return lots.groupby("z").borough.agg(lambda b: b.mode().iloc[0]).to_dict()
+
+
+def people_explorer(con, run: Path, outcomes: "pd.DataFrame", k: int = 30) -> dict:
+    """People to open, of three kinds (found despite typos, split, merged): each one's records as the sources
+    sent them, the pipeline's golden profile with every competing value, and the answer key's verdict."""
+    from .queries import SOURCE_LABEL, people, person_records, showcase, strangers_in
+    back = {v: k for k, v in SOURCE_LABEL.items()}
+    show = showcase(outcomes, k=k)
+    ppl = people(run).set_index("person_id")
+    o = outcomes.set_index("person_id")
+    out = []
+    for kind, pids in show.items():
+        for pid in pids:
+            row = o.loc[pid]
+            keys = list(row["keys"])
+            recs = person_records(con, run, pid)
+            strangers = strangers_in(con, run, keys, pid)
+            vals = con.execute("""SELECT v.person_key, v.attr, v.value, v.observations, v.sources, v.best_source,
+                                         strftime(v.first_observed_at, '%Y-%m-%d') AS first_seen, strftime(v.last_observed_at, '%Y-%m-%d') AS last_seen,
+                                         w.value IS NOT NULL AS won
+                                  FROM products.int_attribute_values v
+                                  LEFT JOIN products.int_attribute_winners w USING (person_key, attr, value)
+                                  WHERE list_contains(?, v.person_key) ORDER BY v.person_key, v.attr, won DESC, v.last_observed_at DESC""",
+                               [keys]).df()
+            clean = lambda v: "" if pd.isna(v) else str(v)
+            t = ppl.loc[pid]
+            out.append({"id": pid, "kind": kind, "name": f"{t.first_name} {t.last_name}", "keys": keys,
+                        "records": [{"source": back.get(r.kind, r.kind), "label": r.kind, "id": clean(r.record_id), "name": clean(r.name), "email": clean(r.email),
+                                     "phone": clean(r.phone), "address": clean(r.address), "person_key": clean(r.person_key)}
+                                    for r in recs.itertuples()],
+                        "strangers": [{"source": s.source, "really": s.really, "person_key": s.person_key} for s in strangers.itertuples()],
+                        "fields": [{"person_key": v.person_key, "attr": v.attr, "value": clean(v.value).replace("|", ", "),
+                                    "observations": int(v.observations), "sources": int(v.sources), "source": v.best_source,
+                                    "first": v.first_seen, "last": v.last_seen, "won": bool(v.won)} for v in vals.itertuples()]})
+    return {"people": out, "rule": "Most fields: the value vouched for most recently wins; a tie goes to the more trusted source. "
+                                   "Address: the newest address still being confirmed wins, because a stale source keeps "
+                                   "echoing the old home after a move."}
+
+
+def lineage(con, g: dict) -> dict:
+    """The saved lineage graph with today's row count on every node, read from this warehouse."""
+    deliveries = {"CRM files": "crm", "Vendor files": "vendor", "Email event files": "email", "Store API": "store",
+                  "Privacy requests": "privacy"}
+    sent = dict(con.execute("SELECT source, sum(rows_in) FROM ingest_ledger GROUP BY 1").fetchall())
+    nodes = []
+    for n in g["nodes"]:
+        rows = None
+        if n["id"] in deliveries:
+            rows = sent.get(deliveries[n["id"]])
+        else:
+            for t in (f"products.{n['id']}", n["id"], f"main.{n['id']}"):
+                try:
+                    rows = con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+                    break
+                except Exception:
+                    continue
+        nodes.append({**n, "rows": None if rows is None else int(rows)})
+    return {**g, "nodes": nodes}
+
+
+AGENT_SCENES = [("U0ADM0001", "Is the pipeline healthy?"), ("U0ADM0001", "What's in the deletion review queue?"),
+                ("U0ADM0001", "What does one_key_matches mean?"), ("U0ADM0001", "What is our parental leave policy?"),
+                ("U0OPS0001", "Give U0NEW0001 the privacy role"), ("U0ADM0001", "Give U0NEW0002 the docs role")]
+
+
+def agent_scenes(d, scenes=AGENT_SCENES) -> dict:
+    """Each question really run through the agent (keyword routing, no model) on a private copy. A change goes
+    the whole way: proposed, the asker tries to approve it, a second admin approves it."""
+    import tempfile
+    from ..agents.agent import handle
+    from .queries import agent_context, example_roles
+    ctx = agent_context(d, Path(tempfile.mkdtemp(prefix="plumbline-scenes-")), use_model=False)
+    roles = example_roles()
+
+    def rep(who, q):
+        r = handle(ctx, who, q, channel="app")
+        return {"who": who, "roles": sorted(roles.get(who, [])), "asked": q, "skill": r.skill, "tool": r.tool,
+                "sources": list(r.sources), "refused": bool(r.refused), "proposals": list(r.proposals), "text": r.text[:900]}
+    out = []
+    for who, q in scenes:
+        steps = [rep(who, q)]
+        for pid in steps[0]["proposals"]:
+            steps.append(rep(who, f"approve {pid}"))                       # the asker cannot approve their own request
+            other = next((u for u, r in sorted(roles.items()) if "admin" in r and u != who), None)
+            if other:
+                steps.append(rep(other, f"approve {pid}"))
+        out.append({"question": q, "steps": steps})
+    return {"scenes": out, "roles": {u: sorted(r) for u, r in roles.items()}}

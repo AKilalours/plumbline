@@ -51,7 +51,9 @@ places, almost no text; every number has its evidence one click away:
 - **Sources**: delivery health, a failure lab that throttles and crashes the store API, AI-drafted
   contracts for partner files nobody described, onboarding a public dataset live, and "Worth buying?",
   where the value of a buyer is a slider and each source's worth per record is recomputed at once.
-- **Identity**: every person's records against the answer key, with split, merge and undo; "You vs the
+- **Identity**: a people explorer (search anyone; their records arrive from each source into the person the
+  pipeline built, and the golden profile shows which value won each field and why, against every value
+  that lost); every person's records against the answer key, with split, merge and undo; "You vs the
   matcher", a game on the matcher's hardest pairs and its mistakes, scored by the answer key; "Tune the
   matcher", a threshold you drag across every scored pair, which shows why the threshold alone is not
   enough (at 0.9 the score would join 1,194 pairs of two people, mostly family at one address; the
@@ -60,7 +62,12 @@ places, almost no text; every number has its evidence one click away:
 - **Audiences**: typed rules from a sentence, English to guarded SQL, and the email experiment.
 - **Models**: the release gate; why each person got their score, as a waterfall from an average person through every input's push to the model's own score (24 people from the 100,000-person city, each checked to add back up); the AI scorecard; and the scale runs with a projection past one machine.
 - **Audiences**: a sentence becomes typed rules, and a funnel shows who each consent or contact rule removes.
-- **Agent** and **Activity**: an incident's trace step by step, and a timeline of what you did in the app.
+- **Agent**: "Watch it work" replays real agent runs step by step (the skill the router chose, the read-only
+  tool or document used, the answer; for a change, the proposal, the asker's refused self-approval and a
+  second admin's approval); incidents with their traces; and a chat.
+- **Sources, Lineage**: every product traced back through every dbt model, the identity tables and the loader
+  to the delivery it came from, with today's row counts and the tests guarding each table.
+- **Activity**: a timeline of what you did in the app.
 
 The interactive pieces (`src/plumbline/app/visuals.py`) are SVG and plain JavaScript that do their arithmetic in
 the browser, so a slider or a card answers at once instead of rerunning the page. They draw numbers the
@@ -311,6 +318,24 @@ known, and the vendor sends one. A missing date of birth in a source that sends 
 requester whose date of birth is known, now goes to a person (`keys_match_but_dob_unknown`): 1 → 0,
 with no requester's record kept at any size (item 7 under [Scale](#scale)). A test plants this father
 and son too.
+
+
+## Lineage
+
+*Where a number in a product came from*
+
+`python -m plumbline.products.lineage` writes `docs/results/lineage.json`; the app's Sources, Lineage page
+draws it with today's row counts. The model graph is dbt's own: `dbt parse` writes a manifest of every model,
+seed and test, and the graph is read from it, not drawn by hand (12 models, 2 seeds, 27 tests). Above dbt,
+the twelve tables dbt declares as sources are written by this repo's Python: the loader writes the
+`current_*` tables, the delivery rows and the ledger; the erasure module writes `suppression`; the identity
+pipeline writes the identity tables; the reference loader writes the PLUTO and Census tables.
+`plumbline.products.lineage.WRITERS` names the module for each, and tests check that every table dbt reads
+has a writer and that the saved graph is what dbt parses today. Click the activation audience and the page
+shows it is built from 26 tables fed by five deliveries, and guarded by four tests.
+
+Column-level lineage is not drawn: dbt's manifest records which models a model reads, not which column
+became which.
 
 
 ## Should we buy this data?

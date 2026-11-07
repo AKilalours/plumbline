@@ -326,6 +326,9 @@ def identity():
     d = demo()
     header("Identity graph", "Pick anyone. See every record, why they were joined, and fix it if it is wrong.")
     o = outcomes(d, key(d))
+    viz("people", explorer_data(d, key(d)), 120)
+    st.markdown('<div class="mono" style="margin-top:1.6rem">Fix a person: the graph, the evidence, split and merge</div>',
+                unsafe_allow_html=True)
     show = Q.showcase(o, k=40)
     p = Q.people(d.run).set_index("person_id")
     label = lambda pid: f"{p.at[pid, 'first_name']} {p.at[pid, 'last_name']}"
@@ -723,6 +726,11 @@ def agent():
         + ("" if USE_MODEL else "No language model is called on this public page."))
 
 
+@st.cache_data(show_spinner=False)
+def agent_scenes(_d, key) -> dict:
+    return VD.agent_scenes(_d)
+
+
 def activity():
     header("Activity log", "Everything you did in this app, and what it found. Other visitors' actions stay private.")
     r = LOG.recent(200, who=st.session_state.setdefault("visitor", f"visitor-{uuid.uuid4().hex[:4]}"))
@@ -1042,6 +1050,12 @@ def flows(_d, key):
 
 
 @st.cache_data(show_spinner=False)
+def explorer_data(_d, key):
+    with Q.connect(_d) as con:
+        return VD.people_explorer(con, _d.run, outcomes(_d, key), k=30)
+
+
+@st.cache_data(show_spinner=False)
 def city_data(_d, key):
     with Q.connect(_d) as con:
         return VD.city(con, _d.run)
@@ -1164,7 +1178,19 @@ def open_data():
 
 def sources_page():
     header("Sources")
-    v = view(["Health", "Failure lab", "Onboarding", "Open data", "Worth buying?"], "src_view")
+    v = view(["Health", "Lineage", "Failure lab", "Onboarding", "Open data", "Worth buying?"], "src_view")
+    if v == "Lineage":
+        d = demo()
+        g = json.loads((Path(__file__).parent / "docs/results/lineage.json").read_text())
+        with Q.connect(d) as con:
+            data = VD.lineage(con, g)
+        viz("lineage", {**data, "start": "mart_activation_audience",
+                        "hint": "Click any table: everything it is built from and everything built from it lights up, with today's row "
+                                "counts and the tests that guard it. Green deliveries are real public data."}, 120)
+        how("The model graph is dbt's own (its manifest, parsed fresh by `python -m plumbline.products.lineage`). Above dbt, each "
+            "table dbt reads is written by this repo's Python; the lineage module names the module that writes it, and a test "
+            "checks that every table dbt declares as a source has a writer, so the two halves of the graph meet.")
+        return
     if v == "Open data":
         open_data()
         return
@@ -1250,7 +1276,15 @@ def models_page():
 
 def agent_page():
     header("Agent")
-    v = view(["Incidents", "Ask"], "agent_dest")
+    v = view(["Watch it work", "Incidents", "Ask"], "agent_dest")
+    if v == "Watch it work":
+        d = demo()
+        viz("agent", agent_scenes(d, key(d)), 120)
+        how("Each question was run through the agent on a private copy of this city, with keyword routing and no language "
+            "model, and recorded step by step: the skill the router chose, the read-only tool or document it used, and the "
+            "answer. A change only becomes a proposal; the asker cannot approve it, and a second person with the admin role "
+            "must. Click a step for what the agent actually said.")
+        return
     if v == "Ask":
         with embedded():
             agent()

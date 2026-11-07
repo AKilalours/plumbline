@@ -494,3 +494,37 @@ def test_the_threshold_view_counts_at_production_exactly_what_its_cards_count(wo
     assert sum(t["diff"][k:]) == t["rules"]["score_says_join_two_people"]
     assert sum(t["same"][k:]) + sum(t["diff"][k:]) <= over and sum(t["same"]) + sum(t["diff"]) == t["pairs"]
     assert t["rules"]["joined_two_people"] < t["rules"]["score_says_join_two_people"]
+
+
+def test_the_people_explorer_shows_real_records_and_who_won_each_field(world):
+    from plumbline.app import visual_data as VD
+    d, _ = world
+    with Q.connect(d) as con:
+        o = Q.identity_outcomes(con, d.run)
+        x = VD.people_explorer(con, d.run, o, k=5)
+    kinds = {p["kind"] for p in x["people"]}
+    assert "correct" in kinds and x["people"]
+    for p in x["people"]:
+        assert p["records"] and all(r["source"] in ("crm", "vendor", "store") for r in p["records"])
+        won = {}
+        for f in p["fields"]:
+            won.setdefault((f["person_key"], f["attr"]), []).append(f["won"])
+        assert all(sum(v) == 1 for v in won.values())           # exactly one winner per field
+        if p["kind"] == "merged":
+            assert p["strangers"]
+
+
+def test_the_agent_scenes_are_real_runs_and_a_change_needs_a_second_person(world):
+    from plumbline.app import visual_data as VD
+    d, _ = world
+    sc = VD.agent_scenes(d)
+    by = {s["question"] + s["steps"][0]["who"]: s for s in sc["scenes"]}
+    health = next(s for s in sc["scenes"] if s["question"] == "Is the pipeline healthy?")
+    assert health["steps"][0]["tool"] and not health["steps"][0]["refused"]
+    leave = next(s for s in sc["scenes"] if "parental leave" in s["question"])
+    assert leave["steps"][0]["refused"]
+    for s in sc["scenes"]:
+        if s["steps"][0]["proposals"]:
+            assert s["steps"][1]["refused"] and not s["steps"][2]["refused"]      # the asker cannot; a second admin can
+            assert s["steps"][2]["who"] != s["steps"][0]["who"]
+    assert by

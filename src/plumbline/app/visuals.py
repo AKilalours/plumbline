@@ -7,13 +7,13 @@ caller, which reads it from the warehouse or a saved result, so a test can check
 
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
-Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace.
+Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace, people, agent, lineage.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -70,7 +70,7 @@ input[type=range]{width:100%;margin:0;accent-color:var(--blue);height:28px}
 .dots{display:flex;gap:4px;flex-wrap:wrap}.dots i{width:9px;height:9px;border-radius:50%;background:var(--line);display:inline-block}
 .dots i.on{background:var(--blue)}.dots i.r{background:var(--green)}.dots i.w{background:var(--red)}
 .flyR{transform:translateX(60px) rotate(2deg);opacity:0;transition:all .28s}.flyL{transform:translateX(-60px) rotate(-2deg);opacity:0;transition:all .28s}
-.chip{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;margin:3px 4px 0 0}
+.chip{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:12px;margin:3px 4px 0 0;max-width:100%;overflow-wrap:anywhere}
 .chip.gone{text-decoration:line-through;color:var(--red);border-color:#F2C9C0;background:#FDF5F3}
 .chip.new{color:var(--blue);border-color:#C9D1F2;background:var(--tint)}
 @media (max-width:560px){.recs{grid-template-columns:1fr}.bars .b{grid-template-columns:1fr 70px}.bars .track{grid-column:1/3;grid-row:2}.tile .v{font-size:28px}}
@@ -688,6 +688,162 @@ R.trace = () => {
       <div class="track" style="height:5px;margin-top:6px"><div class="fill grow" style="width:${Math.max(2, 100 * e.seconds / tot)}%;background:${c};animation-delay:${i * 120}ms"></div></div></div>
       <div class="num" style="text-align:right;font-size:13px;color:var(--muted)">${e.seconds.toFixed(1)} s</div>`;
     w.appendChild(r); });
+};
+
+// Open anyone: their records fly in from each source and land in the person (or persons) the pipeline
+// built; the golden profile shows, field by field, which value won and why, against every value that lost.
+R.people = () => {
+  const P = D.people, KIND = {correct: ['Found despite typos', 'pass'], split: ['Split in two', 'fail'], merged: ['Merged with someone', 'fail']};
+  const SC = {crm: '#2941B9', vendor: '#E5B74D', store: '#11196F', email: '#7C8FE0'};
+  let kind = 'merged', q = '', cur = null;
+  const top = document.createElement('div'); top.className = 'row';
+  const kinds = seg(Object.keys(KIND).map(k => `${KIND[k][0]} (${P.filter(p => p.kind === k).length})`), null, v => { kind = Object.keys(KIND).find(k => v.startsWith(KIND[k][0])); list(); });
+  kinds.querySelectorAll('button')[2].className = 'on';
+  const search = document.createElement('input'); search.placeholder = 'Search a name'; search.style.cssText = 'flex:1;min-width:160px;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font:14px Geist,sans-serif';
+  search.oninput = () => { q = search.value.toLowerCase(); list(); };
+  top.append(kinds, search); app.appendChild(top);
+  const names = document.createElement('div'); names.style.cssText = 'margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;max-height:84px;overflow:auto'; app.appendChild(names);
+  const stage = document.createElement('div'); app.appendChild(stage);
+  function list() {
+    const pool = P.filter(p => (q ? p.name.toLowerCase().includes(q) : p.kind === kind));
+    const dup = n => pool.filter(x => x.name === n).length > 1;      // two real people can share a name: that is a merge's whole story
+    names.innerHTML = ''; pool.forEach(p => { const b = document.createElement('button'); b.className = 'chip'; b.style.cursor = 'pointer'; b._p = p;
+      b.textContent = p.name + (dup(p.name) ? ` · ${p.id.slice(-4)}` : '') + (q ? ' · ' + KIND[p.kind][0].toLowerCase() : '');
+      b.onclick = () => open(p); names.appendChild(b); });
+    if (!pool.length) names.innerHTML = '<span class="cap">Nobody by that name here.</span>';
+    if (!cur || !pool.includes(cur)) open(pool[0]);
+  }
+  function open(p) {
+    if (!p) { stage.innerHTML = ''; return; } cur = p;
+    names.querySelectorAll('button').forEach(b => { const on = b._p === p; b.style.background = on ? 'var(--blue)' : '#fff'; b.style.color = on ? '#fff' : 'inherit'; });
+    const [kl, tone] = KIND[p.kind];
+    const boxes = [...new Set([...p.keys, ...p.records.map(r => r.person_key).filter(Boolean)])];
+    const verdict = p.kind === 'correct' ? `${p.records.length} records from ${new Set(p.records.map(r => r.source)).size} sources, joined into one person. Nobody else mixed in.`
+      : p.kind === 'split' ? `Their records landed in ${boxes.length} persons: one real person counted ${boxes.length} times.`
+      : `Someone else's record was joined to them: ${p.strangers.map(s => s.really).join(', ')}.`;
+    stage.innerHTML = `<div class="card fade" style="margin-top:4px"><div class="row" style="justify-content:space-between">
+        <div><div class="mono">Answer key</div><div style="font-size:24px;font-weight:600">${esc(p.name)}</div></div>
+        <span class="pill p-${tone}">${esc(kl)}</span></div><div class="cap" style="margin-top:4px">${esc(verdict)}</div>
+      <div id="lanes" style="display:grid;gap:12px;margin-top:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))"></div></div>
+      <div class="card fade" style="margin-top:12px"><div class="mono">The golden profile: which value won, and why</div><div id="gold"></div>
+      <div class="cap" id="why" style="margin-top:8px">${esc(D.rule)} Click a field.</div></div>`;
+    const lanes = stage.querySelector('#lanes');
+    boxes.forEach((k, bi) => { const box = document.createElement('div'); box.style.cssText = `border:2px dashed ${boxes.length > 1 ? 'var(--red)' : 'var(--line)'};border-radius:16px;padding:10px;min-height:120px`;
+      box.innerHTML = `<div class="mono">Pipeline person ${bi + 1} · ${esc(k.slice(-6))}</div>`;
+      const mine = p.records.filter(r => r.person_key === k), strange = p.strangers.filter(s => s.person_key === k);
+      mine.forEach((r, i) => { const c = document.createElement('div'); c.className = 'rec';
+        c.style.cssText = `margin-top:8px;border-left:4px solid ${SC[r.source] || '#999'};animation:fly${i % 2} .6s ${bi * 200 + i * 160}ms both`;
+        c.innerHTML = `<div class="mono" style="color:${SC[r.source]}">${esc(r.label)} · ${esc(r.id)}</div><div style="font-weight:600;font-size:14px">${esc(r.name)}</div>
+          <div class="cap" style="margin:2px 0 0;overflow-wrap:anywhere">${esc(r.email || 'no email')}${r.phone ? ' · ' + esc(r.phone) : ''}<br>${esc(r.address)}</div>`; box.appendChild(c); });
+      strange.forEach((s_, i) => { const c = document.createElement('div'); c.className = 'rec';
+        c.style.cssText = `margin-top:8px;border:1px solid #F2C9C0;background:#FDF5F3;animation:fly1 .6s ${bi * 200 + (mine.length + i) * 160}ms both`;
+        c.innerHTML = `<div class="mono" style="color:var(--red)">${esc(s_.source)} record of someone else</div><div style="font-weight:600;font-size:14px;color:var(--red)">really ${esc(s_.really)}</div>`; box.appendChild(c); });
+      lanes.appendChild(box); });
+    const gold = stage.querySelector('#gold'), why = stage.querySelector('#why'), byAttr = {};
+    p.fields.filter(f => f.person_key === boxes[0]).forEach(f => (byAttr[f.attr] = byAttr[f.attr] || []).push(f));
+    Object.entries(byAttr).forEach(([attr, vs], i) => { const w = vs.find(v => v.won) || vs[0], lose = vs.filter(v => v !== w);
+      const r = document.createElement('div'); r.className = 'f fade'; r.style.cssText += `;cursor:pointer;animation-delay:${600 + i * 60}ms;align-items:center`;
+      r.innerHTML = `<b style="min-width:110px">${esc(attr.replace(/_/g, ' '))}</b><span style="flex:1;text-align:left;font-weight:600">${esc(w.value)}
+        <span class="chip" style="font-weight:400;border-color:${SC[w.source] || '#999'};color:${SC[w.source] || '#999'}">${esc(w.source)}</span>
+        ${lose.map(l => `<span class="chip gone" style="font-weight:400">${esc(l.value)}</span>`).join('')}</span>`;
+      r.onclick = () => { why.innerHTML = `<b>${esc(attr.replace(/_/g, ' '))}</b>: <b>${esc(w.value)}</b> won. Seen ${w.observations}× by ${w.sources} source${w.sources > 1 ? 's' : ''}, last on ${w.last}, most trusted source ${esc(w.source)}.` +
+        (lose.length ? ' Lost: ' + lose.map(l => `${esc(l.value)} (seen ${l.observations}×, last ${l.last})`).join('; ') + '.' : ' No other value was ever seen.') +
+        (attr === 'address' && lose.length ? ' Address rule: the newest address still being confirmed wins, so an old one a stale source keeps repeating does not.' : ''); };
+      gold.appendChild(r); });
+    if (!Object.keys(byAttr).length) gold.innerHTML = '<div class="cap">No golden profile for this person.</div>';
+  }
+  const st = document.createElement('style'); st.textContent = '@keyframes fly0{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:none}}@keyframes fly1{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}';
+  document.head.appendChild(st); list();
+};
+
+// The agent, step by step, on real runs: who asked, the skill the router chose, the read-only tool or the
+// documents it used, the answer, and for a change, the approval gate that stops it until a second person agrees.
+R.agent = () => {
+  const S = D.scenes; let timer = null;
+  const chips = document.createElement('div'); chips.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+  const lane = document.createElement('div'); lane.style.cssText = 'margin-top:14px;display:flex;flex-wrap:wrap;row-gap:10px;align-items:center';
+  const cards = document.createElement('div'); cards.style.marginTop = '10px';
+  app.append(chips, lane, cards);
+  S.forEach((sc, i) => { const b = document.createElement('button'); b.className = 'chip'; b.style.cursor = 'pointer';
+    b.textContent = `${sc.steps[0].who}: ${sc.question}`; b.onclick = () => run(i); chips.appendChild(b); });
+  function nodes(sc) {
+    const out = [], a = sc.steps[0];
+    out.push({t: 'Asked', v: `${a.who} (${a.roles.join(', ') || 'no role'})`, d: a.asked, c: 'var(--navy)'});
+    out.push({t: 'Router chose', v: a.skill || 'none', d: 'Questions are matched to a skill; the skill decides which tools it may use.', c: 'var(--blue)'});
+    if (a.tool) out.push({t: a.proposals.length ? 'Change tool' : 'Read-only tool', v: a.tool, d: a.proposals.length ? 'Writes nothing: it files a proposal.' : 'Reads the live warehouse; cannot change it.', c: a.proposals.length ? 'var(--gold)' : 'var(--blue)'});
+    if (a.sources.length) out.push({t: 'Cited', v: a.sources.join(', '), d: 'The answer quotes this document.', c: 'var(--blue)'});
+    out.push({t: a.refused ? 'Refused' : a.proposals.length ? 'Proposed' : 'Answered', v: a.refused ? 'not in the documents' : a.proposals.length ? a.proposals[0] : 'with evidence', d: a.text, c: a.refused ? 'var(--red)' : a.proposals.length ? 'var(--gold)' : 'var(--green)'});
+    sc.steps.slice(1).forEach(s2 => out.push({t: s2.refused ? 'Approval refused' : 'Approved', v: s2.who, d: s2.text, c: s2.refused ? 'var(--red)' : 'var(--green)'}));
+    return out;
+  }
+  function run(i) {
+    clearInterval(timer); chips.querySelectorAll('button').forEach((b, k) => { b.style.background = k === i ? 'var(--blue)' : '#fff'; b.style.color = k === i ? '#fff' : 'inherit'; });
+    const ns = nodes(S[i]); lane.innerHTML = ''; cards.innerHTML = '';
+    ns.forEach((n, k) => { const el = document.createElement('div'); el.style.cssText = 'display:flex;align-items:center;flex:0 0 auto';
+      el.innerHTML = `${k ? '<div class="ln" style="width:34px;height:3px;background:#E6E6E6;position:relative;overflow:hidden"><div style="position:absolute;inset:0;background:' + n.c + ';transform:scaleX(0);transform-origin:left;transition:transform .35s"></div></div>' : ''}
+        <div class="nd" style="border:2px solid #E6E6E6;border-radius:14px;padding:8px 12px;min-width:120px;max-width:190px;opacity:.35;transition:all .3s;cursor:pointer">
+        <div class="mono">${esc(n.t)}</div><div style="font-weight:600;font-size:13.5px;overflow-wrap:anywhere">${esc(n.v)}</div></div>`;
+      el.querySelector('.nd').onclick = () => detail(n); lane.appendChild(el); });
+    let k = 0; const step = () => { const el = lane.children[k]; if (!el) { clearInterval(timer); return; }
+      const nd = el.querySelector('.nd'), ln = el.querySelector('.ln div'); if (ln) ln.style.transform = 'scaleX(1)';
+      nd.style.opacity = 1; nd.style.borderColor = ns[k].c; nd.style.boxShadow = `0 6px 18px rgba(17,25,111,.10)`; detail(ns[k]); k++; };
+    step(); timer = setInterval(step, reduce ? 0 : 750);
+  }
+  function detail(n) { cards.innerHTML = `<div class="card fade" style="border-left:5px solid ${n.c}"><div class="mono">${esc(n.t)}</div>
+    <div style="font-size:14px;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(n.d)}</div></div>`; }
+  run(0);
+};
+
+// Where every product comes from: click any table to light up everything upstream and downstream of it.
+R.lineage = () => {
+  // Reference tables sit with the loader's, seeds with staging: six columns leave room for whole names.
+  const COL = {Reference: 'Loader', Seeds: 'Staging'};
+  const N = D.nodes.map(n => ({...n, stage: COL[n.stage] || n.stage})), E = D.edges, ST = D.stages.filter(s => !COL[s]), by = Object.fromEntries(N.map(n => [n.id, n]));
+  const up = {}, down = {}; E.forEach(([a, b]) => { (down[a] = down[a] || []).push(b); (up[b] = up[b] || []).push(a); });
+  const walk = (s, g) => { const seen = new Set(), st = [s]; while (st.length) { const x = st.pop(); (g[x] || []).forEach(y => { if (!seen.has(y)) { seen.add(y); st.push(y); } }); } return seen; };
+  const W = Math.max(300, app.clientWidth || 900), narrow = W < 700;
+  const cols = ST.filter(s => N.some(n => n.stage === s));
+  const groups = cols.map(s => N.filter(n => n.stage === s));
+  const nw = narrow ? Math.min(150, (W - 20) / 2 - 8) : Math.min(150, (W - 20) / cols.length - 14), nh = 34, gap = 9;
+  let pos = {}, H;
+  if (!narrow) { const colW = (W - 10) / cols.length; H = Math.max(...groups.map(g => g.length)) * (nh + gap) + 40;
+    groups.forEach((g, c) => g.forEach((n, i) => pos[n.id] = {x: 5 + c * colW + (colW - nw) / 2, y: 30 + i * (nh + gap) + (H - 40 - g.length * (nh + gap)) / 2}));
+  } else { let y = 10; groups.forEach(g => { y += 22; g.forEach((n, i) => { pos[n.id] = {x: 10 + (i % 2) * (nw + 16), y: y + Math.floor(i / 2) * (nh + gap)}; });
+      y += Math.ceil(g.length / 2) * (nh + gap) + 6; }); H = y + 10; }
+  const box = document.createElement('div'); app.appendChild(box);
+  const cap = document.createElement('div'); cap.className = 'card'; cap.style.marginTop = '10px'; app.appendChild(cap);
+  const color = n => n.kind === 'delivery' ? (n.real ? 'var(--green)' : 'var(--navy)') : n.stage === 'Products' ? 'var(--blue)' : n.stage === 'Identity' ? '#7C8FE0' : n.kind === 'seed' ? 'var(--gold)' : '#9AA3C7';
+  let sel = null;
+  const fit = (t, px) => { const n = Math.max(6, Math.floor(px / 6.4)); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+  function draw() {
+    const ups = sel ? walk(sel, up) : null, downs = sel ? walk(sel, down) : null;
+    const on = id => !sel || id === sel || ups.has(id) || downs.has(id);
+    const lit = (a, b) => sel && ((b === sel && ups.has(a)) || (a === sel && downs.has(b)) || (ups.has(a) && ups.has(b)) || (downs.has(a) && downs.has(b)));
+    let g = `<svg width="${W}" height="${H}" style="display:block;max-width:100%">`;
+    if (!narrow) cols.forEach((s, c) => { const colW = (W - 10) / cols.length; g += `<text x="${5 + c * colW + colW / 2}" y="14" text-anchor="middle" font-size="10.5" font-family="Geist Mono" fill="#6B6B6B">${esc(s.toUpperCase())}</text>`; });
+    else { let y = 10; groups.forEach((gr, c) => { g += `<text x="10" y="${y + 16}" font-size="10.5" font-family="Geist Mono" fill="#6B6B6B">${esc(cols[c].toUpperCase())}</text>`; y += 22 + Math.ceil(gr.length / 2) * (nh + gap) + 6; }); }
+    E.forEach(([a, b]) => { const p = pos[a], q = pos[b]; if (!p || !q) return; const l = lit(a, b);
+      const x1 = narrow ? p.x + nw / 2 : p.x + nw, y1 = narrow ? p.y + nh : p.y + nh / 2, x2 = narrow ? q.x + nw / 2 : q.x, y2 = narrow ? q.y : q.y + nh / 2;
+      const d = narrow ? `M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}` : `M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`;
+      g += `<path d="${d}" fill="none" stroke="${l ? 'var(--blue)' : '#D7DBEA'}" stroke-width="${l ? 1.8 : 1}" opacity="${sel && !l ? .18 : l ? .85 : .9}"/>`; });
+    N.forEach(n => { const p = pos[n.id], o = on(n.id) ? 1 : .2, c = color(n);
+      g += `<g class="ln" data-id="${esc(n.id)}" style="cursor:pointer" opacity="${o}"><rect x="${p.x}" y="${p.y}" width="${nw}" height="${nh}" rx="9" fill="#fff" stroke="${n.id === sel ? '#050505' : c}" stroke-width="${n.id === sel ? 2.5 : 1.5}"/>
+        <rect x="${p.x}" y="${p.y}" width="5" height="${nh}" rx="2" fill="${c}"/>
+        <text x="${p.x + 11}" y="${p.y + 14}" font-size="11" font-weight="600"><title>${esc(n.id)}</title>${esc(fit(n.id, nw - 16))}</text>
+        <text x="${p.x + 11}" y="${p.y + 27}" font-size="10" fill="#6B6B6B">${esc(fit((n.rows == null ? '' : F.int(n.rows) + ' rows') + (n.tests ? ` · ${n.tests.length} test${n.tests.length > 1 ? 's' : ''}` : ''), nw - 14))}</text></g>`; });
+    box.innerHTML = g + '</svg>';
+    box.querySelectorAll('.ln').forEach(e => e.onclick = () => { const id = e.dataset.id; sel = id === sel ? null : id; draw(); tell(); });
+  }
+  function tell() {
+    if (!sel) { cap.innerHTML = `<div class="mono">Lineage</div><div style="font-size:14px;margin-top:4px">${esc(D.hint)}</div>`; return; }
+    const n = by[sel], u = walk(sel, up), d = walk(sel, down), roots = [...u].filter(x => by[x].kind === 'delivery');
+    cap.innerHTML = `<div class="mono">${esc(n.stage)} · ${esc(n.kind)}</div><div style="font-size:18px;font-weight:600;margin:4px 0">${esc(sel)}</div>
+      ${n.description ? `<div style="font-size:14px">${esc(n.description)}</div>` : ''}
+      <div class="cap" style="margin-top:6px">${n.rows == null ? '' : F.int(n.rows) + ' rows today · '}${n.written_by ? 'built by ' + esc(n.written_by) : 'arrives from outside'}</div>
+      <div style="margin-top:6px;font-size:13.5px">Built from <b>${u.size}</b> upstream, feeds <b>${d.size}</b> downstream.${roots.length ? ' Comes from: ' + roots.map(r => `<span class="chip">${esc(r)}</span>`).join('') : ''}</div>
+      ${n.tests ? `<div style="margin-top:6px">${n.tests.map(t => `<span class="chip new">${esc(t.length > 48 ? t.slice(0, 47) + '…' : t)}</span>`).join('')}</div>` : ''}`;
+  }
+  sel = D.start || null; draw(); tell();
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

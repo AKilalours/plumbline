@@ -1,0 +1,549 @@
+{
+ "nodes": [
+  {
+   "id": "CRM files",
+   "kind": "delivery",
+   "stage": "Deliveries",
+   "written_by": "",
+   "real": false
+  },
+  {
+   "id": "Census ACS (real)",
+   "kind": "delivery",
+   "stage": "Deliveries",
+   "written_by": "",
+   "real": true
+  },
+  {
+   "id": "Email event files",
+   "kind": "delivery",
+   "stage": "Deliveries",
+   "written_by": "",
+   "real": false
+  },
+  {
+   "id": "NYC PLUTO (real)",
+   "kind": "delivery",
+   "stage": "Deliveries",
+   "written_by": "",
+   "real": true
+  },
+  {
+   "id": "Privacy requests",
+   "kind": "delivery",
+   "stage": "Deliveries",
+   "written_by": "",
+   "real": false
+  },
+  {
+   "id": "Store API",
+   "kind": "delivery",
+   "stage": "Deliveries",
+   "written_by": "",
+   "real": false
+  },
+  {
+   "id": "Vendor files",
+   "kind": "delivery",
+   "stage": "Deliveries",
+   "written_by": "",
+   "real": false
+  },
+  {
+   "id": "current_crm",
+   "kind": "table",
+   "stage": "Loader",
+   "written_by": "src/plumbline/ingest/engine.py"
+  },
+  {
+   "id": "current_email",
+   "kind": "table",
+   "stage": "Loader",
+   "written_by": "src/plumbline/ingest/engine.py",
+   "tests": [
+    "audience_never_emails_a_suppressed_or_unsubscribed_address"
+   ]
+  },
+  {
+   "id": "current_store",
+   "kind": "table",
+   "stage": "Loader",
+   "written_by": "src/plumbline/ingest/connectors/store_api.py"
+  },
+  {
+   "id": "current_vendor",
+   "kind": "table",
+   "stage": "Loader",
+   "written_by": "src/plumbline/ingest/engine.py"
+  },
+  {
+   "id": "delivery_rows",
+   "kind": "table",
+   "stage": "Loader",
+   "written_by": "src/plumbline/ingest/engine.py"
+  },
+  {
+   "id": "dim_household",
+   "kind": "model",
+   "stage": "Products",
+   "written_by": "models/marts/dim_household.sql",
+   "description": "",
+   "schema": "products",
+   "tests": [
+    "not_null_dim_household_household_key",
+    "relationships_dim_person_household_key__household_key__ref_dim_household_",
+    "unique_dim_household_household_key"
+   ]
+  },
+  {
+   "id": "dim_person",
+   "kind": "model",
+   "stage": "Products",
+   "written_by": "models/marts/dim_person.sql",
+   "description": "Golden person record. One row per resolved person; every value carries its source and date.",
+   "schema": "products",
+   "tests": [
+    "accepted_values_dim_person_address_source__crm__vendor__store",
+    "audience_never_emails_a_suppressed_or_unsubscribed_address",
+    "deleted_people_are_not_in_products",
+    "golden_values_come_from_the_persons_own_records",
+    "not_null_dim_person_person_key",
+    "not_null_dim_person_records",
+    "relationships_dim_person_address_history_person_key__person_key__ref_dim_person_",
+    "relationships_dim_person_household_key__household_key__ref_dim_household_",
+    "relationships_fct_person_features_person_key__person_key__ref_dim_person_",
+    "relationships_mart_activation_audience_person_key__person_key__ref_dim_person_",
+    "unique_dim_person_person_key"
+   ]
+  },
+  {
+   "id": "dim_person_address_history",
+   "kind": "model",
+   "stage": "Products",
+   "written_by": "models/marts/dim_person_address_history.sql",
+   "description": "Address history with valid_from and valid_to, for point-in-time lookups.",
+   "schema": "products",
+   "tests": [
+    "address_history_has_no_overlaps",
+    "not_null_dim_person_address_history_person_key",
+    "not_null_dim_person_address_history_valid_from",
+    "relationships_dim_person_address_history_person_key__person_key__ref_dim_person_"
+   ]
+  },
+  {
+   "id": "fct_life_events",
+   "kind": "model",
+   "stage": "Products",
+   "written_by": "models/marts/fct_life_events.sql",
+   "description": "",
+   "schema": "products",
+   "tests": [
+    "accepted_values_fct_life_events_confidence__high__medium__low",
+    "accepted_values_fct_life_events_event_type__move"
+   ]
+  },
+  {
+   "id": "fct_person_features",
+   "kind": "model",
+   "stage": "Products",
+   "written_by": "models/marts/fct_person_features.sql",
+   "description": "Point-in-time model features, one row per person with a known address, as of var('as_of').",
+   "schema": "products",
+   "tests": [
+    "not_null_fct_person_features_as_of",
+    "not_null_fct_person_features_person_key",
+    "relationships_fct_person_features_person_key__person_key__ref_dim_person_",
+    "unique_fct_person_features_person_key"
+   ]
+  },
+  {
+   "id": "identity_map",
+   "kind": "table",
+   "stage": "Identity",
+   "written_by": "src/plumbline/identity/pipeline.py",
+   "tests": [
+    "deleted_people_are_not_in_products"
+   ]
+  },
+  {
+   "id": "identity_records",
+   "kind": "table",
+   "stage": "Identity",
+   "written_by": "src/plumbline/identity/pipeline.py"
+  },
+  {
+   "id": "identity_store_profiles",
+   "kind": "table",
+   "stage": "Identity",
+   "written_by": "src/plumbline/identity/pipeline.py"
+  },
+  {
+   "id": "ingest_ledger",
+   "kind": "table",
+   "stage": "Loader",
+   "written_by": "src/plumbline/ingest/engine.py"
+  },
+  {
+   "id": "int_address_canonical",
+   "kind": "model",
+   "stage": "Intermediate",
+   "written_by": "models/intermediate/int_address_canonical.sql",
+   "description": "",
+   "schema": "products",
+   "tests": [
+    "every_address_spelling_has_one_canonical"
+   ]
+  },
+  {
+   "id": "int_attribute_values",
+   "kind": "model",
+   "stage": "Intermediate",
+   "written_by": "models/intermediate/int_attribute_values.sql",
+   "description": "",
+   "schema": "products"
+  },
+  {
+   "id": "int_attribute_winners",
+   "kind": "model",
+   "stage": "Intermediate",
+   "written_by": "models/intermediate/int_attribute_winners.sql",
+   "description": "",
+   "schema": "products"
+  },
+  {
+   "id": "int_observations_resolved",
+   "kind": "model",
+   "stage": "Intermediate",
+   "written_by": "models/intermediate/int_observations_resolved.sql",
+   "description": "",
+   "schema": "products"
+  },
+  {
+   "id": "int_observations_typed",
+   "kind": "model",
+   "stage": "Intermediate",
+   "written_by": "models/intermediate/int_observations_typed.sql",
+   "description": "",
+   "schema": "products"
+  },
+  {
+   "id": "mart_activation_audience",
+   "kind": "model",
+   "stage": "Products",
+   "written_by": "models/marts/mart_activation_audience.sql",
+   "description": "Contactable people by channel and segment, with compliance rules applied.",
+   "schema": "products",
+   "tests": [
+    "audience_never_emails_a_suppressed_or_unsubscribed_address",
+    "not_null_mart_activation_audience_email_ok",
+    "relationships_mart_activation_audience_person_key__person_key__ref_dim_person_",
+    "unique_mart_activation_audience_person_key"
+   ]
+  },
+  {
+   "id": "personal_email_domains",
+   "kind": "seed",
+   "stage": "Seeds",
+   "written_by": "seeds/personal_email_domains.csv",
+   "description": "Consumer mailbox providers. Any other domain is treated as a work email (B2B2C link).",
+   "schema": "products",
+   "tests": [
+    "not_null_personal_email_domains_domain",
+    "unique_personal_email_domains_domain"
+   ]
+  },
+  {
+   "id": "ref_property",
+   "kind": "table",
+   "stage": "Reference",
+   "written_by": "src/plumbline/ml/reference.py"
+  },
+  {
+   "id": "ref_zip_income",
+   "kind": "table",
+   "stage": "Reference",
+   "written_by": "src/plumbline/ml/reference.py"
+  },
+  {
+   "id": "source_trust",
+   "kind": "seed",
+   "stage": "Seeds",
+   "written_by": "seeds/source_trust.csv",
+   "description": "Tie-break order when two sources report a value on the same day. Recency decides first.",
+   "schema": "products",
+   "tests": [
+    "not_null_source_trust_rank"
+   ]
+  },
+  {
+   "id": "stg_observations",
+   "kind": "model",
+   "stage": "Staging",
+   "written_by": "models/staging/stg_observations.sql",
+   "description": "",
+   "schema": "products",
+   "tests": [
+    "golden_values_come_from_the_persons_own_records"
+   ]
+  },
+  {
+   "id": "suppression",
+   "kind": "table",
+   "stage": "Loader",
+   "written_by": "src/plumbline/ingest/erasure.py",
+   "tests": [
+    "audience_never_emails_a_suppressed_or_unsubscribed_address"
+   ]
+  }
+ ],
+ "edges": [
+  [
+   "CRM files",
+   "current_crm"
+  ],
+  [
+   "CRM files",
+   "delivery_rows"
+  ],
+  [
+   "CRM files",
+   "ingest_ledger"
+  ],
+  [
+   "Census ACS (real)",
+   "ref_zip_income"
+  ],
+  [
+   "Email event files",
+   "current_email"
+  ],
+  [
+   "Email event files",
+   "delivery_rows"
+  ],
+  [
+   "Email event files",
+   "ingest_ledger"
+  ],
+  [
+   "NYC PLUTO (real)",
+   "ref_property"
+  ],
+  [
+   "Privacy requests",
+   "suppression"
+  ],
+  [
+   "Store API",
+   "current_store"
+  ],
+  [
+   "Store API",
+   "delivery_rows"
+  ],
+  [
+   "Store API",
+   "ingest_ledger"
+  ],
+  [
+   "Vendor files",
+   "current_vendor"
+  ],
+  [
+   "Vendor files",
+   "delivery_rows"
+  ],
+  [
+   "Vendor files",
+   "ingest_ledger"
+  ],
+  [
+   "current_crm",
+   "identity_records"
+  ],
+  [
+   "current_crm",
+   "stg_observations"
+  ],
+  [
+   "current_email",
+   "dim_person"
+  ],
+  [
+   "current_email",
+   "mart_activation_audience"
+  ],
+  [
+   "current_email",
+   "stg_observations"
+  ],
+  [
+   "current_store",
+   "dim_person"
+  ],
+  [
+   "current_store",
+   "fct_person_features"
+  ],
+  [
+   "current_store",
+   "identity_records"
+  ],
+  [
+   "current_store",
+   "identity_store_profiles"
+  ],
+  [
+   "current_store",
+   "stg_observations"
+  ],
+  [
+   "current_vendor",
+   "identity_records"
+  ],
+  [
+   "current_vendor",
+   "stg_observations"
+  ],
+  [
+   "delivery_rows",
+   "stg_observations"
+  ],
+  [
+   "dim_person",
+   "dim_household"
+  ],
+  [
+   "dim_person",
+   "fct_person_features"
+  ],
+  [
+   "dim_person",
+   "mart_activation_audience"
+  ],
+  [
+   "dim_person_address_history",
+   "fct_life_events"
+  ],
+  [
+   "fct_life_events",
+   "fct_person_features"
+  ],
+  [
+   "fct_life_events",
+   "mart_activation_audience"
+  ],
+  [
+   "identity_map",
+   "dim_person"
+  ],
+  [
+   "identity_map",
+   "fct_person_features"
+  ],
+  [
+   "identity_map",
+   "stg_observations"
+  ],
+  [
+   "identity_records",
+   "identity_map"
+  ],
+  [
+   "identity_records",
+   "stg_observations"
+  ],
+  [
+   "identity_store_profiles",
+   "stg_observations"
+  ],
+  [
+   "ingest_ledger",
+   "stg_observations"
+  ],
+  [
+   "int_address_canonical",
+   "int_observations_resolved"
+  ],
+  [
+   "int_attribute_values",
+   "dim_person_address_history"
+  ],
+  [
+   "int_attribute_values",
+   "fct_person_features"
+  ],
+  [
+   "int_attribute_values",
+   "int_attribute_winners"
+  ],
+  [
+   "int_attribute_winners",
+   "dim_person"
+  ],
+  [
+   "int_observations_resolved",
+   "int_attribute_values"
+  ],
+  [
+   "int_observations_typed",
+   "dim_person"
+  ],
+  [
+   "int_observations_typed",
+   "int_address_canonical"
+  ],
+  [
+   "int_observations_typed",
+   "int_observations_resolved"
+  ],
+  [
+   "personal_email_domains",
+   "int_observations_typed"
+  ],
+  [
+   "ref_property",
+   "fct_person_features"
+  ],
+  [
+   "ref_zip_income",
+   "fct_person_features"
+  ],
+  [
+   "source_trust",
+   "int_observations_typed"
+  ],
+  [
+   "stg_observations",
+   "int_observations_typed"
+  ],
+  [
+   "suppression",
+   "mart_activation_audience"
+  ]
+ ],
+ "dbt_sources": [
+  "current_crm",
+  "current_email",
+  "current_store",
+  "current_vendor",
+  "delivery_rows",
+  "identity_map",
+  "identity_records",
+  "identity_store_profiles",
+  "ingest_ledger",
+  "ref_property",
+  "ref_zip_income",
+  "suppression"
+ ],
+ "stages": [
+  "Deliveries",
+  "Reference",
+  "Loader",
+  "Identity",
+  "Seeds",
+  "Staging",
+  "Intermediate",
+  "Products"
+ ]
+}

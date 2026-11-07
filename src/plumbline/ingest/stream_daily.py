@@ -9,7 +9,8 @@ ones already seen (a real check of resume on a stream nobody here controls); loa
 reviewed contract (sources/streams/wikimedia_recentchange.yaml) into a scratch warehouse; publish to the cloud
 warehouse when MOTHERDUCK_TOKEN is set; and append one line to docs/results/streams/runs.jsonl: events,
 rows loaded and quarantined, duplicates dropped, reconnects by cause, the resume check, events a second, and
-lag (seconds from an edit happening to it landing here) at the median and 95th percentile.
+lag (seconds from the stream's own event time to the event landing here; Wikimedia stamps that
+time a second or two after the edit itself) at the median and 95th percentile.
 
 Each run starts from the live edge, not from yesterday's checkpoint: catching up a day of this stream would
 be millions of events for a sample job. Resume is exercised inside every run instead, and by the tests.

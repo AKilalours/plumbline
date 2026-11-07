@@ -37,6 +37,7 @@ import duckdb
 import pandas as pd
 
 from ..privacy import tombstones
+from . import gate
 from .erasure import QUARANTINE_ERASE, RequestIndex, contract_erase_sql
 from .contracts import BadValue, SourceContract, email_hash, normalize, phone_hash
 
@@ -61,7 +62,7 @@ class LoadResult:
     source: str
     path: str
     delivery_id: str
-    status: str               # loaded | skipped_seen_before | rejected
+    status: str               # loaded | skipped_seen_before | rejected | held
     rows_in: int = 0
     rows_loaded: int = 0
     rows_quarantined: int = 0
@@ -78,7 +79,7 @@ class RunReport:
     def totals(self) -> dict:
         keys = ["rows_in", "rows_loaded", "rows_quarantined", "rows_suppressed", "rows_already_present", "rows_purged"]
         t = {k: sum(getattr(r, k) for r in self.results) for k in keys}
-        for s in ("loaded", "skipped_seen_before", "rejected"):
+        for s in ("loaded", "skipped_seen_before", "rejected", "held"):
             t[f"deliveries_{s}"] = sum(r.status == s for r in self.results)
         return t
 
@@ -106,6 +107,8 @@ def ensure_schema(con: duckdb.DuckDBPyConnection, contracts: dict[str, SourceCon
         created_at TIMESTAMP)""")
     con.execute("""CREATE TABLE IF NOT EXISTS suppression_log (
         source VARCHAR, delivery_id VARCHAR, action VARCHAR, rows INTEGER, logged_at TIMESTAMP)""")
+    if any(c.gate for c in contracts.values()):
+        gate.ensure(con)
     for c in contracts.values():
         if c.role != "data":
             continue
@@ -229,11 +232,16 @@ def load_delivery(con, c: SourceContract, run_dir: Path, d: Delivery,
     seen: dict[tuple, str] = {}
     out_rows: list[dict] = []
     blocked: list[dict] = []
+    empties = dict.fromkeys(c.columns, 0) if c.gate else None
     for i, row in enumerate(reader, start=1):
         if not row:
             continue
         res.rows_in += 1
         raw = dict(zip(mapped, row))
+        if empties is not None and len(row) == len(mapped):
+            for n in empties:
+                if not (raw.get(n) or "").strip():
+                    empties[n] += 1
         hit = requests.match(*_raw_hashes(c, raw))
         if hit:
             res.rows_suppressed += 1
@@ -270,8 +278,24 @@ def load_delivery(con, c: SourceContract, run_dir: Path, d: Delivery,
                     "_first_seen_at": d.delivered_at, "_first_row_number": i})
         out_rows.append(rec)
 
+    prof = None
+    if c.gate and c.role == "data":
+        prof = gate.profile(res.rows_in, len(quarantine), empties)
+        fam = gate.family(d.path)
+        reasons = [] if gate.released(con, did) else gate.check(prof, gate.baseline(con, c.name, fam, c.gate["baseline"]), c.gate)
+        if reasons:                    # held: nothing from it is stored, the reasons are
+            res.status, res.note = "held", "; ".join(reasons)
+            res.rows_suppressed = 0
+            con.execute("BEGIN TRANSACTION")
+            gate.record(con, c.name, fam, did, d.delivered_at, prof, "held", reasons)
+            _ledger(con, d, res)
+            con.execute("COMMIT")
+            return res
+
     con.execute("BEGIN TRANSACTION")
     try:
+        if prof is not None:
+            gate.record(con, c.name, fam, did, d.delivered_at, prof, "loaded", [])
         if c.role == "suppression":
             res.rows_loaded, res.rows_purged = _apply_suppression(con, did, out_rows, contracts)
         elif out_rows:

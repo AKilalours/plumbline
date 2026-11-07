@@ -54,6 +54,7 @@ st.set_page_config(page_title="Plumbline", page_icon="📏", layout="wide")
 # Visual language after Minerva's site: white pages, royal blue, deep navy, a gold accent, pill controls,
 # small monospace labels. Their style, not their name or logo: this is an independent project.
 BLUE, NAVY, GOLD, INK, MUTED, LINE, TINT = "#2941B9", "#11196F", "#E5B74D", "#050505", "#6B6B6B", "#E6E6E6", "#F3F5FC"
+RED = "#C2412D"
 GREEN, RED = "#1F8A5B", "#C2412D"
 st.markdown(f"""
 <style>
@@ -462,6 +463,56 @@ def failure_lab():
     how("A real HTTP server serves the store's orders with the faults you set. The connector backs off and retries, "
         "honours Retry-After, writes each page atomically and saves its cursor after every page. A crash kills the sync; "
         "the second run resumes from the cursor. Then the received orders are reconciled against what the store holds.")
+
+
+def failure_lab_page():
+    failure_lab()
+    gate_lab()
+
+
+def gate_lab():
+    """Break a vendor file the way vendor files really break; the real loader decides whether it loads."""
+    d = demo()
+    st.markdown('<div class="mono" style="margin-top:2rem">Break a vendor file: does the delivery gate hold it?</div>', unsafe_allow_html=True)
+    fault = choose("Fault", list(O.GATE_FAULTS), default="truncated", key="gate_fault", format_func=O.GATE_FAULTS.get,
+                   label_visibility="collapsed")
+    c = st.columns([1, 1, 2])
+    go = c[0].button("Send the file", type="primary", key="gate_go")
+    rel = c[1].button("Release it as data ops", key="gate_rel", disabled=not (st.session_state.get("gate_last") or {}).get("status") == "held")
+    if go or rel:
+        with st.spinner("Loading every delivery of the city with the real loader"):
+            st.session_state.gate_last = O.gate_lab(d, fault, release_by="data ops (you)" if rel else None)
+        r = st.session_state.gate_last
+        log("ingestion: gate lab", {k_: r[k_] for k_ in ("fault", "status", "rows_stored")})
+        st.rerun()
+    r = st.session_state.get("gate_last")
+    if not r:
+        return
+    held = r["status"] == "held"
+    verdict(not held, (f"Held: {r['file']} was not loaded. Nothing from it was stored. " + " · ".join(r["reasons"])) if held else
+            (f"Loaded: {r['file']}, {r['rows_stored']:,} rows" + (f", released by {r['reviews'][0][0]} and recorded" if r["reviews"] else
+             ", inside its normal shape") + "."))
+    wk = pd.DataFrame(r["weeks"])
+    wk["Week"] = wk.file.str.extract(r"week_(\d+)")[0].fillna("?").radd("week ") + wk.file.str.contains("_v2").map({True: " (v2)", False: ""})
+    wk["Decision"] = wk.status.map({"loaded": "loaded", "held": "held"})
+    wk["Email empty"] = wk.email_empty
+    a, b = st.columns(2, gap="large")
+    a.markdown("**Rows per weekly vendor file**")
+    b.markdown("**Share of rows with no email**")
+    a.altair_chart(alt.Chart(wk).mark_bar(cornerRadiusEnd=4).encode(
+        x=alt.X("Week:N", sort=None, title=None), y=alt.Y("rows:Q", title="Rows in the file"),
+        color=alt.Color("Decision:N", scale=alt.Scale(domain=["loaded", "held"], range=[BLUE, RED]), legend=None),
+        tooltip=["file", "rows", "Decision"]).properties(height=220), width="stretch")
+    b.altair_chart(alt.Chart(wk).mark_bar(cornerRadiusEnd=4).encode(
+        x=alt.X("Week:N", sort=None, title=None), y=alt.Y("Email empty:Q", title="Share with no email", axis=alt.Axis(format="%")),
+        color=alt.Color("Decision:N", scale=alt.Scale(domain=["loaded", "held"], range=[BLUE, RED]), legend=None),
+        tooltip=["file", alt.Tooltip("Email empty:Q", format=".0%"), "Decision"]).properties(height=220),
+        width="stretch")
+    how("Every delivery of a gated source is profiled before anything is written (rows, rows failing validation, how often each "
+        "column is empty) and compared with the median of the last five loaded files of the same kind. Outside its limits, the whole "
+        "delivery is held: nothing is stored, the ledger says why, and a rerun does not retry it until a person releases it "
+        "(`python -m plumbline.ingest.gate release`), which is recorded with who and why. Row checks alone would have loaded the "
+        "truncated file and the emptied emails. Tests: tests/test_gate.py.")
 
 
 def deletion():
@@ -1313,7 +1364,7 @@ def sources_page():
             ).properties(height=alt.Step(30)), width="stretch")
     elif v == "Failure lab":
         with embedded():
-            failure_lab()
+            failure_lab_page()
     else:
         with embedded():
             onboarding_page()

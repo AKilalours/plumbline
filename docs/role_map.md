@@ -27,6 +27,7 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | A streaming source | `ingest/connectors/sse.py`, `ingest/stream_daily.py`, `store/sse_server.py` | Wikimedia's live stream daily: Last-Event-ID resume, a planned hang-up with a repeat count, batches before checkpoints, one copy in the warehouse after a crash; profiling it found ids past 32 bits the loader would have failed on |
 | A cloud warehouse target | `products/publish.py` | transactional upsert into MotherDuck, safe to rerun, checked after every write; tested against a local file; live only once a token is configured |
 | Reruns, backfills and retries that never duplicate | file ledger, row hashes, `delivery_rows` | 100 random faults change nothing; rerun is a no-op |
+| Bad deliveries held, not loaded | `ingest/gate.py`, `gate:` in each file contract | each delivery profiled against its source's last five of the same kind; truncated files, emptied columns and failing-row spikes held with the reason, released only by a named person; 0 of 276 normal deliveries held |
 | Bad records quarantined, not loaded | `quarantine` with reason codes | `test_bad_rows_go_to_quarantine_with_reasons` |
 | Onboarding by configuration | one YAML per source | `test_new_source_onboards_with_yaml_only` |
 | Onboard a partner file nobody described | `ai/onboard.py`, `evals/onboarding.yaml` | a drafted contract (types, email and phone flags, identity roles, key) checked by the same loader, written to `sources/drafts/` for a person; scored on held-out partner files against rules without a model |

@@ -551,3 +551,25 @@ def test_feed_health_renders_from_a_run_history_with_a_failure_in_it():
             "streamlit_app.feed_health(runs)\nstreamlit_app.feed_health([])\n")
     at = st_testing.AppTest.from_string(code, default_timeout=60).run()
     assert not at.exception, at.exception
+
+
+def test_the_gate_lab_holds_a_truncated_vendor_file_and_loads_it_once_released(world, monkeypatch):
+    at = _app(world, monkeypatch, "sources_page")
+    at.segmented_control(key="src_view").set_value("Failure lab").run()
+    at.segmented_control(key="gate_fault").set_value("truncated").run()
+    _button(at, lambda l: l == "Send the file").click().run(timeout=180)
+    assert not at.exception, at.exception
+    r = at.session_state.gate_last
+    assert r["status"] == "held" and r["rows_stored"] == 0 and any("rows against a usual" in x for x in r["reasons"])
+    _button(at, lambda l: l.startswith("Release it")).click().run(timeout=180)
+    assert not at.exception, at.exception
+    r = at.session_state.gate_last
+    assert r["status"] == "loaded" and r["rows_stored"] == r["rows_in_file"] and r["reviews"][0][0] == "data ops (you)"
+
+
+def test_the_gate_lab_control_file_loads_without_a_hold(world):
+    from plumbline.app import ops as O
+    r = O.gate_lab(world[0], "none")
+    assert r["status"] == "loaded" and r["held_total"] == 0
+    for fault in ("blank_email", "zip_format"):
+        assert O.gate_lab(world[0], fault)["status"] == "held", fault

@@ -14,7 +14,7 @@ a reconnect the server may send some events again. What keeps the landed data ri
 - Duplicates are dropped as they arrive: the ids of recent events are kept with the checkpoint.
 - A fixed column set per landing folder, as for every other connector: the first batch records it; fields
   that appear later are reported as drift and not written.
-- Lag: for every event, the seconds between the event happening (its own timestamp) and it landing here.
+- Lag: for every event, the seconds between its own event time (as the stream stamps it) and it landing here.
 
     python -m plumbline.ingest.stream_daily        # what the daily job runs against Wikimedia's live stream
 """

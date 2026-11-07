@@ -31,11 +31,12 @@ against the answer key, and the tests that hold each one are named.
 | Model release gate | on 100,000 people it held all three challengers, including one with the champion's AUC whose probabilities were off by 0.44 on average: an AUC-only gate would have shipped it |
 | Should we buy this data? | each source taken out of the home-buyer model and refit: without property data AUC falls 0.050 (95% -0.071 to -0.026) and the top decile finds 31 fewer buyers; the vendor's inputs change nothing measurable, because its file arrives after the training cutoffs; its homeowner flag is wrong for 5,718 of the 15,824 people it calls owners; it is the only source for 38,778 of 73,912 people. See [Should we buy this data?](#should-we-buy-this-data) |
 | A public source nobody here controls | NYC Open Data (Socrata) through the same connector rules as the store API, plus a privacy filter that drops columns naming a person; onboarding a new dataset (sync, draft a contract, check it, load) is one command, timed. 12 tests, and 5 of 5 deliberate breaks caught. See [A real public source](#a-real-public-source) |
-| A live stream | Wikimedia's public edit stream (about 30 events a second, Server-Sent Events) read for a two-minute window every day: resume by Last-Event-ID after any dropped connection, a planned hang-up mid-window that counts repeats after the reconnect, micro-batches written before their checkpoint so a crash replays and the warehouse keeps one copy, and lag from each edit to it landing. Profiling the real stream found change ids past 3.5 billion, which the loader's 32-bit integer columns would have failed on. 26 tests. See [A live stream](#a-live-stream) |
+| Delivery gate | a whole delivery that breaks its source's normal shape (half the rows, a column suddenly empty, a spike of failing rows) is held with the reason, not loaded, until a person releases it; 0 of 276 real deliveries held on the 100,000-person world, and each of three realistic vendor breaks held. See [The delivery gate](#the-delivery-gate) |
+| A live stream | Wikimedia's public edit stream (about 30 events a second, Server-Sent Events) read for a two-minute window every day: resume by Last-Event-ID after any dropped connection, a planned hang-up mid-window that counts repeats after the reconnect, micro-batches written before their checkpoint so a crash replays and the warehouse keeps one copy, and lag from the stream's event time to landing (a median of 0.05 s on the first live run). Profiling the real stream found change ids past 3.5 billion, which the loader's 32-bit integer columns would have failed on. 26 tests. See [A live stream](#a-live-stream) |
 | Cloud warehouse | each daily run upserts what it landed into MotherDuck (DuckDB in the cloud, the same SQL): newest version per key, safe to rerun, new columns added first, every key checked after the write, all in one transaction. Tested against a local file; **live only once a MotherDuck token is added**, and the app says "off" until then. See [A cloud warehouse target](#a-cloud-warehouse-target) |
 | Past one machine | fixed cost plus cost per extra person, from same-machine runs: identity gets dearer per person (17.5 to 29.5 s per 100,000), so it grows faster than the data; the warehouse takes 1,826 bytes a person. See [Past one machine](#past-one-machine) |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 439 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 451 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 
 ## See it work
@@ -886,6 +887,7 @@ identify a person. Adding a source is a new YAML file and nothing else
 | A file loads at most once | its id is the SHA-256 of its bytes, recorded in the same transaction as its rows |
 | A row is stored at most once | rows are normalized, then hashed; a known hash is skipped |
 | Bad rows never load silently | quarantine with a reason code; a file missing a required column is rejected whole |
+| Bad deliveries never load silently | a file whose rows each pass but whose whole is wrong (half the usual rows, a column suddenly empty, a spike of failing rows) is held until a person releases it; see [The delivery gate](#the-delivery-gate) |
 | A corrected `_v2` replaces `_v1` | `delivery_rows` remembers which files contained each row; only the newest version counts |
 | Newer facts win, replays do not | latest by the source's own date columns, then by when the content first arrived |
 | Deleted people stay deleted | purged from storage and quarantine; blocked before validation in every later load |
@@ -897,6 +899,24 @@ and lands each page as a CSV atomically before saving its cursor. Landing as fil
 promise above applies to API data with no extra code. The store itself is a local mock
 (`src/plumbline/store/server.py`) that throttles, fails, cuts responses in half and refunds orders
 while you page through it.
+
+### The delivery gate
+
+Row checks judge one row at a time, so a vendor file can pass every row and still be wrong: the export
+stopped at 40%, a broken join upstream emptied half the emails, a format change made a third of the ZIP codes
+fail. Each of these loaded before. `src/plumbline/ingest/gate.py` profiles every delivery of a gated source
+before anything is written (rows, share failing validation, how often each column is empty) and compares it
+with the median of the last five loaded files of the same kind (a daily change file with change files, not
+with the full extract). Outside the contract's limits (`gate:` in `sources/crm.yaml`, `vendor.yaml`,
+`email.yaml`: half to double the usual rows, 25 points more empty, 15 points more failing), the whole delivery
+is **held**: nothing from it is stored, the ledger records each reason in plain words, and a rerun does not
+retry it. `python -m plumbline.ingest.gate release WAREHOUSE ID --by NAME --reason WHY` lets it load on the
+next run; the release is recorded with who and why, and must name both.
+
+Measured before switching it on: on the 100,000-person world it holds **0 of 276** deliveries (vendor weeks
+vary by about 4% in rows; empty shares hold steady near 5%), so no result in this page changed. On a broken
+copy of a vendor week it holds the truncated file, the emptied emails and the ZIP format change, and loads the
+unbroken control (`tests/test_gate.py`; Sources, Failure lab in the app breaks a file and lets you release it).
 
 ### A real public source
 
@@ -982,13 +1002,19 @@ anything is written.
 **Every day, on the record.** The same scheduled job that syncs NYC Open Data runs
 `python -m plumbline.ingest.stream_daily`: two minutes of the live stream, a planned hang-up half-way that
 counts how many events after the reconnect were already seen, load under the contract, and one line of
-history (events a second, rows loaded and quarantined, repeats dropped, reconnects by cause, lag from edit
-to landing at the median and 95th percentile, and the second-by-second timeline the app draws). Each run
+history (events a second, rows loaded and quarantined, repeats dropped, reconnects by cause, lag from the
+stream's event time to landing at the median and 95th percentile (Wikimedia stamps that time a second or two
+after the edit itself, so this is the pipeline's lag, not the edit's age), and the second-by-second timeline
+the app draws). Each run
 starts at the live edge rather than yesterday's checkpoint: catching up a day of this stream is millions of
 events for a sample job. Resume is exercised inside every run instead, and by the tests
 (`tests/test_stream.py`, `tests/test_stream_daily.py`, against `src/plumbline/store/sse_server.py`, a local
 stream that drops the connection mid-event, repeats events after a reconnect, throttles and sends health-check
 and malformed events).
+
+**The first live run** (2026-11-07, from GitHub Actions): 3,893 events from 75 wikis in two minutes, 32.4 a
+second; after the planned hang-up, the first 200 events were all new (0 repeats); 3,893 rows loaded, 0
+quarantined, 0 duplicates; lag 0.05 s at the median and 0.09 s at the 95th percentile.
 
 ### A cloud warehouse target
 

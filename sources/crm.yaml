@@ -14,3 +14,6 @@ columns:
   zip:            {type: zip, identity: zip}
   created_at:     {type: date, required: true}
   updated_at:     {type: date, required: true}
+# Hold a whole delivery that breaks this source's normal shape (ingest/gate.py): row count outside half to
+# double the usual, a column empty 25 points more often than usual, or 15 points more rows failing checks.
+gate: {baseline: 5, min_history: 3, rows: [0.5, 2.0], empty_jump: 0.25, quarantine_jump: 0.15}

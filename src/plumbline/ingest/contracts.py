@@ -48,6 +48,7 @@ class SourceContract:
     latest_by: tuple[str, ...] = ()
     aliases: dict[str, str] = field(default_factory=dict)
     role: str = "data"           # "data" or "suppression"
+    gate: dict | None = None     # delivery-level limits (ingest/gate.py); None: no gate
 
     @property
     def identity_cols(self) -> dict[str, str]:
@@ -74,7 +75,8 @@ def load_contract(path: str | Path) -> SourceContract:
                 raise ContractError(f"{path}: column {name} has unknown identity role {cols[name].identity!r}")
         c = SourceContract(name=raw["name"], kind=raw["kind"], files=raw["files"], key=tuple(raw["key"]),
                            columns=cols, latest_by=tuple(raw.get("latest_by") or ()),
-                           aliases=dict(raw.get("aliases") or {}), role=raw.get("role", "data"))
+                           aliases=dict(raw.get("aliases") or {}), role=raw.get("role", "data"),
+                           gate=_gate(path, raw.get("gate")))
     except KeyError as e:
         raise ContractError(f"{path}: missing field {e}") from None
     missing = [k for k in c.key + c.latest_by if k not in c.columns]
@@ -83,6 +85,14 @@ def load_contract(path: str | Path) -> SourceContract:
     if not re.fullmatch(r"[a-z][a-z0-9_]*", c.name):
         raise ContractError(f"{path}: source name must be lowercase snake_case")
     return c
+
+
+def _gate(path, raw):
+    from .gate import config
+    try:
+        return config(raw)
+    except (ValueError, TypeError) as e:
+        raise ContractError(f"{path}: {e}") from None
 
 
 def load_contracts(directory: str | Path) -> dict[str, SourceContract]:

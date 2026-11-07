@@ -881,8 +881,8 @@ R.stream = () => {
     top.appendChild(tiles([
       {label: 'Events in the window', value: r.events, fmt: 'int', sub: `${r.events_per_second} a second · ${r.wikis ?? '?'} wikis`, tone: 'info'},
       {label: 'Landed, each once', value: r.rows_loaded ?? r.rows, fmt: 'int', sub: `${F.int(r.duplicates)} repeats dropped · ${F.int(r.rows_quarantined || 0)} quarantined`, tone: (r.rows_quarantined || 0) ? 'warn' : 'pass'},
-      {label: 'Lag, median', value: r.lag_p50 == null ? 'n/a' : r.lag_p50.toFixed(1) + ' s', fmt: 'raw',
-       sub: r.lag_p50 == null ? 'measured on the live stream only: the test stream has no real clock' : `edit to landed; 95th percentile ${r.lag_p95.toFixed(1)} s`, tone: 'info'},
+      {label: 'Lag, median', value: r.lag_p50 == null ? 'n/a' : r.lag_p50.toFixed(2) + ' s', fmt: 'raw',
+       sub: r.lag_p50 == null ? 'measured on the live stream only: the test stream has no real clock' : `stream's event time to landed; 95th percentile ${r.lag_p95.toFixed(2)} s`, tone: 'info'},
       {label: 'Sent again after the hang-up', value: rc ? rc.repeated : 'n/a', fmt: rc ? 'int' : 'raw',
        sub: rc ? (rc.repeated ? `all dropped; ${F.int(rc.new)} new events after it` : `${F.int(rc.new)} new events after the reconnect, none seen before`)
          : 'the window ended first', tone: rc ? 'pass' : 'info'},

@@ -164,6 +164,72 @@ class IdentityEdits:
 
 
 # ----------------------------------------------------------------- ingestion failure lab
+GATE_FAULTS = {
+    "truncated": "The export stopped at 40%",
+    "blank_email": "A broken join empties 45% of emails",
+    "zip_format": "30% of ZIP codes arrive in a new format",
+    "none": "Nothing wrong (control)",
+}
+
+
+def gate_lab(demo: Demo, fault: str, release_by: str | None = None, work: str | Path | None = None) -> dict:
+    """Break the city's newest vendor file the way vendor files really break, load every delivery with the real
+    loader into a private warehouse, and report what the delivery gate decided and why. With release_by, a
+    person releases the held file and the run is repeated, as `python -m plumbline.ingest.gate release` does."""
+    import csv
+    import io
+    from ..ingest import gate
+    from ..ingest.contracts import load_contracts
+    from ..ingest.engine import ingest
+    if fault not in GATE_FAULTS:
+        raise ValueError(f"unknown fault {fault!r}")
+    work = Path(work or tempfile.mkdtemp(prefix="plumbline-gatelab-"))
+    run = work / "run"
+    shutil.copytree(demo.run, run, ignore=shutil.ignore_patterns("truth", "campaign", "*.duckdb"))
+    files = sorted(p for p in (run / "sources" / "vendor").glob("vendor_week_*.csv") if "_v" not in p.stem.split("_")[-1])
+    last = files[-1]
+    rows = list(csv.DictReader(io.StringIO(last.read_text())))
+    fields = list(rows[0])
+    if fault == "truncated":
+        rows = rows[: len(rows) * 2 // 5]
+    elif fault == "blank_email":
+        for i, r in enumerate(rows):
+            if i % 20 < 9:
+                r["email"] = ""
+    elif fault == "zip_format":
+        for i, r in enumerate(rows):
+            if i % 10 < 3:
+                r["zip"] = r["zip"][:4] + " " + r["zip"][4:]
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=fields, lineterminator="\n")
+    w.writeheader()
+    w.writerows(rows)
+    last.write_text(buf.getvalue())
+    rel = last.relative_to(run).as_posix()
+    wh = work / "gate.duckdb"
+    contracts = load_contracts(CONTRACTS)
+    t0 = time.perf_counter()
+    report = ingest(run, wh, contracts)
+    released = None
+    with duckdb.connect(str(wh)) as con:
+        status, note, did = con.execute("SELECT status, note, delivery_id FROM ingest_ledger WHERE path = ?", [rel]).fetchone()
+    if release_by and status == "held":
+        released = gate.release(str(wh), did, by=release_by, reason="checked with the vendor in the gate lab")
+        report = ingest(run, wh, contracts)
+        with duckdb.connect(str(wh)) as con:
+            status, note, did = con.execute("SELECT status, note, delivery_id FROM ingest_ledger WHERE path = ?", [rel]).fetchone()
+    with duckdb.connect(str(wh), read_only=True) as con:
+        weeks = con.execute("""SELECT l.path, p.rows_in, p.quarantine_share, p.empty_share, p.status
+            FROM delivery_profiles p JOIN ingest_ledger l USING (delivery_id) WHERE p.source = 'vendor' ORDER BY l.path""").fetchall()
+        stored = con.execute("SELECT count(*) FROM delivery_rows WHERE delivery_id = ?", [did]).fetchone()[0]
+        reviews = con.execute("SELECT by_whom, reason FROM delivery_reviews WHERE delivery_id = ?", [did]).fetchall()
+    return {"fault": fault, "file": rel.rsplit("/", 1)[-1], "status": status, "reasons": (note or "").split("; ") if status == "held" else [],
+            "rows_in_file": len(rows), "rows_stored": stored, "released": released, "reviews": reviews,
+            "held_total": report.totals()["deliveries_held"], "seconds": round(time.perf_counter() - t0, 1),
+            "weeks": [{"file": p.rsplit("/", 1)[-1], "rows": n, "quarantined": q, "email_empty": json.loads(e).get("email", 0),
+                       "status": st} for p, n, q, e, st in weeks]}
+
+
 def failure_lab(demo: Demo, p_429: float, p_503: float, p_drop: float, crash_after_page: int | None,
                 work: str | Path | None = None) -> dict:
     """Sync every order from the store's API into an empty landing folder under the given faults;

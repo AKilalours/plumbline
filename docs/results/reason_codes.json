@@ -2,6 +2,1544 @@
  "city": "seed 7, 100,000 people",
  "snapshot": "2025-06-30",
  "people": 30323,
+ "walk": [
+  {
+   "person_key": "PK04f8ec2a7c45",
+   "score": 0.041761,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "building class H",
+     0.5414
+    ],
+    [
+     "ZIP income",
+     0.4532
+    ],
+    [
+     "building size",
+     0.1888
+    ],
+    [
+     "no average order value on file",
+     -0.1206
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "year the building was built",
+     0.0735
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "average order value",
+     -0.0205
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "units in the building",
+     -0.019
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0157
+    ]
+   ]
+  },
+  {
+   "person_key": "PK9752f1014912",
+   "score": 0.034526,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.4722
+    ],
+    [
+     "building size",
+     0.1551
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "average order value",
+     0.0886
+    ],
+    [
+     "spend in the last 90 days",
+     -0.076
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "no days since last order on file",
+     0.065
+    ],
+    [
+     "orders in the last 90 days",
+     0.0528
+    ],
+    [
+     "building class R",
+     0.0514
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "days since last order",
+     -0.0135
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0027
+    ]
+   ]
+  },
+  {
+   "person_key": "PKd63cd80dff28",
+   "score": 0.033155,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.4643
+    ],
+    [
+     "building size",
+     0.1431
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "no days since last order on file",
+     0.065
+    ],
+    [
+     "orders in the last 90 days",
+     0.0528
+    ],
+    [
+     "year the building was built",
+     0.021
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "average order value",
+     0.0114
+    ],
+    [
+     "all other inputs",
+     -0.0012
+    ]
+   ]
+  },
+  {
+   "person_key": "PK29895371ff9e",
+   "score": 0.032872,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.5138
+    ],
+    [
+     "average order value",
+     0.178
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "spend in the last 90 days",
+     -0.09
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "no days since last order on file",
+     0.065
+    ],
+    [
+     "orders in the last 90 days",
+     0.0528
+    ],
+    [
+     "year the building was built",
+     -0.0435
+    ],
+    [
+     "building class C",
+     0.0344
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0199
+    ]
+   ]
+  },
+  {
+   "person_key": "PK9a3ca8794637",
+   "score": 0.029126,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "orders in the last 90 days",
+     0.2273
+    ],
+    [
+     "ZIP income",
+     0.1136
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "building size",
+     0.0991
+    ],
+    [
+     "spend in the last 90 days",
+     -0.0884
+    ],
+    [
+     "average order value",
+     0.0759
+    ],
+    [
+     "year the building was built",
+     0.0705
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "no days since last order on file",
+     0.065
+    ],
+    [
+     "building class R",
+     0.0514
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0083
+    ]
+   ]
+  },
+  {
+   "person_key": "PK679ef65b6e29",
+   "score": 0.028597,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.4532
+    ],
+    [
+     "building size",
+     0.1898
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "average order value",
+     -0.064
+    ],
+    [
+     "building class R",
+     0.0514
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "year the building was built",
+     0.0219
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "units in the building",
+     -0.0193
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.019
+    ]
+   ]
+  },
+  {
+   "person_key": "PK119597fecefa",
+   "score": 0.027952,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.4722
+    ],
+    [
+     "average order value",
+     0.1389
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "year the building was built",
+     -0.0475
+    ],
+    [
+     "building class C",
+     0.0344
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0134
+    ]
+   ]
+  },
+  {
+   "person_key": "PK9c35d61ba0c9",
+   "score": 0.026941,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.2982
+    ],
+    [
+     "average order value",
+     0.1948
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "building size",
+     0.0345
+    ],
+    [
+     "building class C",
+     0.0344
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0116
+    ]
+   ]
+  },
+  {
+   "person_key": "PK80ced1afad7e",
+   "score": 0.026379,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.4722
+    ],
+    [
+     "building size",
+     0.1566
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "average order value",
+     -0.0392
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "year the building was built",
+     -0.0257
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "units in the building",
+     -0.01
+    ],
+    [
+     "all other inputs",
+     0.015
+    ]
+   ]
+  },
+  {
+   "person_key": "PK713df8932f22",
+   "score": 0.02599,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.2554
+    ],
+    [
+     "building size",
+     0.1732
+    ],
+    [
+     "no average order value on file",
+     -0.1206
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "year the building was built",
+     0.0775
+    ],
+    [
+     "no days since last order on file",
+     0.065
+    ],
+    [
+     "orders in the last 90 days",
+     0.0528
+    ],
+    [
+     "building class R",
+     0.0514
+    ],
+    [
+     "average order value",
+     -0.0205
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "days since last order",
+     0.0152
+    ],
+    [
+     "units in the building",
+     -0.0141
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0192
+    ]
+   ]
+  },
+  {
+   "person_key": "PK6bac57d23331",
+   "score": 0.025769,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.4532
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "year the building was built",
+     -0.0842
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "average order value",
+     0.0579
+    ],
+    [
+     "building size",
+     0.0488
+    ],
+    [
+     "building class C",
+     0.0344
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0177
+    ]
+   ]
+  },
+  {
+   "person_key": "PK5ce010939ef7",
+   "score": 0.02541,
+   "bought": false,
+   "top_decile": true,
+   "start": -4.2893,
+   "steps": [
+    [
+     "average order value",
+     0.4232
+    ],
+    [
+     "building size",
+     0.1581
+    ],
+    [
+     "ZIP income",
+     -0.118
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "spend in the last 90 days",
+     -0.1023
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "no days since last order on file",
+     0.065
+    ],
+    [
+     "orders in the last 90 days",
+     0.0528
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "units in the building",
+     -0.0104
+    ],
+    [
+     "all other inputs",
+     0.0139
+    ]
+   ]
+  },
+  {
+   "person_key": "PK6f8b24143b02",
+   "score": 0.018034,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "no ZIP income on file",
+     0.3123
+    ],
+    [
+     "no average order value on file",
+     -0.1206
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "building size",
+     -0.0214
+    ],
+    [
+     "average order value",
+     -0.0205
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "no year the building was built on file",
+     0.0139
+    ],
+    [
+     "no units in the building on file",
+     0.0139
+    ],
+    [
+     "no building size on file",
+     0.0139
+    ],
+    [
+     "no lives in a small building on file",
+     0.0139
+    ],
+    [
+     "property record found",
+     0.0139
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "ZIP income",
+     0.0118
+    ],
+    [
+     "all other inputs",
+     0.0172
+    ]
+   ]
+  },
+  {
+   "person_key": "PK6631ebe1cb2f",
+   "score": 0.015001,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     -0.1751
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "no days since last order on file",
+     0.065
+    ],
+    [
+     "average order value",
+     -0.0537
+    ],
+    [
+     "orders in the last 90 days",
+     0.0528
+    ],
+    [
+     "building size",
+     -0.0214
+    ],
+    [
+     "spend in the last 90 days",
+     -0.0206
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "no lives in a small building on file",
+     0.0139
+    ],
+    [
+     "no units in the building on file",
+     0.0139
+    ],
+    [
+     "no building size on file",
+     0.0139
+    ],
+    [
+     "no year the building was built on file",
+     0.0139
+    ],
+    [
+     "property record found",
+     0.0139
+    ],
+    [
+     "days since last order",
+     0.0132
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.015
+    ]
+   ]
+  },
+  {
+   "person_key": "PK51f8d9cfe7dd",
+   "score": 0.014764,
+   "bought": true,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     0.2215
+    ],
+    [
+     "lives in a small building",
+     -0.2181
+    ],
+    [
+     "building size",
+     -0.1037
+    ],
+    [
+     "building class B",
+     -0.0728
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "no days since last order on file",
+     0.065
+    ],
+    [
+     "work emails seen",
+     0.0631
+    ],
+    [
+     "orders in the last 90 days",
+     0.0528
+    ],
+    [
+     "year the building was built",
+     0.0329
+    ],
+    [
+     "spend in the last 90 days",
+     -0.0282
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "average order value",
+     0.0117
+    ],
+    [
+     "all other inputs",
+     0.0258
+    ]
+   ]
+  },
+  {
+   "person_key": "PK60bae98fded8",
+   "score": 0.014534,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "building size",
+     0.1311
+    ],
+    [
+     "no average order value on file",
+     -0.1206
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "ZIP income",
+     0.0242
+    ],
+    [
+     "average order value",
+     -0.0205
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0149
+    ]
+   ]
+  },
+  {
+   "person_key": "PK3077e59d40c2",
+   "score": 0.014126,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "building size",
+     0.1633
+    ],
+    [
+     "average order value",
+     -0.1566
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "ZIP income",
+     -0.0982
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "year the building was built",
+     0.02
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "units in the building",
+     -0.0116
+    ],
+    [
+     "all other inputs",
+     0.015
+    ]
+   ]
+  },
+  {
+   "person_key": "PK9a7d9483c27d",
+   "score": 0.013813,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     -0.1751
+    ],
+    [
+     "building size",
+     0.1206
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "year the building was built",
+     -0.0267
+    ],
+    [
+     "average order value",
+     -0.021
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0114
+    ]
+   ]
+  },
+  {
+   "person_key": "PKe69b6affd939",
+   "score": 0.013791,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "building size",
+     0.1255
+    ],
+    [
+     "no average order value on file",
+     -0.1206
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "ZIP income",
+     -0.0579
+    ],
+    [
+     "building class C",
+     0.0344
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "average order value",
+     -0.0205
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "year the building was built",
+     -0.0128
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0107
+    ]
+   ]
+  },
+  {
+   "person_key": "PK296d6be568b5",
+   "score": 0.013181,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "average order value",
+     -0.2048
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "ZIP income",
+     -0.0982
+    ],
+    [
+     "building size",
+     0.0957
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "year the building was built",
+     0.0547
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0143
+    ]
+   ]
+  },
+  {
+   "person_key": "PKf7b0d6ab035a",
+   "score": 0.010127,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     -0.506
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "building class C",
+     0.0344
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "building size",
+     0.0305
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "average order value",
+     0.0162
+    ],
+    [
+     "year the building was built",
+     -0.0157
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0186
+    ]
+   ]
+  },
+  {
+   "person_key": "PK310b074ac7cc",
+   "score": 0.009448,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "lives in a small building",
+     -0.2181
+    ],
+    [
+     "ZIP income",
+     0.1306
+    ],
+    [
+     "no average order value on file",
+     -0.1206
+    ],
+    [
+     "building size",
+     -0.1037
+    ],
+    [
+     "building class B",
+     -0.0728
+    ],
+    [
+     "work emails seen",
+     0.0631
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "year the building was built",
+     0.0279
+    ],
+    [
+     "average order value",
+     -0.0205
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0288
+    ]
+   ]
+  },
+  {
+   "person_key": "PK7ed75a8445de",
+   "score": 0.009087,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "ZIP income",
+     -0.4326
+    ],
+    [
+     "no average order value on file",
+     -0.1206
+    ],
+    [
+     "building size",
+     0.1155
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "average order value",
+     -0.0205
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0122
+    ]
+   ]
+  },
+  {
+   "person_key": "PK68d275a0c7d5",
+   "score": 0.001828,
+   "bought": false,
+   "top_decile": false,
+   "start": -4.2893,
+   "steps": [
+    [
+     "year the building was built",
+     -1.9211
+    ],
+    [
+     "ZIP income",
+     -0.2041
+    ],
+    [
+     "lives in a small building",
+     0.1047
+    ],
+    [
+     "no average order value on file",
+     0.0683
+    ],
+    [
+     "building class R",
+     0.0514
+    ],
+    [
+     "average order value",
+     -0.0456
+    ],
+    [
+     "orders in the last 90 days",
+     -0.0344
+    ],
+    [
+     "no days since last order on file",
+     -0.0332
+    ],
+    [
+     "building size",
+     -0.0303
+    ],
+    [
+     "spend in the last 90 days",
+     0.0194
+    ],
+    [
+     "building class C",
+     -0.017
+    ],
+    [
+     "building class B",
+     0.0168
+    ],
+    [
+     "building class A",
+     -0.0126
+    ],
+    [
+     "all other inputs",
+     0.0243
+    ]
+   ]
+  }
+ ],
  "base_rate": 0.02177,
  "faithfulness_max_gap": 8.326672684688674e-17,
  "top_decile_first_reason": {

@@ -52,10 +52,15 @@ places, almost no text; every number has its evidence one click away:
   contracts for partner files nobody described, onboarding a public dataset live, and "Worth buying?",
   where the value of a buyer is a slider and each source's worth per record is recomputed at once.
 - **Identity**: every person's records against the answer key, with split, merge and undo; "You vs the
-  matcher", a game on the matcher's hardest pairs and its mistakes, scored by the answer key; households;
-  person-level deletion with a replay that proves nobody comes back.
+  matcher", a game on the matcher's hardest pairs and its mistakes, scored by the answer key; "Tune the
+  matcher", a threshold you drag across every scored pair, which shows why the threshold alone is not
+  enough (at 0.9 the score would join 1,194 pairs of two people, mostly family at one address; the
+  clustering's safety rules leave 22); households; person-level deletion with a replay that proves
+  nobody comes back.
 - **Audiences**: typed rules from a sentence, English to guarded SQL, and the email experiment.
-- **Models**: the release gate, why each person got their score (reason codes that add back up to it), the AI scorecard, and the scale runs with a projection past one machine.
+- **Models**: the release gate; why each person got their score, as a waterfall from an average person through every input's push to the model's own score (24 people from the 100,000-person city, each checked to add back up); the AI scorecard; and the scale runs with a projection past one machine.
+- **Audiences**: a sentence becomes typed rules, and a funnel shows who each consent or contact rule removes.
+- **Agent** and **Activity**: an incident's trace step by step, and a timeline of what you did in the app.
 
 The interactive pieces (`src/plumbline/app/visuals.py`) are SVG and plain JavaScript that do their arithmetic in
 the browser, so a slider or a card answers at once instead of rerunning the page. They draw numbers the
@@ -652,7 +657,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | --- | --- |
 | Right section in the top 3 results | 44 of 49 answerable questions |
 | Answered right, with the right source | 19 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
-| Refused when the documents have no answer | 8 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
+| Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
 | Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **13 of 20 (test half)**; 16 of 20 before the threshold moved (below) |
 | Security questionnaire, left for a person when the controls page does not settle it | 7 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer) |

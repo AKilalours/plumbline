@@ -7,13 +7,13 @@ caller, which reads it from the warehouse or a saved result, so a test can check
 
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
-Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city.
+Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -156,7 +156,7 @@ R.flow = () => {
     L.forEach(n => { const a = ln[n.key];
       s += `<g class="nd" data-k="${n.key}" style="cursor:pointer"><rect x="${X0 - 10}" y="${a.y}" width="10" height="${a.h}" rx="3" fill="${n.color}"/>
       <text x="${X0 - 16}" y="${a.y + a.h / 2 - 3}" text-anchor="end" font-size="${FS}" font-weight="500" class="num">${F.int(n.value)}</text>
-      <text x="${X0 - 16}" y="${a.y + a.h / 2 + 14}" text-anchor="end" font-size="${FL}" fill="#6B6B6B">${esc(n.label)}</text></g>`; });
+      <text x="${X0 - 16}" y="${a.y + a.h / 2 + 14}" text-anchor="end" font-size="${FL}" fill="#6B6B6B">${esc(narrow && n.short ? n.short : n.label)}</text></g>`; });
     Rt.forEach(n => { const b = rn[n.key];
       s += `<g class="nd" data-k="${n.key}" style="cursor:pointer"><rect x="${X1}" y="${b.y}" width="10" height="${b.h}" rx="3" fill="${n.color}"/>
       <text x="${X1 + 18}" y="${b.y + b.h / 2 - 2}" font-size="${FS}" font-weight="500" class="num">${F.int(n.value)}${narrow ? '' :
@@ -373,123 +373,321 @@ R.history = () => {
 };
 
 // The city's data, live: rows leave the sources, pass the contract gate (or drop into quarantine, or hit
-// the wall of people who asked to be forgotten), and the records of one person snap together into one node.
-// The animation plays a sample of real people; the counters are the whole city's totals.
+// the wall of people who asked to be forgotten), and the records of one person snap together into one node,
+// placed in the borough of their real NYC address. The animation plays a sample of real people; the
+// counters are the whole city's totals.
 R.city = () => {
-  const T = D.totals, P = D.people, SRC = D.sources;
+  const T = D.totals, P = D.people, SRC = D.sources, HELD = D.held || [];
   const order = ['crm', 'vendor', 'store', 'email', 'privacy'].filter(k => SRC[k]);
-  const head = document.createElement('div'); head.className = 'grid'; head.style.gridTemplateColumns = 'repeat(auto-fit,minmax(118px,1fr))';
   const SHORT = {crm: 'CRM', vendor: 'Vendor', store: 'Store', email: 'Email', privacy: 'Privacy'};
+  const BORO = {MN: 'Manhattan', BX: 'Bronx', BK: 'Brooklyn', QN: 'Queens', SI: 'Staten Island'};
+  // Rough shape of the five boroughs, in the people area's own 0..1 coordinates (north is up).
+  const GEO = {BX: {x: .50, y: .13, rx: .15, ry: .10}, MN: {x: .33, y: .38, rx: .065, ry: .20}, QN: {x: .74, y: .42, rx: .19, ry: .20},
+               BK: {x: .50, y: .74, rx: .16, ry: .15}, SI: {x: .13, y: .84, rx: .10, ry: .10}};
+  const head = document.createElement('div'); head.className = 'grid'; head.style.gridTemplateColumns = 'repeat(auto-fit,minmax(118px,1fr))';
   const counters = [['Rows in', () => Object.values(T.rows_in).reduce((a, b) => a + b, 0), 'info'], ['Loaded', () => T.loaded, 'pass'],
     ['Already had', () => T.already, 'info'], ['Quarantined', () => T.quarantined, 'warn'], ['Blocked: forgotten', () => T.suppressed, 'fail'],
     ['People', () => T.people, 'pass']];
   const cEls = counters.map(([l, , tone]) => { const d = document.createElement('div'); d.className = 'tile tone-' + tone; d.style.padding = '12px 14px';
     d.innerHTML = `<span class="bar"></span><div class="mono">${l}</div><div class="v num" style="font-size:26px">0</div>`; head.appendChild(d); return d.querySelector('.v'); });
   const ctl = document.createElement('div'); ctl.className = 'row'; ctl.style.margin = '12px 0 6px';
-  const play = document.createElement('button'); play.className = 'btn blue'; play.style.padding = '7px 16px'; play.textContent = 'Pause';
-  const again = document.createElement('button'); again.className = 'btn'; again.style.padding = '7px 16px'; again.textContent = 'Replay';
+  const btn = (t, cls) => { const b = document.createElement('button'); b.className = 'btn ' + (cls || ''); b.style.padding = '7px 16px'; b.textContent = t; return b; };
+  const play = btn('Pause', 'blue'), again = btn('Replay'), bad = btn('Replay a real quarantined row');
   let speed = 1; const sp = seg(['1×', '3×', '10×'], '1×', v => speed = parseFloat(v));
-  const note = document.createElement('span'); note.className = 'cap'; note.style.margin = '0';
-  note.textContent = `Animated: ${P.length} real people of ${F.int(T.people)}. Counters: the whole city. Click a person.`;
-  ctl.append(play, again, sp, note);
-  const cv = document.createElement('canvas'); cv.style.width = '100%'; cv.style.display = 'block'; cv.style.borderRadius = '18px';
-  cv.style.background = 'linear-gradient(180deg,#FBFCFF 0%,#F3F5FC 100%)'; cv.style.border = '1px solid var(--line)'; cv.style.cursor = 'pointer';
+  ctl.append(play, again, sp, bad);
+  const note = document.createElement('div'); note.className = 'cap'; note.style.margin = '0 0 8px';
+  note.textContent = `Animated: ${P.length} real people of ${F.int(T.people)}, each in the borough of their address. Counters: the whole city. Click a person or a source.`;
+  const wrap = document.createElement('div'); wrap.style.cssText = 'display:grid;gap:12px;grid-template-columns:minmax(0,1fr)';
+  const cv = document.createElement('canvas'); cv.style.cssText = 'width:100%;display:block;border-radius:18px;border:1px solid var(--line);cursor:pointer;background:linear-gradient(180deg,#FBFCFF 0%,#F3F5FC 100%)';
+  const feed = document.createElement('div'); feed.className = 'card'; feed.style.cssText += ';padding:12px 14px;font-size:12.5px;min-height:150px;max-height:260px;overflow:hidden';
+  feed.innerHTML = '<div class="mono">Live feed</div><div id="fd"></div>';
+  wrap.append(cv, feed);
   const panel = document.createElement('div'); panel.className = 'cap'; panel.style.minHeight = '22px';
-  app.append(head, ctl, cv, panel);
-  const ctx = cv.getContext('2d'); let W = 0, H = 0, narrow = false;
-  let nodes = [], parts = [], t = 0, running = true, last = performance.now(), pick = null, hover = null;
-  const DUR = 26;                                  // seconds of story at 1x
+  app.append(head, ctl, note, wrap, panel);
+  const fd = feed.querySelector('#fd'); const log = [];
+  function say(html, tone) { log.unshift({html, tone, at: performance.now()}); if (log.length > 9) log.pop();
+    fd.innerHTML = log.map((e, k) => `<div style="padding:4px 0;border-bottom:1px dashed #EEE;opacity:${1 - k * .09};${k === 0 ? 'animation:rise .35s both' : ''}">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;background:${e.tone}"></span>${e.html}</div>`).join(''); }
+  const ctx = cv.getContext('2d'); let W = 0, H = 0, narrow = false, geo = {};
+  let nodes = [], parts = [], t = 0, running = true, last = performance.now(), pick = null, hover = null, only = null, flash = null;
+  const DUR = 26;
+  const col = k => (SRC[k] || {color: '#9A9A9A'}).color;
+  function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function layout() {
-    W = Math.max(320, cv.clientWidth); narrow = W < 620; H = narrow ? 520 : 470;
+    W = Math.max(320, cv.clientWidth); narrow = W < 620; H = narrow ? 560 : 500;
+    const wide = !narrow && app.clientWidth > 1050;
+    wrap.style.gridTemplateColumns = wide ? 'minmax(0,1fr) 280px' : 'minmax(0,1fr)';
+    W = Math.max(320, cv.clientWidth);
     const dpr = window.devicePixelRatio || 1; cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + 'px'; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const gx = narrow ? W * 0.30 : W * 0.25, zx0 = gx + (narrow ? 26 : 50), zx1 = W - 16, zy0 = 44, zy1 = H - (narrow ? 110 : 96);
-    const cols = Math.max(6, Math.round(Math.sqrt(P.length * (zx1 - zx0) / (zy1 - zy0)))), rows = Math.ceil(P.length / cols);
-    const dx = (zx1 - zx0) / cols, dy = (zy1 - zy0) / rows;
-    const rnd = mulberry(7), slot = P.map((_, i) => i);
-    for (let i = slot.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [slot[i], slot[j]] = [slot[j], slot[i]]; }   // organic, not sorted by type
-    nodes = P.map((p, k) => ({p, i: slot[k], x: 0, y: 0, got: [], r: 0})).map(n => ({...n, x: zx0 + dx * (n.i % cols + .5) + (rnd() - .5) * dx * .45, y: zy0 + dy * (Math.floor(n.i / cols) + .5) + (rnd() - .5) * dy * .45}));
-    const srcY = {}; order.forEach((k, i) => srcY[k] = 54 + i * ((H - 150) / Math.max(1, order.length - 1)));
-    geo = {gx, srcX: narrow ? 12 : 24, srcY, zy1, binX: narrow ? 14 : 24, binY: H - 52, wallX: gx + 6};
+    const dockW = narrow ? 58 : 112, gx = (narrow ? 12 : 22) + dockW + (narrow ? 20 : 40);
+    const zx0 = gx + (narrow ? 16 : 36), zx1 = W - 14, zy0 = 40, zy1 = H - (narrow ? 96 : 84);
+    const Z = (b, fx, fy) => [zx0 + (zx1 - zx0) * fx, zy0 + (zy1 - zy0) * fy];
+    const srcY = {}; order.forEach((k, i) => srcY[k] = 52 + i * ((H - 150) / Math.max(1, order.length - 1)));
+    geo = {gx, dockW, srcX: narrow ? 12 : 22, srcY, zy1, zx0, zx1, zy0, Z, binY: H - 46, binX: narrow ? 12 : 22};
+    const rnd = mulberry(7), byB = {};
+    P.forEach((p, k) => (byB[p.borough || 'none'] = byB[p.borough || 'none'] || []).push(k));
+    nodes = P.map(p => ({p, x: 0, y: 0, got: [], r: 0}));
+    Object.entries(byB).forEach(([b, ks]) => { const g = GEO[b] || {x: .93, y: .9, rx: .05, ry: .06};
+      ks.forEach((k, j) => { const a = j * 2.39996, rr = Math.sqrt((j + .5) / ks.length) * .92;           // a sunflower: even, organic
+        const [x, y] = Z(b, g.x + Math.cos(a) * g.rx * rr, g.y + Math.sin(a) * g.ry * rr); nodes[k].x = x + (rnd() - .5) * 3; nodes[k].y = y + (rnd() - .5) * 3; }); });
     build();
   }
-  let geo = {};
-  function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function build() {
     const rnd = mulberry(11); parts = [];
     nodes.forEach(n => n.p.records.forEach((r, j) => parts.push({kind: 'rec', src: r.source, node: n, rec: r, t0: rnd() * 0.72 + j * 0.01})));
     const q = Math.min(T.quarantined, 10), sup = Math.min(T.suppressed, 10), em = Math.min(60, Math.round(P.length * 0.6));
-    for (let i = 0; i < q; i++) parts.push({kind: 'q', src: (D.reasons[i % Math.max(1, D.reasons.length)] || {}).source || 'email', t0: 0.1 + rnd() * 0.7});
+    for (let i = 0; i < q; i++) { const h = HELD[i % Math.max(1, HELD.length)] || {source: 'email', reason: 'held'}; parts.push({kind: 'q', src: h.source, held: h, t0: 0.1 + rnd() * 0.7}); }
     for (let i = 0; i < sup; i++) parts.push({kind: 'sup', src: order[Math.floor(rnd() * Math.min(3, order.length))], t0: 0.1 + rnd() * 0.7});
     if (SRC.privacy) for (let i = 0; i < Math.min(8, T.rows_in.privacy || 0); i++) parts.push({kind: 'sup', req: true, src: 'privacy', t0: 0.02 + rnd() * 0.6});
     for (let i = 0; i < em && SRC.email; i++) parts.push({kind: 'email', src: 'email', node: nodes[Math.floor(rnd() * nodes.length)], t0: 0.05 + rnd() * 0.8});
     parts.sort((a, b) => a.t0 - b.t0); nodes.forEach(n => { n.got = []; n.r = 0; });
   }
   const ease = x => x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
-  const col = k => (SRC[k] || {color: '#9A9A9A'}).color;
+  const dim = s => only && s !== only;
+  function land(p) {
+    if (p.kind === 'rec') { const first = !p.node.got.length; p.node.got.push(p.src);
+      if (Math.random() < (speed > 3 ? .12 : .35)) say(`<b style="color:${col(p.src)}">${esc(SHORT[p.src] || p.src)}</b> record for ${esc(p.rec.name || 'someone')} ${first ? 'became a new person' : 'joined <b>' + esc(p.node.p.name) + '</b>'}${p.node.p.borough ? ' · ' + BORO[p.node.p.borough] : ''}`, col(p.src)); }
+    else if (p.kind === 'email') p.node.pulse = 1;
+    else if (p.kind === 'q') say(`Quarantined a row from <b>${esc(SHORT[p.src] || p.src)}</b>: ${esc(p.held.reason)}${p.held.row ? ' (row ' + p.held.row + ')' : ''}`, '#E5B74D');
+    else if (p.req) say('Privacy request: that person is forgotten in every product', '#9A9A9A');
+    else say(`Blocked a row from <b>${esc(SHORT[p.src] || p.src)}</b>: that person asked to be forgotten`, '#C2412D');
+  }
   function draw() {
     ctx.clearRect(0, 0, W, H);
+    // the boroughs
+    Object.entries(GEO).forEach(([b, g]) => { const [x, y] = geo.Z(b, g.x, g.y), rx = (geo.zx1 - geo.zx0) * g.rx * 1.08, ry = (geo.zy1 - geo.zy0) * g.ry * 1.12;
+      ctx.fillStyle = 'rgba(41,65,185,.045)'; ctx.strokeStyle = 'rgba(41,65,185,.14)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(x, y, rx, ry, b === 'MN' ? -.35 : 0, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(17,25,111,.5)'; ctx.font = `500 ${narrow ? 9.5 : 10.5}px 'Geist Mono', monospace`; ctx.textAlign = 'center';
+      const sh = D.borough_share && D.borough_share[b];
+      const lt = (narrow ? b : BORO[b].toUpperCase()) + (sh && !narrow ? ` · ${(100 * sh).toFixed(0)}%` : '');
+      if (b === 'MN') { ctx.textAlign = 'right'; ctx.fillText(lt, x - rx - 6, y); } else ctx.fillText(lt, x, y - ry - 5); ctx.textAlign = 'left'; });
     // sources
     ctx.font = `500 ${narrow ? 11 : 12.5}px Geist, sans-serif`; ctx.textBaseline = 'middle';
-    order.forEach(k => { const y = geo.srcY[k]; ctx.fillStyle = col(k); ctx.beginPath(); ctx.roundRect(geo.srcX, y - 15, narrow ? 58 : 116, 30, 9); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText(narrow ? SHORT[k] || k : SRC[k].label, geo.srcX + 8, y); });
-    // the contract gate
+    order.forEach(k => { const y = geo.srcY[k]; ctx.globalAlpha = dim(k) ? .3 : 1; ctx.fillStyle = col(k); ctx.beginPath(); ctx.roundRect(geo.srcX, y - 15, geo.dockW, 30, 9); ctx.fill();
+      if (only === k) { ctx.strokeStyle = '#050505'; ctx.lineWidth = 2; ctx.stroke(); }
+      ctx.fillStyle = '#fff'; ctx.fillText(narrow ? SHORT[k] || k : SRC[k].label, geo.srcX + 8, y); ctx.globalAlpha = 1; });
+    // the contract gate, the bins
     ctx.strokeStyle = 'rgba(41,65,185,.35)'; ctx.setLineDash([4, 6]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(geo.gx, 26); ctx.lineTo(geo.gx, geo.zy1 + 8); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = '#2941B9'; ctx.font = `500 10.5px 'Geist Mono', monospace`; ctx.fillText('CONTRACTS', geo.gx - 30, 16);
-    // quarantine and forgotten bins
-    ctx.fillStyle = 'rgba(229,183,77,.16)'; ctx.strokeStyle = 'rgba(229,183,77,.7)'; ctx.beginPath(); ctx.roundRect(geo.binX, geo.binY - 18, narrow ? 70 : 104, 40, 10); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#7A5A06'; ctx.font = `500 10px 'Geist Mono', monospace`; ctx.fillText('QUARANTINE', geo.binX + 8, geo.binY - 6);
-    const wx = geo.binX + (narrow ? 80 : 118);
-    ctx.fillStyle = 'rgba(194,65,45,.12)'; ctx.strokeStyle = 'rgba(194,65,45,.6)'; ctx.beginPath(); ctx.roundRect(wx, geo.binY - 18, narrow ? 70 : 104, 40, 10); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#8E2A1B'; ctx.fillText('FORGOTTEN', wx + 8, geo.binY - 6);
-    ctx.fillStyle = '#6B6B6B'; ctx.font = `500 10.5px 'Geist Mono', monospace`; ctx.fillText('PEOPLE, RESOLVED', geo.gx + 18, 30);
-    if (!narrow) { ctx.font = `400 11.5px Geist, sans-serif`; ctx.textAlign = 'right';
-      ctx.fillText('ring: each record, colored by its source  ·  red center: a stranger\'s record was joined (answer key)', W - 18, H - 18); ctx.textAlign = 'left'; }
+    const bw = narrow ? 70 : 104, wx = geo.binX + bw + 12;
+    [[geo.binX, 'QUARANTINE', 'rgba(229,183,77,.16)', 'rgba(229,183,77,.7)', '#7A5A06'], [wx, 'FORGOTTEN', 'rgba(194,65,45,.12)', 'rgba(194,65,45,.6)', '#8E2A1B']]
+      .forEach(([x, l, f, s, c]) => { ctx.fillStyle = f; ctx.strokeStyle = s; ctx.beginPath(); ctx.roundRect(x, geo.binY - 18, bw, 40, 10); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = c; ctx.font = `500 10px 'Geist Mono', monospace`; ctx.fillText(l, x + 8, geo.binY - 6); });
+    if (!narrow) { ctx.fillStyle = '#6B6B6B'; ctx.font = `400 11.5px Geist, sans-serif`; ctx.textAlign = 'right';
+      ctx.fillText('ring: each record, colored by its source  ·  red center: a stranger\'s record was joined (answer key)', W - 16, H - 14); ctx.textAlign = 'left'; }
+    // where the selected person's records came from
+    const focus = pick || hover;
+    if (focus && focus.got.length) focus.p.records.forEach((r, j) => { const sy = geo.srcY[r.source]; if (sy === undefined) return;
+      ctx.strokeStyle = col(r.source); ctx.globalAlpha = .75; ctx.lineWidth = 1.6; ctx.setLineDash([2, 4]);
+      ctx.beginPath(); ctx.moveTo(geo.srcX + geo.dockW, sy); ctx.bezierCurveTo(geo.gx + 40, sy, focus.x - 60, focus.y + j * 4, focus.x, focus.y); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; });
     // people
-    nodes.forEach(n => { if (!n.got.length) { ctx.fillStyle = 'rgba(17,25,111,.07)'; ctx.beginPath(); ctx.arc(n.x, n.y, 2.2, 0, 7); ctx.fill(); return; }
-      const R = 3.5 + 1.8 * Math.sqrt(n.got.length) * (narrow ? .8 : 1.15); n.r += (R - n.r) * .15;
+    nodes.forEach(n => { const isDim = only && !n.got.includes(only);
+      if (!n.got.length) { ctx.fillStyle = 'rgba(17,25,111,.08)'; ctx.beginPath(); ctx.arc(n.x, n.y, 2, 0, 7); ctx.fill(); return; }
+      const R = 3.5 + 1.8 * Math.sqrt(n.got.length) * (narrow ? .8 : 1.1); n.r += (R - n.r) * .15;
+      ctx.globalAlpha = isDim ? .18 : 1;
       const per = (Math.PI * 2) / n.got.length; n.got.forEach((s, j) => { ctx.strokeStyle = col(s); ctx.lineWidth = narrow ? 2.5 : 3.2;
         ctx.beginPath(); ctx.arc(n.x, n.y, n.r, j * per - Math.PI / 2, (j + 1) * per - Math.PI / 2 - .12); ctx.stroke(); });
       ctx.fillStyle = n.p.mixed && n.got.length === n.p.records.length ? 'rgba(194,65,45,.85)' : (n === pick ? '#2941B9' : '#fff');
-      ctx.beginPath(); ctx.arc(n.x, n.y, Math.max(1.5, n.r - 2.6), 0, 7); ctx.fill();
-      if (n === hover || n === pick) { ctx.strokeStyle = '#050505'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 4, 0, 7); ctx.stroke(); } });
+      ctx.beginPath(); ctx.arc(n.x, n.y, Math.max(1.5, n.r - 2.6), 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      if (n === focus) { ctx.strokeStyle = '#050505'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 4, 0, 7); ctx.stroke();
+        ctx.fillStyle = '#050505'; ctx.font = `600 12px Geist, sans-serif`; ctx.fillText(n.p.name, Math.min(n.x + n.r + 7, W - 120), n.y - n.r - 6); } });
     // moving rows
     parts.forEach(p => { const age = t - p.t0; if (age < 0) return;
-      const sx = geo.srcX + (narrow ? 58 : 116), sy = geo.srcY[p.src] ?? geo.srcY[order[0]];
+      const sx = geo.srcX + geo.dockW, sy = geo.srcY[p.src] ?? geo.srcY[order[0]];
+      ctx.globalAlpha = dim(p.src) ? .12 : 1;
       if (p.kind === 'rec' || p.kind === 'email') {
         const a1 = .07, a2 = .11, tx = p.node.x, ty = p.node.y;
         let x, y; if (age < a1) { const e = ease(age / a1); x = sx + (geo.gx - sx) * e; y = sy; }
         else if (age < a1 + a2) { const e = ease((age - a1) / a2); x = geo.gx + (tx - geo.gx) * e; y = sy + (ty - sy) * e - Math.sin(e * Math.PI) * 22; }
-        else { if (!p.done) { p.done = true; if (p.kind === 'rec') p.node.got.push(p.src); else p.node.pulse = 1; } return; }
-        ctx.fillStyle = col(p.src); ctx.globalAlpha = p.kind === 'email' ? .5 : .95; ctx.beginPath(); ctx.arc(x, y, p.kind === 'email' ? 2 : 3.2, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+        else { if (!p.done) { p.done = true; land(p); } ctx.globalAlpha = 1; return; }
+        ctx.fillStyle = col(p.src); ctx.globalAlpha *= p.kind === 'email' ? .5 : .95; ctx.beginPath(); ctx.arc(x, y, p.kind === 'email' ? 2 : 3.2, 0, 7); ctx.fill();
       } else {
-        const a1 = .07, a2 = .09, tx = p.kind === 'q' ? geo.binX + 20 + (p.t0 * 997 % 60) : wx + 20 + (p.t0 * 991 % 60), ty = geo.binY + 4;
+        const a1 = .07, a2 = .09, tx = p.kind === 'q' ? geo.binX + 18 + (p.t0 * 997 % (bw - 30)) : wx + 18 + (p.t0 * 991 % (bw - 30)), ty = geo.binY + 4;
         let x, y, alpha = 1; if (age < a1) { const e = ease(age / a1); x = sx + (geo.gx - 6 - sx) * e; y = sy; }
         else if (age < a1 + a2) { const e = ease((age - a1) / a2); x = geo.gx - 6 + (tx - geo.gx + 6) * e; y = sy + (ty - sy) * e * e; }
-        else { x = tx; y = ty; alpha = p.kind === 'sup' ? Math.max(.25, 1 - (age - a1 - a2) * 4) : 1; }
-        ctx.globalAlpha = alpha; ctx.fillStyle = p.kind === 'q' ? '#E5B74D' : p.req ? '#9A9A9A' : '#C2412D'; ctx.beginPath(); ctx.arc(x, y, 3.4, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+        else { x = tx; y = ty; alpha = p.kind === 'sup' ? Math.max(.25, 1 - (age - a1 - a2) * 4) : 1; if (!p.done) { p.done = true; land(p); } }
+        ctx.globalAlpha *= alpha; ctx.fillStyle = p.kind === 'q' ? '#E5B74D' : p.req ? '#9A9A9A' : '#C2412D'; ctx.beginPath(); ctx.arc(x, y, p.big ? 5 : 3.4, 0, 7); ctx.fill();
         if (age > a1 - .004 && age < a1 + .012) { ctx.strokeStyle = p.kind === 'q' ? '#E5B74D' : '#C2412D'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(geo.gx, sy, 10, 0, 7); ctx.stroke(); }
-      } });
+        if (p.big && age < a1 + a2 + .12) { ctx.globalAlpha = 1; ctx.fillStyle = '#7A5A06'; ctx.font = `600 12px Geist, sans-serif`;
+          ctx.fillText(`${p.held.reason}`, Math.min(x + 10, W - 170), y - 10); }
+      }
+      ctx.globalAlpha = 1; });
     nodes.forEach(n => { if (n.pulse > 0) { ctx.strokeStyle = `rgba(124,143,224,${n.pulse})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 6 * (1 - n.pulse) + 2, 0, 7); ctx.stroke(); n.pulse -= .04; } });
-    // counters follow the story's progress; the totals are the whole city's
     const prog = Math.min(1, t / 0.92);
     counters.forEach(([, f], i) => cEls[i].textContent = F.int(f() * prog));
   }
   function loop(now) { const dt = Math.min(.05, (now - last) / 1000); last = now;
-    if (running && !reduce) t = Math.min(1.25, t + dt * speed / DUR); draw(); requestAnimationFrame(loop); }
-  function at(e) { const b = cv.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top; let best = null, d = 1e9;
+    if (running && !reduce) t = Math.min(1.4, t + dt * speed / DUR); draw(); requestAnimationFrame(loop); }
+  const xy = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  function at(x, y) { let best = null, d = 1e9;
     nodes.forEach(n => { if (!n.got.length) return; const dd = Math.hypot(n.x - x, n.y - y); if (dd < d && dd < n.r + 8) { d = dd; best = n; } }); return best; }
-  function show(n) { if (!n) { panel.textContent = 'Click a person to see the records they were built from.'; return; }
-    panel.innerHTML = `<b>${esc(n.p.name)}</b> · ${n.p.records.length} records${n.p.mixed ? ' · <span class="differ">the answer key says one of these belongs to someone else: a matcher mistake, shown on purpose</span>' : ''}<br>` +
+  const dockAt = (x, y) => order.find(k => x >= geo.srcX && x <= geo.srcX + geo.dockW && Math.abs(y - geo.srcY[k]) <= 16);
+  function show(n) { if (!n) { panel.textContent = only ? `Showing ${SRC[only].label} only. Click it again to show every source.` : 'Click a person to see the records they were built from, or a source to isolate it.'; return; }
+    panel.innerHTML = `<b>${esc(n.p.name)}</b>${n.p.borough ? ' · ' + BORO[n.p.borough] : ''} · ${n.p.records.length} records${n.p.mixed ? ' · <span class="differ">the answer key says one of these belongs to someone else: a matcher mistake, shown on purpose</span>' : ''}<br>` +
       n.p.records.map(r => `<span class="chip" style="border-color:${col(r.source)}"><b style="color:${col(r.source)}">${esc(SRC[r.source] ? SRC[r.source].label : r.source)}</b> ${esc(r.name)} · ${esc(r.email || 'no email')} · ${esc(r.address)}</span>`).join(''); }
-  cv.onmousemove = e => { hover = at(e); cv.title = hover ? `${hover.p.name}: ${hover.got.length} of ${hover.p.records.length} records joined` : ''; };
+  cv.onmousemove = e => { const [x, y] = xy(e); hover = at(x, y); cv.style.cursor = hover || dockAt(x, y) ? 'pointer' : 'default'; };
   cv.onmouseleave = () => hover = null;
-  cv.onclick = e => { pick = at(e); show(pick); };
+  cv.onclick = e => { const [x, y] = xy(e), k = dockAt(x, y);
+    if (k) { only = only === k ? null : k; pick = null; show(null); return; }
+    pick = at(x, y); show(pick); };
   play.onclick = () => { running = !running; play.textContent = running ? 'Pause' : 'Play'; };
-  again.onclick = () => { t = 0; build(); pick = null; show(null); running = true; play.textContent = 'Pause'; };
-  layout(); show(null); if (reduce) t = 1.25;
-  let lw = W; new ResizeObserver(() => { if (Math.abs(cv.clientWidth - lw) > 20) { lw = cv.clientWidth; const keep = t; layout(); t = 0; build(); t = keep;
+  again.onclick = () => { t = 0; build(); pick = null; log.length = 0; fd.innerHTML = ''; show(null); running = true; play.textContent = 'Pause'; };
+  let hi = 0; bad.onclick = () => { if (!HELD.length) { say('Nothing was quarantined in this city.', '#9A9A9A'); return; }
+    const h = HELD[hi++ % HELD.length]; parts.push({kind: 'q', src: h.source, held: h, t0: t, big: true}); running = true; play.textContent = 'Pause';
+    if (t > 1.2) t = 1.0; };
+  layout(); show(null); if (reduce) t = 1.4;
+  let lw = cv.clientWidth; new ResizeObserver(() => { if (Math.abs(cv.clientWidth - lw) > 20) { lw = cv.clientWidth; const keep = t; layout(); t = keep;
     parts.forEach(p => { if (t - p.t0 > .18 && p.kind === 'rec') { p.done = true; p.node.got.push(p.src); } }); } }).observe(cv);
   requestAnimationFrame(loop);
+};
+
+// Where to cut the matcher's score: drag the line; the answer key scores every pair either side of it.
+R.threshold = () => {
+  const E = D.edges, S = D.same, Df = D.diff, n = S.length, Rl = D.rules;
+  const toP = w => 1 / (1 + Math.pow(2, -w));
+  const k0 = Math.max(0, E.findIndex(e => Math.abs(e - D.prod) < 1e-9));
+  const top = document.createElement('div'); app.appendChild(top);
+  const W = Math.max(320, app.clientWidth || 800), H = 230, padL = 8, bw = (W - padL * 2) / n;
+  const mx = Math.max(...S, ...Df, 1), sc = v => (H / 2 - 18) * Math.sqrt(v / mx);
+  const box = document.createElement('div'); box.style.marginTop = '12px'; app.appendChild(box);
+  const inp = document.createElement('input'); inp.type = 'range'; inp.min = 0; inp.max = n; inp.value = k0; app.appendChild(inp);
+  const cap = document.createElement('div'); cap.className = 'cap'; app.appendChild(cap);
+  const rules = document.createElement('div'); rules.className = 'decide'; app.appendChild(rules);
+  rules.innerHTML = `<div class="card fail fade"><div class="mono">The score alone, at ${D.prod_p}</div><div class="w num">${F.int(Rl.score_says_join_two_people)}</div>
+      <div class="t">pairs of two different people it would join: mostly family at one address, same surname, often one inbox</div></div>
+    <div class="card pass fade"><div class="mono">After the safety rules</div><div class="w num">${F.int(Rl.joined_two_people)}</div>
+      <div class="t">pairs of two people production actually joined; the rest were refused (for example, two dates of birth disagree)</div></div>
+    <div class="card info fade"><div class="mono">The cost of caution</div><div class="w num">${F.int(Rl.same_person_kept_apart)}</div>
+      <div class="t">pairs of one person kept apart, of ${F.int(Rl.same_person_pairs)}</div></div>`;
+  let prev = null;
+  function draw(k) {
+    const tp = S.slice(k).reduce((a, b) => a + b, 0), fp = Df.slice(k).reduce((a, b) => a + b, 0), fn = S.slice(0, k).reduce((a, b) => a + b, 0);
+    const prec = tp + fp ? tp / (tp + fp) : 1, rec = tp + fn ? tp / (tp + fn) : 0, f1 = prec + rec ? 2 * prec * rec / (prec + rec) : 0;
+    const cut = k < n ? E[k] : E[n];
+    top.innerHTML = ''; top.appendChild(tiles([
+      {label: 'Cut at', value: k === k0 ? D.prod_p : toP(cut), fmt: 'pct1', sub: k === k0 ? 'production’s threshold' : 'match probability', tone: 'info'},
+      {label: 'Precision', value: prec, fmt: 'f3', sub: `${F.int(fp)} wrong joins`, tone: prec > .9 ? 'pass' : 'fail'},
+      {label: 'Recall', value: rec, fmt: 'f3', sub: `${F.int(fn)} missed`, tone: rec > .9 ? 'pass' : 'warn'},
+      {label: 'F1, pairs, score alone', value: f1, fmt: 'f3', sub: 'before the safety rules', tone: 'info'}]));
+    let g = `<svg width="${W}" height="${H + 20}" style="display:block;max-width:100%">`;
+    for (let i = 0; i < n; i++) { const x = padL + i * bw, on = i >= k;
+      g += `<rect class="hb" data-i="${i}" x="${x}" y="${H / 2 - sc(S[i])}" width="${Math.max(1, bw - 1)}" height="${sc(S[i])}" fill="var(--green)" opacity="${on ? .9 : .25}"/>`;
+      g += `<rect class="hb" data-i="${i}" x="${x}" y="${H / 2}" width="${Math.max(1, bw - 1)}" height="${sc(Df[i])}" fill="var(--red)" opacity="${on ? .9 : .25}"/>`; }
+    const lx = padL + k * bw, px = padL + k0 * bw;
+    g += `<line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="#DDD"/>
+      <line x1="${px}" x2="${px}" y1="4" y2="${H - 4}" stroke="#6B6B6B" stroke-dasharray="3 4"/>
+      <line x1="${lx}" x2="${lx}" y1="0" y2="${H}" stroke="var(--blue)" stroke-width="3"/>
+      <text x="${padL}" y="14" font-size="11.5" fill="var(--green)">one person (answer key) ↑</text>
+      <text x="${padL}" y="${H - 4}" font-size="11.5" fill="var(--red)">two people ↓</text>
+      <text x="${W - 8}" y="14" font-size="11.5" fill="#6B6B6B" text-anchor="end">joined →</text>
+      <text x="${padL}" y="${H + 16}" font-size="11" fill="#6B6B6B">${(100 * toP(E[0])).toFixed(1)}%</text>
+      <text x="${px}" y="${H + 16}" font-size="11" fill="#6B6B6B" text-anchor="middle">${(100 * D.prod_p).toFixed(0)}%</text>
+      <text x="${W - 8}" y="${H + 16}" font-size="11" fill="#6B6B6B" text-anchor="end">${(100 * toP(E[n])).toFixed(4)}%</text></svg>`;
+    box.innerHTML = g;
+    box.querySelectorAll('.hb').forEach(e => { e.onmouseenter = () => { const i = +e.dataset.i;
+      cap.textContent = `Score ${(100 * toP(E[i])).toFixed(1)}% to ${(100 * toP(E[i + 1])).toFixed(1)}%: ${F.int(S[i])} pairs of one person, ${F.int(Df[i])} of two people.`; };
+      e.onmouseleave = () => cap.textContent = D.hint; });
+    cap.textContent = D.hint;
+  }
+  inp.oninput = () => draw(+inp.value); draw(k0);
+};
+
+// Who each rule removes: every step is the one before minus the people it names.
+R.funnel = () => {
+  const st = D.steps, mx = Math.max(1, st[0].value);
+  const w = document.createElement('div'); app.appendChild(w);
+  const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = 'Hover a step.';
+  st.forEach((x, i) => { const r = document.createElement('div'); r.className = 'b fade'; r.style.animationDelay = (i * 90) + 'ms';
+    r.style.cssText += ';display:grid;grid-template-columns:1fr 70px;column-gap:12px;row-gap:4px;align-items:center;padding:6px 0;cursor:default';
+    const c = {info: 'var(--blue)', fail: 'var(--red)', pass: 'var(--green)'}[x.tone] || 'var(--blue)';
+    r.innerHTML = `<div style="font-size:14px;grid-column:1/3">${esc(x.label)}${x.note ? ` <span style="color:var(--muted);font-size:12px">· ${esc(x.note)}</span>` : ''}</div>
+      <div style="background:#F2F3F6;border-radius:8px;height:22px;overflow:hidden"><div class="grow" style="height:22px;border-radius:8px;background:${c};opacity:${x.tone === 'fail' ? .75 : .95};
+      width:${Math.max(1.5, 100 * x.value / mx)}%;animation-delay:${i * 90}ms"></div></div><div class="num v" style="text-align:right;font-weight:600"></div>`;
+    w.appendChild(r); count(r.querySelector('.v'), x.value, 'int');
+    r.onmouseenter = () => cap.textContent = `${x.label}: ${F.int(x.value)} people${x.note ? ' · ' + x.note : ''}`; r.onmouseleave = () => cap.textContent = 'Hover a step.'; });
+  app.appendChild(cap);
+};
+
+// One person's score, step by step: the average person, then each input's push, ending at the model's own score.
+R.waterfall = () => {
+  const P = D.walk, base = D.base_rate; let i = 0, playing = null;
+  const top = document.createElement('div'); top.className = 'row';
+  const prev = document.createElement('button'); prev.className = 'btn'; prev.textContent = '←'; prev.style.padding = '7px 14px';
+  const next = document.createElement('button'); next.className = 'btn'; next.textContent = '→'; next.style.padding = '7px 14px';
+  const play = document.createElement('button'); play.className = 'btn blue'; play.textContent = 'Play'; play.style.padding = '7px 16px';
+  const who = document.createElement('div'); who.style.flex = '1'; who.style.minWidth = '200px';
+  top.append(prev, next, play, who); app.appendChild(top);
+  const dots = document.createElement('div'); dots.className = 'dots'; dots.style.margin = '10px 0'; app.appendChild(dots);
+  P.forEach((p, k) => { const d = document.createElement('i'); d.title = `${(100 * p.score).toFixed(1)}%`; d.style.cursor = 'pointer'; d.onclick = () => go(k); dots.appendChild(d); });
+  const box = document.createElement('div'); app.appendChild(box);
+  const cap = document.createElement('div'); cap.className = 'cap'; app.appendChild(cap);
+  const sig = z => 1 / (1 + Math.exp(-z));
+  function go(k) { i = (k + P.length) % P.length; draw(); }
+  function draw(n) {
+    const p = P[i], steps = p.steps, shown = n === undefined ? steps.length : n;
+    dots.querySelectorAll('i').forEach((d, k) => d.className = k === i ? 'on' : (P[k].bought ? 'r' : ''));
+    who.innerHTML = `<div class="mono">${p.top_decile ? 'Top decile' : 'Everyone else'} · ${esc(p.person_key.slice(-6))}</div>
+      <div style="font-size:26px;font-weight:600" class="num">${(100 * p.score).toFixed(2)}% <span style="font-size:14px;font-weight:400;color:var(--muted)">
+      home-buyer score · base rate ${(100 * base).toFixed(2)}% · ${p.bought ? '<span class="agree">bought within 180 days</span>' : 'did not buy'} (answer key)</span></div>`;
+    let z = p.start; const pts = [z]; steps.forEach(([, v]) => { z += v; pts.push(z); });
+    const lo = Math.min(...pts) - .2, hi = Math.max(...pts) + .2, W = Math.max(300, app.clientWidth || 800), narrow = W < 560, lab = narrow ? 128 : 210;
+    const X = v => lab + (W - lab - (narrow ? 112 : 150)) * (v - lo) / (hi - lo), rowH = 26, cut = narrow ? 19 : 30;
+    let g = `<svg width="${W}" height="${(steps.length + 2) * rowH + 10}" style="display:block;max-width:100%">`;
+    const row = (y, name, a, b, color, text, k) => `<g class="wf" data-k="${k}" style="cursor:default">
+      <text x="${lab - 8}" y="${y + 17}" text-anchor="end" font-size="${narrow ? 11.5 : 12.5}" fill="#050505"><title>${esc(name)}</title>${esc(name.length > cut ? name.slice(0, cut - 1) + '…' : name)}</text>
+      <rect x="${Math.min(X(a), X(b))}" y="${y + 5}" width="${Math.max(2, Math.abs(X(b) - X(a)))}" height="${rowH - 10}" rx="4" fill="${color}" class="grow" style="animation-delay:${k * 70}ms"/>
+      <text x="${Math.max(X(a), X(b)) + 6}" y="${y + 17}" font-size="11.5" fill="#6B6B6B" class="num">${text}</text></g>`;
+    g += row(0, 'an average person', lo, p.start, '#C9CFE8', `${(100 * sig(p.start)).toFixed(2)}%`, 0);
+    let c = p.start;
+    steps.slice(0, shown).forEach(([name, v], k) => { const a = c; c += v; g += row((k + 1) * rowH, name, a, c, v > 0 ? 'var(--blue)' : 'var(--gold)',
+      narrow ? `${(100 * sig(c)).toFixed(2)}%` : `${v > 0 ? '+' : ''}${v.toFixed(3)} → ${(100 * sig(c)).toFixed(2)}%`, k + 1); });
+    if (shown === steps.length) g += row((steps.length + 1) * rowH, 'the model’s score', lo, c, 'var(--navy)', `${(100 * sig(c)).toFixed(2)}%`, steps.length + 1);
+    box.innerHTML = g + '</svg>';
+    cap.textContent = D.hint;
+  }
+  prev.onclick = () => go(i - 1); next.onclick = () => go(i + 1);
+  play.onclick = () => { if (playing) { clearInterval(playing); playing = null; play.textContent = 'Play'; return; }
+    let n = 0; play.textContent = 'Stop'; draw(0);
+    playing = setInterval(() => { n++; draw(n); if (n >= P[i].steps.length) { clearInterval(playing); playing = null; play.textContent = 'Play'; } }, 420); };
+  draw();
+};
+
+// This visitor's actions in time: hover a dot for what it did and found.
+R.timeline = () => {
+  const E = D.events; if (!E.length) { app.innerHTML = '<div class="cap">Nothing yet.</div>'; return; }
+  const kinds = [...new Set(E.map(e => e.kind))], pal = ['var(--blue)', 'var(--green)', 'var(--gold)', 'var(--red)', 'var(--navy)', '#7C8FE0', '#9A9A9A'];
+  const W = Math.max(320, app.clientWidth || 800), lab = W < 560 ? 90 : 150, rowH = 30, H = kinds.length * rowH + 30;
+  const t = E.map(e => Date.parse(e.at.replace(' ', 'T') + 'Z')), t0 = Math.min(...t), t1 = Math.max(...t, t0 + 60000);
+  const X = v => lab + (W - lab - 20) * (v - t0) / (t1 - t0);
+  let g = `<svg width="${W}" height="${H}" style="display:block;max-width:100%">`;
+  kinds.forEach((k, r) => { g += `<text x="${lab - 10}" y="${r * rowH + 20}" text-anchor="end" font-size="12.5">${esc(k)}</text>
+    <line x1="${lab}" x2="${W - 10}" y1="${r * rowH + 16}" y2="${r * rowH + 16}" stroke="#EEE"/>`; });
+  E.forEach((e, i) => { const r = kinds.indexOf(e.kind);
+    g += `<circle class="ev" data-i="${i}" cx="${X(t[i])}" cy="${r * rowH + 16}" r="7" fill="${pal[r % pal.length]}" style="cursor:pointer;animation:rise .4s ${i * 30}ms both"/>`; });
+  g += `<text x="${lab}" y="${H - 4}" font-size="11" fill="#6B6B6B">${esc(E[0].at)} UTC</text>
+    <text x="${W - 10}" y="${H - 4}" font-size="11" fill="#6B6B6B" text-anchor="end">${esc(E[E.length - 1].at)} UTC</text></svg>`;
+  const box = document.createElement('div'); box.innerHTML = g; app.appendChild(box);
+  const cap = document.createElement('div'); cap.className = 'card'; cap.style.marginTop = '8px'; cap.style.fontSize = '13.5px'; app.appendChild(cap);
+  const tell = e => `<div class="mono">${esc(e.at)} UTC</div><div style="font-weight:600;margin:4px 0">${esc(e.action)}</div><div style="color:var(--muted);overflow-wrap:anywhere">${esc(e.result)}</div>`;
+  cap.innerHTML = tell(E[E.length - 1]);
+  box.querySelectorAll('.ev').forEach(c => { c.onmouseenter = () => cap.innerHTML = tell(E[+c.dataset.i]); c.onclick = c.onmouseenter; });
+};
+
+// An incident, step by step: what the agent did, how long each step took, and the detail behind it.
+R.trace = () => {
+  const E = D.events, PH = ['inject', 'detect', 'inspect', 'propose', 'approve', 'fix', 'verify'];
+  const tot = Math.max(.1, E.reduce((a, e) => a + e.seconds, 0));
+  const w = document.createElement('div'); app.appendChild(w);
+  E.forEach((e, i) => { const r = document.createElement('div'); r.className = 'fade'; r.style.animationDelay = (i * 120) + 'ms';
+    r.style.cssText += ';display:grid;grid-template-columns:22px 1fr 60px;gap:10px;align-items:start;padding:7px 0;border-bottom:1px dashed #EEE';
+    const c = /fail|refus|risk/i.test(e.label + e.detail) ? 'var(--red)' : /verif|pass|approv/i.test(e.phase + e.label) ? 'var(--green)' : 'var(--blue)';
+    r.innerHTML = `<div style="width:14px;height:14px;border-radius:50%;background:${c};margin-top:3px;box-shadow:0 0 0 4px ${'#F3F5FC'}"></div>
+      <div><div class="mono">${esc(e.phase)}</div><div style="font-size:14px;font-weight:500">${esc(e.label)}</div>
+      ${e.detail ? `<div class="cap" style="margin:2px 0 0;overflow-wrap:anywhere">${esc(e.detail)}</div>` : ''}
+      <div class="track" style="height:5px;margin-top:6px"><div class="fill grow" style="width:${Math.max(2, 100 * e.seconds / tot)}%;background:${c};animation-delay:${i * 120}ms"></div></div></div>
+      <div class="num" style="text-align:right;font-size:13px;color:var(--muted)">${e.seconds.toFixed(1)} s</div>`;
+    w.appendChild(r); });
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

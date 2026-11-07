@@ -55,6 +55,19 @@ def reasons(C: pd.DataFrame, k: int = 3) -> list[list[tuple[str, float]]]:
     return out
 
 
+def waterfall(C: pd.DataFrame, b: float, i: int, keep: float = 0.01) -> dict:
+    """One person's score as steps: the average person's log-odds (the intercept, since inputs are
+    standardised), then every input's push, grouped by its reason label. Pushes smaller than `keep`
+    are summed into one step so nothing is dropped: start plus every step is the model's log-odds."""
+    row = C.iloc[i].groupby(lambda n: label(n)).sum()
+    big = row[row.abs() >= keep].sort_values(key=abs, ascending=False)
+    steps = [[k, round(float(v), 4)] for k, v in big.items()]
+    rest = float(row[row.abs() < keep].sum())
+    if abs(rest) > 1e-9:
+        steps.append(["all other inputs", round(rest, 4)])
+    return {"start": round(float(b), 4), "steps": steps}
+
+
 def faithfulness(model, X: pd.DataFrame) -> float:
     """Largest gap, over all people, between the model's probability and the one rebuilt from reasons."""
     C, b = contributions(model, X)
@@ -62,7 +75,7 @@ def faithfulness(model, X: pd.DataFrame) -> float:
     return float(np.max(np.abs(rebuilt - model.predict_proba(X)[:, 1])))
 
 
-def report(warehouse, run_dir, examples: int = 5) -> dict:
+def report(warehouse, run_dir, examples: int = 5, walk: int = 24) -> dict:
     """Fit the production recipe (logistic, as chosen on validation at 100,000 people; the release gate
     re-checks that choice), refit on the training snapshots, explain the
     held-out test snapshot, and keep a few examples from the top decile."""
@@ -86,14 +99,20 @@ def report(warehouse, run_dir, examples: int = 5) -> dict:
     model = candidates()["logistic"].fit(X(tr), tr.label)
     Xt = X(te)
     p = model.predict_proba(Xt)[:, 1]
-    C, _ = contributions(model, Xt)
+    C, b = contributions(model, Xt)
     top = np.argsort(-p)[: max(1, len(p) // 10)]
     first = pd.Series([label(C.iloc[i].abs().idxmax()) for i in top]).value_counts()
     ex = []
     for i in top[:: max(1, len(top) // examples)][:examples]:
         ex.append({"person_key": te.person_key.iloc[i], "score": round(float(p[i]), 4), "bought": bool(te.label.iloc[i]),
                    "reasons": reasons(C.iloc[[i]])[0]})
-    return {"city": "seed 7, 100,000 people", "snapshot": TEST, "people": int(len(te)),
+    # People to step through in the app: half from the top decile, half from everyone else, fixed by seed.
+    rng = np.random.default_rng(7)
+    rest = np.setdiff1d(np.arange(len(p)), top)
+    pick = list(rng.choice(top, walk // 2, replace=False)) + list(rng.choice(rest, walk - walk // 2, replace=False))
+    walkers = [{"person_key": te.person_key.iloc[i], "score": round(float(p[i]), 6), "bought": bool(te.label.iloc[i]),
+                "top_decile": bool(i in set(top)), **waterfall(C, b[i], i)} for i in sorted(pick, key=lambda i: -p[i])]
+    return {"city": "seed 7, 100,000 people", "snapshot": TEST, "people": int(len(te)), "walk": walkers,
             "base_rate": round(float(te.label.mean()), 5), "faithfulness_max_gap": faithfulness(model, Xt),
             "top_decile_first_reason": {k: int(v) for k, v in first.head(6).items()}, "examples": ex}
 

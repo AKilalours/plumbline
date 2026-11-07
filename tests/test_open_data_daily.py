@@ -2,7 +2,6 @@
 (failures too), and a publisher reloading its whole table is reported rather than silently re-downloaded."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest

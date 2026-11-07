@@ -120,7 +120,7 @@ def test_saved_results_are_the_numbers_in_the_readme():
 DESTINATIONS = ["overview", "sources_page", "identity_page", "audiences_page", "models_page", "agent_page", "activity_page"]
 VIEWS = ["scale", "identity", "failure_lab", "deletion", "households_page", "audiences", "experiment", "agent",
          "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page", "reasons_page",
-         "worth_buying", "open_data", "matcher_game"]
+         "worth_buying", "open_data", "matcher_game", "tune_matcher"]
 PAGES = DESTINATIONS + VIEWS
 
 
@@ -478,3 +478,19 @@ def test_the_live_city_counts_the_whole_warehouse_and_marks_the_matchers_mistake
     assert sum(t["rows_in"].values()) == sent == t["loaded"] + t["quarantined"] + t["suppressed"] + t["already"]
     assert t["people"] == people and 0 < len(c["people"]) <= 140
     assert any(p["mixed"] for p in c["people"])          # mistakes are shown, not filtered out
+    assert sum(p["borough"] is not None for p in c["people"]) > 0.9 * len(c["people"])   # placed by their real ZIP
+    assert abs(sum(c["borough_share"].values()) - 1) < 0.02 and len(c["held"]) == min(40, t["quarantined"])
+
+
+def test_the_threshold_view_counts_at_production_exactly_what_its_cards_count(world):
+    """The histogram once had no edge at 0.9, so the tiles said 1,157 wrong joins and the card below said 1,194."""
+    from plumbline.app import visual_data as VD
+    from plumbline.identity.match import MATCH_THRESHOLD
+    d, _ = world
+    with Q.connect(d) as con:
+        t = VD.threshold(con, d.run, MATCH_THRESHOLD)
+        over = con.execute("SELECT count(*) FROM identity_pairs WHERE match_probability >= ?", [MATCH_THRESHOLD]).fetchone()[0]
+    k = next(i for i, e in enumerate(t["edges"]) if abs(e - t["prod"]) < 1e-9)
+    assert sum(t["diff"][k:]) == t["rules"]["score_says_join_two_people"]
+    assert sum(t["same"][k:]) + sum(t["diff"][k:]) <= over and sum(t["same"]) + sum(t["diff"]) == t["pairs"]
+    assert t["rules"]["joined_two_people"] < t["rules"]["score_says_join_two_people"]

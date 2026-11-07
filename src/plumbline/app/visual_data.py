@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 BLUE, NAVY, GOLD, GREEN, RED, GREY = "#2941B9", "#11196F", "#E5B74D", "#1F8A5B", "#C2412D", "#9A9A9A"
+SHORT = {"crm": "CRM", "vendor": "Vendor", "email": "Email", "store": "Store", "privacy": "Privacy"}
 SOURCE = {"crm": ("CRM", BLUE), "vendor": ("Data vendor", GOLD), "email": ("Email events", "#7C8FE0"),
           "store": ("Online store", NAVY), "privacy": ("Privacy requests", GREY)}
 FIELDS = {"First name": "first_name", "Last name": "last_name", "Email": "email", "Phone": "phone",
@@ -25,7 +26,7 @@ def row_flow(con) -> dict:
     outcomes = {"loaded": ("Loaded", GREEN, "kept, newest version wins"), "already": ("Already had it", BLUE, "a resend: stored once"),
                 "quarantined": ("Quarantined", GOLD, "held with a reason, never silently dropped"),
                 "suppressed": ("Blocked: deleted person", RED, "someone who asked to be forgotten")}
-    left = [{"key": r.source, "label": SOURCE.get(r.source, (r.source, GREY))[0], "value": int(r.rows_in),
+    left = [{"key": r.source, "label": SOURCE.get(r.source, (r.source, GREY))[0], "short": SHORT.get(r.source, r.source), "value": int(r.rows_in),
              "color": SOURCE.get(r.source, (r.source, GREY))[1]} for r in df.itertuples()]
     right = [{"key": k, "label": lab, "value": int(df[k].sum()), "color": c, "note": note}
              for k, (lab, c, note) in outcomes.items() if int(df[k].sum())]
@@ -46,7 +47,8 @@ def people_flow(con) -> dict:
     tone = {1: GREY, 2: BLUE, 3: GREEN}
     word = {1: "Seen by one source", 2: "Joined across two", 3: "Joined across all three"}
     srcs = df.groupby("source").records.sum().sort_values(ascending=False)
-    left = [{"key": s, "label": SOURCE.get(s, (s, GREY))[0], "value": int(v), "color": SOURCE.get(s, (s, GREY))[1]} for s, v in srcs.items()]
+    left = [{"key": s, "label": SOURCE.get(s, (s, GREY))[0], "short": SHORT.get(s, s), "value": int(v), "color": SOURCE.get(s, (s, GREY))[1]}
+            for s, v in srcs.items()]
     right = [{"key": f"n{n}", "label": word.get(n, f"{n} sources"), "value": int(df[df.n == n].records.sum()), "color": tone.get(n, NAVY),
               "sub": f"{persons[n]:,} people", "note": f"{persons[n]:,} people"} for n in sorted(persons)]
     links = [{"from": r.source, "to": f"n{int(r.n)}", "value": int(r.records)} for r in df.itertuples()]
@@ -179,6 +181,8 @@ def city(con, run: Path, k: int = 140, seed: int = 11) -> dict:
     totals["audience"] = int(con.execute("SELECT count(*) FROM products.mart_activation_audience").fetchone()[0])
     reasons = [{"source": s, "reason": r, "rows": int(n)} for s, r, n in con.execute(
         "SELECT source, reason, count(*) FROM quarantine GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 6").fetchall()]
+    held = [{"source": s, "reason": r.replace("_", " "), "row": int(n), "delivery": str(d)[:10]} for s, r, n, d in con.execute(
+        "SELECT source, reason, row_number, delivery_id FROM quarantine ORDER BY source, row_number LIMIT 40").fetchall()]
 
     recs = con.execute("""SELECT person_key, source, record_id, first_name, last_name, email, house, street, zip
                           FROM identity_records""").df()
@@ -195,16 +199,88 @@ def city(con, run: Path, k: int = 140, seed: int = 11) -> dict:
     for pool, w in zip(pools, want):
         pool = [p for p in pool if p not in chosen]
         chosen += rnd.sample(pool, min(len(pool), max(0, min(w, k - len(chosen)))))
+    borough = _zip_borough()
     people = []
     for p in chosen[:k]:
         rows = g.get_group(p)
+        bz = rows.zip.dropna().astype(str).str[:5].map(borough).dropna()
         clean = lambda v: "" if pd.isna(v) else str(v)
         first = rows.first_name.dropna().astype(str).str.title().mode()
         last = rows.last_name.dropna().astype(str).str.title().mode()
         people.append({"name": f"{first.iloc[0] if len(first) else ''} {last.iloc[0] if len(last) else ''}".strip() or "unnamed",
-                       "mixed": bool(rows.truth.nunique() > 1),
+                       "mixed": bool(rows.truth.nunique() > 1), "borough": bz.mode().iloc[0] if len(bz) else None,
                        "records": [{"source": r.source, "name": f"{clean(r.first_name)} {clean(r.last_name)}".strip(),
                                     "email": clean(r.email), "address": f"{clean(r.house)} {clean(r.street)} {clean(r.zip)}".strip()}
                                    for r in rows.itertuples()]})
-    return {"totals": totals, "reasons": reasons, "people": people,
+    zips = recs.zip.dropna().astype(str).str[:5].map(borough)
+    share = {b: round(float(n), 4) for b, n in zips.value_counts(normalize=True).items()}
+    return {"totals": totals, "reasons": reasons, "held": held, "people": people, "borough_share": share,
             "sources": {s: {"label": SOURCE.get(s, (s, GREY))[0], "color": SOURCE.get(s, (s, GREY))[1]} for s in totals["rows_in"]}}
+
+
+def threshold(con, run: Path, prod: float, bins: int = 60) -> dict:
+    """Every pair the matcher scored, by its match probability, split by the answer key: the same person or
+    two people. Pair level, before clustering and the safety rules production adds on top."""
+    import math
+
+    import numpy as np
+    from .queries import links
+    owner = links(run).assign(uid=lambda d: d.source + ":" + d.record_id).set_index("uid").person_id
+    pairs = con.execute("""SELECT p.unique_id_l AS a, p.unique_id_r AS b, p.match_probability AS p,
+                                  l.person_key = r.person_key AS joined
+                           FROM identity_pairs p JOIN identity_records l ON l.unique_id = p.unique_id_l
+                                                 JOIN identity_records r ON r.unique_id = p.unique_id_r""").df()
+    pairs = pairs[pairs.a.isin(owner.index) & pairs.b.isin(owner.index)]
+    same = owner.loc[pairs.a].to_numpy() == owner.loc[pairs.b].to_numpy()
+    over = (pairs.p >= prod).to_numpy()
+    joined = pairs.joined.fillna(False).astype(bool).to_numpy()
+    # The axis is the pair's match probability on a log-odds scale (base 2), the same quantity production
+    # thresholds at 0.9; Splink's match weight leaves out the prior, so it is not that scale.
+    pc = pairs.p.clip(1e-6, 1 - 1e-6)
+    w = np.log2(pc / (1 - pc)).to_numpy()
+    lo, hi = max(-20.0, math.floor(w.min())), min(20.0, math.ceil(w.max()))
+    w = np.clip(w, lo, hi)
+    cut = math.log2(prod / (1 - prod))
+    # An edge exactly at production's threshold, so the counts there are the same pairs the cards count.
+    edges = np.unique(np.append(np.linspace(lo, hi, bins + 1), cut))
+    s, _ = np.histogram(w[same], edges)
+    d, _ = np.histogram(w[~same], edges)
+    return {"edges": [float(x) for x in edges], "same": s.astype(int).tolist(), "diff": d.astype(int).tolist(),
+            "prod": float(cut), "prod_p": prod, "pairs": int(len(pairs)),
+            "same_total": int(same.sum()), "diff_total": int((~same).sum()),
+            # What production does at its threshold, after clustering and the safety rules (it ran once):
+            "rules": {"score_says_join_two_people": int((over & ~same).sum()), "joined_two_people": int((joined & ~same).sum()),
+                      "same_person_kept_apart": int((same & ~joined).sum()), "same_person_pairs": int(same.sum())}}
+
+
+def funnel(a: dict, channel_label: str | None) -> dict:
+    """Everyone, then the segment, then each reason consent or contact removes someone; the last step is
+    who can be reached. Each step is the one before minus the people it names."""
+    steps = [{"label": "Everyone in the audience mart", "value": a["population"], "tone": "info"},
+             {"label": "Match the rules", "value": a["segment"], "tone": "info",
+              "note": f"{a['population'] - a['segment']:,} do not match"}]
+    left = a["segment"]
+    if len(a["excluded"]):
+        for reason, n in a["excluded"].reason.value_counts().items():
+            left -= int(n)
+            steps.append({"label": f"minus: {reason}", "value": left, "tone": "fail", "note": f"{int(n):,} kept out"})
+    steps.append({"label": f"Reachable{' by ' + channel_label if channel_label else ''}", "value": a["reachable"], "tone": "pass"})
+    return {"steps": steps}
+
+
+def activity_events(r: "pd.DataFrame") -> dict:
+    """This visitor's own actions, oldest first, with a short result line each."""
+    import json as _json
+    out = []
+    for x in r.sort_values("at").itertuples():
+        res = x.result if isinstance(x.result, str) else _json.dumps(x.result)
+        out.append({"at": str(x.at)[:19], "action": str(x.action), "kind": str(x.action).split(":")[0], "result": res[:240]})
+    return {"events": out}
+
+
+def _zip_borough() -> dict:
+    """ZIP to borough from the app's real PLUTO lots (the borough most of a ZIP's lots are in)."""
+    from .demo import REFERENCE
+    lots = pd.read_csv(REFERENCE / "pluto_lots.csv", dtype=str, usecols=["zipcode", "borough"])
+    lots = lots.assign(z=lots.zipcode.str[:5]).dropna(subset=["z", "borough"])
+    return lots.groupby("z").borough.agg(lambda b: b.mode().iloc[0]).to_dict()

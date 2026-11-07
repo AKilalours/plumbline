@@ -6,6 +6,12 @@ on:
   schedule:
     - cron: "23 11 * * *"        # 06:23 New York time in winter
   workflow_dispatch:
+  push:                          # and when the connector, the job or the contract changes
+    branches: [main]
+    paths:
+      - "src/plumbline/ingest/**"
+      - "sources/open_data/**"
+      - ".github/workflows/open_data.yml"
 permissions:
   contents: write
 concurrency:

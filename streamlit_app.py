@@ -604,13 +604,7 @@ def audiences():
     st.write("")
     left, right = st.columns([1, 1], gap="large")
     with left:
-        if len(a["excluded"]):
-            reasons = a["excluded"].reason.value_counts().rename_axis("Reason").reset_index(name="People")
-            st.altair_chart(alt.Chart(reasons).mark_bar(color=GOLD, cornerRadiusEnd=4).encode(
-                y=alt.Y("Reason:N", title=None, axis=alt.Axis(labelLimit=260, labelFontSize=13)),
-                x=alt.X("People:Q", axis=alt.Axis(tickMinStep=1, format="d")),
-                tooltip=["Reason", "People"]).properties(height=alt.Step(34)),
-                width="stretch")
+        viz("funnel", VD.funnel(a, O.CHANNELS.get(rules["channel"])), 120)
         st.markdown('<div class="mono">Members: click one</div>', unsafe_allow_html=True)
         mem = a["members"].assign(Name=lambda x: (x.first_name + " " + x.last_name).str.title())[["Name", "person_key"]]
         ev = st.dataframe(mem.head(500), hide_index=True, width="stretch", height=300, on_select="rerun",
@@ -735,6 +729,7 @@ def activity():
     if r.empty:
         st.info("Nothing yet. Run a sync, fix an identity, forget someone or save an audience.")
         return
+    viz("timeline", VD.activity_events(r), 120)
     r = r.assign(result=r.result.map(lambda x: json.dumps(x) if not isinstance(x, str) else x))
     st.dataframe(r.rename(columns={"at": "When", "who": "Who", "action": "Action", "result": "Result"}),
                  hide_index=True, width="stretch", height=min(560, 35 * (len(r) + 1) + 3))
@@ -898,6 +893,9 @@ def onboarding_page():
     rows = sm["rows"]
     name = choose("Partner file", [r["partner"] for r in rows], default=rows[0]["partner"], key="ob_pick")
     r = next(x for x in rows if x["partner"] == name)
+    st.caption("These partner files come from the small city the recorded model runs were made on. That city keeps the test "
+               "fixtures' invented addresses (\"Fixture Street\"), so each recording replays exactly; the rest of the app runs on "
+               "real NYC buildings.")
     st.markdown(f'<span class="chip">{"held-out" if r["split"] == "test" else "dev"} file</span><span class="chip blue">key: {", ".join(r["key"])}</span>',
                 unsafe_allow_html=True)
     who = choose("Drafted by", ["model", "rules"], default="model", key="ob_who")
@@ -1204,9 +1202,28 @@ def sources_page():
 
 def identity_page():
     header("Identity")
-    v = view(["People", "You vs the matcher", "Households", "Deletion"], "id_dest")
+    v = view(["People", "You vs the matcher", "Tune the matcher", "Households", "Deletion"], "id_dest")
     with embedded():
-        {"People": identity, "You vs the matcher": matcher_game, "Households": households_page, "Deletion": deletion}[v]()
+        {"People": identity, "You vs the matcher": matcher_game, "Tune the matcher": tune_matcher,
+         "Households": households_page, "Deletion": deletion}[v]()
+
+
+@st.cache_data(show_spinner=False)
+def threshold_data(_d, key):
+    from plumbline.identity.match import MATCH_THRESHOLD
+    with Q.connect(_d) as con:
+        return VD.threshold(con, _d.run, MATCH_THRESHOLD)
+
+
+def tune_matcher():
+    d = demo()
+    t = threshold_data(d, key(d))
+    viz("threshold", {**t, "hint": f"Every pair the matcher scored in this city ({t['pairs']:,}), by its score; green pairs are one "
+                      "person, red are two, per the answer key. Drag the slider to move the cut. Hover a bar."}, 120)
+    how("The score compares two records field by field (Splink, trained without labels). Cutting it at a threshold alone joins "
+        "family members who share a surname, an address and sometimes an inbox. Production keeps 0.9 and adds safety rules when "
+        "it builds people from pairs: a join is refused when, for example, two dates of birth disagree. The cards show both, "
+        "measured on this city against the answer key.")
 
 
 def matcher_game():
@@ -1246,21 +1263,9 @@ def reasons_page():
     st.markdown(f'<span class="chip">city: 100,000 people</span><span class="chip">snapshot: {rc["snapshot"]}</span>'
                 f'<span class="chip blue">reasons rebuild every score (max gap {rc["faithfulness_max_gap"]:.0e})</span>',
                 unsafe_allow_html=True)
-    ex = rc["examples"]
-    i = choose("Person (top decile)", list(range(len(ex))), default=0, key="rc_pick",
-                             format_func=lambda k: ex[k]["person_key"][-6:])
-    e = ex[i]
-    a, b = st.columns([1, 2], gap="large")
-    with a:
-        stat("Home-buyer score", f"{e['score']:.1%}", f"base rate {rc['base_rate']:.1%}")
-        stat("Bought within 180 days", "yes" if e["bought"] else "no", "per the answer key", "pass" if e["bought"] else None)
-    with b:
-        df = pd.DataFrame(e["reasons"], columns=["Reason", "Push"])
-        st.altair_chart(alt.Chart(df).mark_bar(cornerRadiusEnd=4).encode(
-            y=alt.Y("Reason:N", sort=None, title=None, axis=alt.Axis(labelLimit=260, labelFontSize=13)),
-            x=alt.X("Push:Q", title="push on the log-odds vs an average person"),
-            color=alt.condition("datum.Push > 0", alt.value(BLUE), alt.value(GOLD)), tooltip=["Reason", "Push"]
-        ).properties(height=alt.Step(40)), width="stretch")
+    viz("waterfall", {"walk": rc["walk"], "base_rate": rc["base_rate"],
+                      "hint": "Blue pushes the score up, gold pulls it down; they start at an average person and end at the model's own "
+                              "score, exactly. Step through people, or press Play to watch one build."}, 120)
     st.markdown('<div class="mono">Most common top reason in the top decile</div>', unsafe_allow_html=True)
     top = pd.DataFrame(list(rc["top_decile_first_reason"].items()), columns=["Reason", "People"])
     st.altair_chart(alt.Chart(top).mark_bar(color=NAVY, cornerRadiusEnd=4).encode(
@@ -1299,10 +1304,8 @@ def incident_lab():
     left, right = st.columns([3, 2], gap="large")
     with left:
         st.markdown(f'<div class="mono">Trace · {run.id}</div>', unsafe_allow_html=True)
-        st.markdown('<div class="trace">' + "".join(
-            f'<div><span class="ph">{html.escape(e["phase"])}</span><span class="lb">{html.escape(e["label"])}'
-            f'{" · <span class=dt>" + html.escape(e["detail"]) + "</span>" if e["detail"] else ""}</span>'
-            f'<span class="sec">{e["seconds"]:.1f}s</span></div>' for e in run.events) + "</div>", unsafe_allow_html=True)
+        viz("trace", {"events": [{"phase": e["phase"], "label": e["label"], "detail": e.get("detail") or "",
+                                  "seconds": float(e["seconds"])} for e in run.events]}, 120)
     with right:
         if run.status in ("proposed", "fixed", "verified"):
             finding_card(run)

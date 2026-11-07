@@ -32,6 +32,17 @@ def _data() -> dict:
             "game": {"pairs": [pair, pair], "fields": ["First name"]},
             "gate": VD.gate(rg, {"other_algorithm": "a", "no_property_data": "b", "balanced_classes": "c"}, lambda g: "d"),
             "onboard": {"run": od},
+            "threshold": {"edges": [-4, -2, 0, 2, 3.17, 6], "same": [1, 2, 5, 9, 40], "diff": [9, 7, 6, 4, 2], "prod": 3.17, "prod_p": 0.9,
+                          "pairs": 85, "same_total": 57, "diff_total": 28, "hint": "h",
+                          "rules": {"score_says_join_two_people": 2, "joined_two_people": 1, "same_person_kept_apart": 3, "same_person_pairs": 57}},
+            "funnel": {"steps": [{"label": "Everyone", "value": 100, "tone": "info"}, {"label": "Match", "value": 60, "tone": "info", "note": "40 do not"},
+                                 {"label": "minus: unsubscribed", "value": 50, "tone": "fail", "note": "10 kept out"},
+                                 {"label": "Reachable by email", "value": 50, "tone": "pass"}]},
+            "waterfall": {"walk": json.loads((RES / "reason_codes.json").read_text())["walk"], "base_rate": 0.0218, "hint": "h"},
+            "timeline": {"events": [{"at": "2026-11-06 10:00:00", "action": "sync: ran", "kind": "sync", "result": "{}"},
+                                    {"at": "2026-11-06 10:05:00", "action": "audience: saved", "kind": "audience", "result": "{\"segment\": 3}"}]},
+            "trace": {"events": [{"phase": "inject", "label": "Merged two people", "detail": "PK1 into PK2", "seconds": 1.7},
+                                 {"phase": "detect", "label": "Checked identity assertions", "detail": "1 failing", "seconds": 0.8}]},
             "history": {"runs": runs_, "summary": OD.summary(runs_), "title": "t"},
             "city": {"totals": {"rows_in": {"crm": 10, "vendor": 12, "privacy": 2}, "loaded": 20, "quarantined": 1, "suppressed": 1,
                                 "already": 0, "records": 15, "people": 9, "households": 6, "audience": 8},
@@ -93,3 +104,21 @@ def test_the_worth_slider_recomputes_in_the_browser():
         pg.wait_for_timeout(1100)
         assert first == "$2.045" and pg.locator(".val").first.inner_text() == "$4.089"   # 31 / 30,323 x $4,000, not double the rounded $2.045
         b.close()
+
+
+def test_every_saved_waterfall_adds_up_to_its_own_score():
+    """The waterfall's steps start at an average person and must end at the model's score, or it is a picture of nothing."""
+    import math
+    r = json.loads((RES / "reason_codes.json").read_text())
+    assert len(r["walk"]) == 24 and sum(p["top_decile"] for p in r["walk"]) == 12
+    for p in r["walk"]:
+        z = p["start"] + sum(v for _, v in p["steps"])
+        assert abs(1 / (1 + math.exp(-z)) - p["score"]) < 1e-4, p["person_key"]
+
+
+def test_the_funnel_steps_subtract_exactly_the_people_each_rule_names():
+    import pandas as pd
+    a = {"population": 100, "segment": 60, "reachable": 45,
+         "excluded": pd.DataFrame({"reason": ["no email on file"] * 10 + ["unsubscribed or asked to be deleted"] * 5})}
+    st = VD.funnel(a, "email")["steps"]
+    assert [x["value"] for x in st] == [100, 60, 50, 45, 45] and st[-1]["label"] == "Reachable by email"

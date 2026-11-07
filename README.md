@@ -5,9 +5,31 @@ Ingest · resolve · predict · act</p>
 
 <p align="center">
 <a href="https://github.com/AKilalours/plumbline/actions/workflows/tests.yml"><img src="https://github.com/AKilalours/plumbline/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
+<a href="https://github.com/AKilalours/plumbline/actions/workflows/open_data.yml"><img src="https://github.com/AKilalours/plumbline/actions/workflows/open_data.yml/badge.svg" alt="daily sync of NYC Open Data and a live stream"></a>
 <img src="https://img.shields.io/badge/python-3.12-2941B9" alt="python 3.12">
 <img src="https://img.shields.io/badge/data-synthetic%20with%20an%20answer%20key-E5B74D" alt="synthetic data with an answer key">
 </p>
+
+<p align="center"><a href="https://minerva-plumbline.streamlit.app"><b>▶ Try the live app</b></a> · every button does real work on your own copy of the city</p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/city.gif" alt="The overview: records flow from each source through the contracts into people placed in their real NYC borough; click a person to see their records, replay a real quarantined row"></td>
+<td width="50%"><img src="docs/img/people.gif" alt="The people explorer: each person's records from every source, the strangers the matcher joined to them, and which value won each field of the golden profile"></td>
+</tr>
+<tr>
+<td align="center"><b>🗽 Every record finds its person</b><br><sub>real NYC buildings · click anyone</sub></td>
+<td align="center"><b>🧬 Why these records are one person</b><br><sub>and which value won each field</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/img/stream.gif" alt="A live event stream second by second: the planned hang-up, the resume, and every repeated event dropped"></td>
+<td width="50%"><img src="docs/img/lineage.gif" alt="Lineage: click any table to light up everything it is built from and everything built from it"></td>
+</tr>
+<tr>
+<td align="center"><b>📡 A stream that drops the line</b><br><sub>resumes, drops repeats, loses nothing</sub></td>
+<td align="center"><b>🧭 Where every product comes from</b><br><sub>dbt's own graph, live row counts</sub></td>
+</tr>
+</table>
 
 <p align="center"><a href="docs/video/plumbline-demo.mp4"><img src="docs/img/video.png" width="880" alt="Watch the 80-second tour of the live app"></a></p>
 
@@ -71,5 +93,6 @@ python -m streamlit run streamlit_app.py      # a live city in about a minute
 <a href="docs/details.md#how-ingestion-works">🔁 Ingestion</a> ·
 <a href="docs/details.md#should-we-buy-this-data">💵 Worth buying?</a> ·
 <a href="docs/details.md#a-real-public-source">🏙️ Open data</a> ·
+<a href="docs/details.md#a-live-stream">📡 Live stream</a> ·
 <a href="docs/role_map.md">🗺️ Role map</a>
 </p>

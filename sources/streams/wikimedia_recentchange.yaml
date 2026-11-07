@@ -1,0 +1,31 @@
+# Wikimedia's public recent-changes stream (stream.wikimedia.org, Server-Sent Events), read by the SSE
+# connector. Written from a profile of the real stream on 2026-11-06: four event types carry different fields
+# (length and revision only on edits and new pages, log_* only on log events), and a few events have no rc id,
+# so only the event's own id, time, type and wiki are required. Who made a change and free-text comments never
+# reach this contract: the connector drops them before anything is written.
+name: wikimedia_recentchange
+kind: stream
+files: "sources/wikimedia_recentchange/*.csv"
+key: [event_id]
+latest_by: [event_time]
+columns:
+  event_id:         {type: string, required: true}
+  event_time:       {type: timestamp, required: true}
+  type:             {type: enum, values: [edit, new, log, categorize, external], required: true}
+  wiki:             {type: string, required: true, pattern: '^[a-z0-9_]+$'}
+  domain:           {type: string, optional: true}
+  namespace:        {type: int, optional: true}
+  title:            {type: string, optional: true}
+  rc_id:            {type: int, min: 0, optional: true}
+  bot:              {type: flag, optional: true}
+  minor:            {type: flag, optional: true}
+  patrolled:        {type: flag, optional: true}
+  length_old:       {type: int, min: 0, optional: true}
+  length_new:       {type: int, min: 0, optional: true}
+  revision_old:     {type: int, min: 0, optional: true}
+  revision_new:     {type: int, min: 0, optional: true}
+  log_type:         {type: string, optional: true}
+  log_action:       {type: string, optional: true}
+  stream_topic:     {type: string, optional: true}
+  stream_partition: {type: int, min: 0, optional: true}
+  stream_offset:    {type: int, optional: true}

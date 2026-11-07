@@ -164,6 +164,8 @@ def normalize(col: Column, raw: str):
             v = int(s) if t == "int" else float(s)
         except ValueError:
             raise BadValue(f"bad_number:{col.name}") from None
+        if t == "int" and not -2**63 <= v < 2**63:         # past BIGINT: one row to quarantine, not a failed delivery
+            raise BadValue(f"out_of_range:{col.name}")
         if (col.min is not None and v < col.min) or (col.max is not None and v > col.max):
             raise BadValue(f"out_of_range:{col.name}")
     elif t == "flag":

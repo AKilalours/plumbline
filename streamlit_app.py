@@ -1125,12 +1125,32 @@ def open_data_runs() -> list[dict]:
     return OD.history(url=OD.HISTORY_URL)
 
 
+def feed_health(runs: list[dict], promise_hours: float = 26):
+    """On time, streak and the last 7 days, counted from the run history the daily job writes (failures included)."""
+    from datetime import datetime as _dt, timezone as _tz
+    from plumbline.ingest.freshness import health
+    h = health(runs, promise_hours, _dt.now(_tz.utc))
+    if h["status"] == "never ran":
+        return
+    since = h["hours_since_success"]
+    viz("tiles", {"items": [
+        {"label": "Feed status", "value": h["status"], "fmt": "raw",
+         "sub": f"last success {since:g} h ago; promise: within {promise_hours:g} h" if since is not None else "no successful run yet",
+         "tone": "pass" if h["status"] == "on time" else "fail"},
+        {"label": "Successful runs in a row", "value": h["streak"], "fmt": "int", "sub": f"since {h['first_run'][:10]}",
+         "tone": "pass" if h["streak"] else "warn"},
+        {"label": "Good days, last 7", "value": f"{h['good_days_of_7']} of 7", "fmt": "raw",
+         "sub": f"{h['failed_7']} failed run{'s' if h['failed_7'] != 1 else ''} this week" + (f": {h['last_error'][:60]}" if h["failed_7"] and h["last_error"] else ""),
+         "tone": "pass" if h["good_days_of_7"] == 7 else "info" if not h["failed_7"] else "warn"}]}, 120)
+
+
 def open_data():
     """A real public source: NYC Open Data, synced every day by a scheduled job, every run on the record."""
     from plumbline.ingest import open_data_daily as OD
     runs = open_data_runs()
     st.markdown(f'<span class="chip blue">NYC Open Data · {OD.DATASET}</span><span class="chip">{OD.TITLE}</span>'
                 '<span class="chip">synced daily</span>', unsafe_allow_html=True)
+    feed_health(runs)
     viz("history", {"runs": runs[-60:], "summary": OD.summary(runs), "title": OD.TITLE}, 120)
     od = json.loads((Path(__file__).parent / "docs/results/onboarding_time.json").read_text())
     real = od.get("where") != "local"
@@ -1176,9 +1196,82 @@ def open_data():
         "is never applied on its own. Tests: tests/test_socrata.py.")
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def stream_runs() -> list[dict]:
+    from plumbline.ingest import stream_daily as SD
+    return SD.history(url=SD.HISTORY_URL)
+
+
+def try_stream(drop_every: int, replay: int, busy: bool) -> dict:
+    """The real connector and loader against the local stand-in stream, misbehaving as asked. Time is read in
+    tenths of a second so a four-second run draws forty bars; nothing here is published anywhere."""
+    import time as _t
+    from collections import Counter as _C
+    import duckdb
+    from plumbline.ingest.connectors.sse import SSEClient, recentchange_row, stream_sync
+    from plumbline.ingest.contracts import load_contracts
+    from plumbline.ingest.engine import ingest
+    from plumbline.store.sse_server import Stream, make_events, serve
+    s = Stream(make_events(4000, seed=drop_every + replay), drop_every=drop_every or None, replay_on_resume=replay,
+               fail_first=2 if busy else 0, fail_code=429, delay=0.02)
+    srv, url = serve(s)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            landing = Path(tmp) / "run" / "sources" / "wikimedia_recentchange"
+            c = SSEClient(url, base_delay=0.05, max_delay=0.2, read_timeout=5)
+            t0 = _t.perf_counter()
+            r = stream_sync(c, landing, name="wikimedia_recentchange", transform=recentchange_row, key="event_id", seconds=40,
+                            batch_events=300, batch_seconds=10, planned_disconnect_at=20, clock=lambda: _t.monotonic() * 10)
+            took = _t.perf_counter() - t0
+            ingest(Path(tmp) / "run", Path(tmp) / "w.duckdb", load_contracts(Path(__file__).parent / "sources" / "streams"))
+            with duckdb.connect(str(Path(tmp) / "w.duckdb"), read_only=True) as con:
+                loaded = con.execute("SELECT count(*) FROM current_wikimedia_recentchange").fetchone()[0]
+                held = con.execute("SELECT count(*) FROM quarantine").fetchone()[0]
+                wikis = con.execute("SELECT count(DISTINCT wiki) FROM current_wikimedia_recentchange").fetchone()[0]
+    finally:
+        srv.shutdown()
+    return {"ok": True, "events": r.events, "rows": r.written, "rows_loaded": loaded, "rows_quarantined": held, "wikis": wikis,
+            "duplicates": r.duplicates, "events_per_second": round(r.events / max(took, 1e-9), 1), "lag_p50": None, "lag_p95": None,
+            "resume_check": r.resume_check, "published": None, "reconnects": c.stats.reconnects,
+            "reconnects_by_cause": dict(c.stats.by_cause), "timeline": r.timeline(), "disconnect_second": r.disconnect_second,
+            "tick": 0.1, "drift": [], "by_type": dict(_C(r.by_type))}
+
+
+def live_stream():
+    """A real streaming source: Wikimedia's live edit stream, read in a daily window by a scheduled job."""
+    runs = stream_runs()
+    st.markdown('<span class="chip blue">stream.wikimedia.org · Server-Sent Events</span><span class="chip">recent changes, all wikis</span>'
+                '<span class="chip">a two-minute window daily</span>', unsafe_allow_html=True)
+    feed_health(runs)
+    viz("stream", {"runs": runs[-30:], "local": st.session_state.get("st_last")}, 120)
+    st.markdown('<div class="mono" style="margin-top:1rem">Try it: make the stream misbehave</div>', unsafe_allow_html=True)
+    c = st.columns(3)
+    drop = c[0].select_slider("Drop the connection every", [0, 300, 800, 2000], value=800, key="st_drop",
+                              format_func=lambda v: "never" if not v else f"{v:,} events")
+    rep = c[1].select_slider("Events sent again after a reconnect", [0, 5, 25, 100], value=25, key="st_rep")
+    busy = c[2].toggle("Throttle the first connects (429)", value=True, key="st_busy")
+    if st.button("Run the connector now", type="primary", key="st_go"):
+        with st.spinner("Reading the local stream for four seconds"):
+            st.session_state.st_last = try_stream(drop, rep, busy)
+        r = st.session_state.st_last
+        log("stream: tried", {k_: r[k_] for k_ in ("events", "rows_loaded", "duplicates", "reconnects")})
+        st.rerun()
+    how("Every morning the same job that syncs NYC Open Data reads two minutes of Wikimedia's public recent-changes stream with the "
+        "SSE connector (src/plumbline/ingest/connectors/sse.py). It resumes after any dropped connection by sending the last event id "
+        "back; half-way through it hangs up on purpose, and counts how many events after the reconnect it had already seen. Events land "
+        "in micro-batches, each written before the checkpoint moves, so a crash replays a batch rather than losing it, and the event's "
+        "own id is the contract key, so the warehouse keeps one copy. Who made an edit and free-text comments are dropped before "
+        "anything is written. When a MOTHERDUCK_TOKEN secret is set, each run is upserted into a MotherDuck cloud database "
+        "(src/plumbline/products/publish.py); until then nothing is published and the page says so. "
+        "Tests: tests/test_stream.py, tests/test_stream_daily.py, tests/test_publish.py.")
+
+
 def sources_page():
     header("Sources")
-    v = view(["Health", "Lineage", "Failure lab", "Onboarding", "Open data", "Worth buying?"], "src_view")
+    v = view(["Health", "Lineage", "Failure lab", "Onboarding", "Open data", "Live stream", "Worth buying?"], "src_view")
+    if v == "Live stream":
+        live_stream()
+        return
     if v == "Lineage":
         d = demo()
         g = json.loads((Path(__file__).parent / "docs/results/lineage.json").read_text())

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -490,8 +490,16 @@ R.city = () => {
         ctx.beginPath(); ctx.arc(n.x, n.y, n.r, j * per - Math.PI / 2, (j + 1) * per - Math.PI / 2 - .12); ctx.stroke(); });
       ctx.fillStyle = n.p.mixed && n.got.length === n.p.records.length ? 'rgba(194,65,45,.85)' : (n === pick ? '#2941B9' : '#fff');
       ctx.beginPath(); ctx.arc(n.x, n.y, Math.max(1.5, n.r - 2.6), 0, 7); ctx.fill(); ctx.globalAlpha = 1;
-      if (n === focus) { ctx.strokeStyle = '#050505'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 4, 0, 7); ctx.stroke();
-        ctx.fillStyle = '#050505'; ctx.font = `600 12px Geist, sans-serif`; ctx.fillText(n.p.name, Math.min(n.x + n.r + 7, W - 120), n.y - n.r - 6); } });
+      if (n === focus) { ctx.strokeStyle = '#050505'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 4, 0, 7); ctx.stroke(); } });
+    // The name goes on a white pill above everything, flipped left near the edge, so other people never cover it.
+    if (focus && focus.got.length) { ctx.font = `600 12.5px Geist, sans-serif`; ctx.textBaseline = 'middle';
+      const label = focus.p.name + (focus.p.borough ? ' · ' + BORO[focus.p.borough] : ''), tw = ctx.measureText(label).width, pw = tw + 18, ph = 24;
+      let lx = focus.x + focus.r + 10, ly = focus.y - focus.r - ph - 4;
+      if (lx + pw > W - 6) lx = focus.x - focus.r - 10 - pw;
+      if (ly < 4) ly = focus.y + focus.r + 6;
+      ctx.shadowColor = 'rgba(17,25,111,.18)'; ctx.shadowBlur = 10; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(lx, ly, pw, ph, 12); ctx.fill();
+      ctx.shadowBlur = 0; ctx.strokeStyle = '#050505'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#050505'; ctx.fillText(label, lx + 9, ly + ph / 2 + .5); }
     // moving rows
     parts.forEach(p => { const age = t - p.t0; if (age < 0) return;
       const sx = geo.srcX + geo.dockW, sy = geo.srcY[p.src] ?? geo.srcY[order[0]];
@@ -844,6 +852,79 @@ R.lineage = () => {
       ${n.tests ? `<div style="margin-top:6px">${n.tests.map(t => `<span class="chip new">${esc(t.length > 48 ? t.slice(0, 47) + '…' : t)}</span>`).join('')}</div>` : ''}`;
   }
   sel = D.start || null; draw(); tell();
+};
+
+// A live stream, second by second: what arrived, of which type, where the run hung up on purpose and resumed,
+// and whether anything after the reconnect was a repeat. Click a run below to see its window; click a type to hide it.
+R.stream = () => {
+  const runs = D.runs || [], TY = ['edit', 'categorize', 'new', 'log', 'other'];
+  const COL = {edit: 'var(--blue)', categorize: '#9AA8E8', new: 'var(--green)', log: 'var(--gold)', other: '#C9CCD6'};
+  const all = runs.map(r => ({...r, label: r.run_at.slice(0, 16).replace('T', ' ') + ' UTC', real: true}));
+  if (D.local) all.push({...D.local, label: 'Local test stream, your settings', real: false});
+  if (!all.length) {
+    app.innerHTML = `<div class="card fade"><div class="mono">Live stream</div>
+      <div style="font-size:22px;font-weight:600;margin:8px 0">The first daily window has not run yet</div>
+      <div class="cap" style="margin:0">Each morning the job reads two minutes of Wikimedia's live edit stream, hangs up half-way on purpose and resumes, and records the run here, failures included. Try the connector below meanwhile.</div></div>`;
+    return;
+  }
+  let cur = all.length - 1; const hidden = new Set();
+  const top = document.createElement('div'), lane = document.createElement('div'), legend = document.createElement('div'),
+        cap = document.createElement('div'), picks = document.createElement('div');
+  legend.className = 'row'; legend.style.margin = '10px 0 4px'; cap.className = 'cap'; picks.style.marginTop = '12px';
+  app.append(top, legend, lane, cap, picks);
+  function draw() {
+    const r = all[cur];
+    if (!r.ok) { top.innerHTML = ''; top.appendChild(tiles([{label: 'This run', value: 'failed', fmt: 'raw', sub: (r.error || '').slice(0, 90), tone: 'fail'}]));
+      lane.innerHTML = ''; legend.innerHTML = ''; cap.textContent = r.label; picker(); return; }
+    const rc = r.resume_check, pub = r.published;
+    top.innerHTML = `<div class="mono" style="margin-bottom:8px;color:${r.real ? 'var(--blue)' : 'var(--muted)'}">${esc(r.label)} · ${r.real ? 'live, from stream.wikimedia.org' : 'not live data: the local stand-in, misbehaving as you set it'}</div>`;
+    top.appendChild(tiles([
+      {label: 'Events in the window', value: r.events, fmt: 'int', sub: `${r.events_per_second} a second · ${r.wikis ?? '?'} wikis`, tone: 'info'},
+      {label: 'Landed, each once', value: r.rows_loaded ?? r.rows, fmt: 'int', sub: `${F.int(r.duplicates)} repeats dropped · ${F.int(r.rows_quarantined || 0)} quarantined`, tone: (r.rows_quarantined || 0) ? 'warn' : 'pass'},
+      {label: 'Lag, median', value: r.lag_p50 == null ? 'n/a' : r.lag_p50.toFixed(1) + ' s', fmt: 'raw',
+       sub: r.lag_p50 == null ? 'measured on the live stream only: the test stream has no real clock' : `edit to landed; 95th percentile ${r.lag_p95.toFixed(1)} s`, tone: 'info'},
+      {label: 'Sent again after the hang-up', value: rc ? rc.repeated : 'n/a', fmt: rc ? 'int' : 'raw',
+       sub: rc ? (rc.repeated ? `all dropped; ${F.int(rc.new)} new events after it` : `${F.int(rc.new)} new events after the reconnect, none seen before`)
+         : 'the window ended first', tone: rc ? 'pass' : 'info'},
+      {label: 'Cloud warehouse', value: pub ? pub.rows_after : 'off', fmt: pub ? 'int' : 'raw',
+       sub: pub ? `rows in MotherDuck, +${F.int(pub.rows_new)} this run` : 'no cloud token set, so nothing is published or claimed', tone: pub ? 'pass' : 'info'}]));
+    legend.innerHTML = '';
+    TY.forEach(t => { const tot = (r.timeline || []).reduce((a, row) => a + row[1 + TY.indexOf(t)], 0); if (!tot) return;
+      const b = document.createElement('button'); b.className = 'btn'; b.style.cssText = `padding:5px 12px;font-size:12.5px;opacity:${hidden.has(t) ? .35 : 1}`;
+      b.innerHTML = `<span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${COL[t]};margin-right:6px"></span>${t} · ${F.int(tot)}`;
+      b.onclick = () => { hidden.has(t) ? hidden.delete(t) : hidden.add(t); draw(); }; legend.appendChild(b); });
+    const T = r.timeline || [], W = Math.max(300, app.clientWidth || 800), H = 170, n = Math.max(1, T.length), tick = r.tick || 1;
+    const secs = v => (v * tick).toFixed(tick < 1 ? 1 : 0) + ' s';
+    const bw = (W - 20) / n, mx = Math.max(1, ...T.map(row => TY.reduce((a, t, k) => a + (hidden.has(t) ? 0 : row[1 + k]), 0)));
+    let g = `<svg width="${W}" height="${H + 24}" style="display:block;max-width:100%">`;
+    T.forEach((row, i) => { let y = H; const x = 10 + i * bw;
+      TY.forEach((t, k) => { if (hidden.has(t) || !row[1 + k]) return; const h = (H - 14) * row[1 + k] / mx; y -= h;
+        g += `<rect x="${x}" y="${y}" width="${Math.max(1, bw - 1)}" height="${h}" fill="${COL[t]}"/>`; });
+      g += `<rect class="sec" data-i="${i}" x="${x}" y="0" width="${bw}" height="${H}" fill="transparent"/>`; });
+    if (r.disconnect_second != null) { const x = 10 + r.disconnect_second * bw + bw / 2;
+      g += `<line x1="${x}" x2="${x}" y1="4" y2="${H}" stroke="#050505" stroke-dasharray="4 3"/>
+        <text x="${Math.min(x + 6, W - 150)}" y="14" font-size="11" font-weight="600">hung up on purpose, resumed</text>`; }
+    g += `<line x1="0" x2="${W}" y1="${H}" y2="${H}" stroke="#E6E6E6"/><text x="10" y="${H + 16}" font-size="11" fill="#6B6B6B">0 s</text>
+      <text x="${W - 10}" y="${H + 16}" font-size="11" fill="#6B6B6B" text-anchor="end">${secs(n)}</text></svg>`;
+    lane.innerHTML = g;
+    const base = `${r.label}${r.real ? ' · live from stream.wikimedia.org' : ''}: ${F.int(r.events)} events, ${r.reconnects} reconnect${r.reconnects === 1 ? '' : 's'}`
+      + (Object.keys(r.reconnects_by_cause || {}).length ? ` (${Object.entries(r.reconnects_by_cause).map(([k, v]) => v + '× ' + k).join(', ')})` : '')
+      + (r.drift && r.drift.length ? `; new fields held back: ${r.drift.join(', ')}` : '') + `. Hover a second.`;
+    cap.textContent = base;
+    lane.querySelectorAll('.sec').forEach(e => { e.onmouseenter = () => { const row = T[+e.dataset.i];
+        cap.textContent = `At ${secs(row[0])}: ` + TY.map((t, k) => row[1 + k] ? `${row[1 + k]} ${t}` : '').filter(Boolean).join(', ') + (TY.some((t, k) => row[1 + k]) ? '' : 'nothing landed'); };
+      e.onmouseleave = () => cap.textContent = base; });
+    picker();
+  }
+  function picker() {
+    if (all.length < 2) { picks.innerHTML = ''; return; }
+    const mx = Math.max(1, ...all.map(r => r.events || 0));
+    picks.innerHTML = `<div class="mono">Each run</div><div class="row" style="align-items:flex-end;gap:4px;height:46px;margin-top:6px">` +
+      all.map((r, i) => `<div class="pk" data-i="${i}" title="${esc(r.label)}" style="cursor:pointer;width:14px;border-radius:3px;height:${r.ok ? Math.max(4, 40 * (r.events || 0) / mx) : 40}px;
+        background:${!r.ok ? 'var(--red)' : r.real ? 'var(--blue)' : '#C9CCD6'};outline:${i === cur ? '2px solid #050505' : 'none'};outline-offset:2px"></div>`).join('') + '</div>';
+    picks.querySelectorAll('.pk').forEach(e => e.onclick = () => { cur = +e.dataset.i; draw(); });
+  }
+  draw();
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

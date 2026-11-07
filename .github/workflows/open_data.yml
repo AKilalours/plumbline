@@ -1,6 +1,7 @@
-# Every morning: pull what NYC changed in DOB NOW approved permits since the last cursor, load it under the
-# reviewed contract, and record the run (failed runs too) on the open-data-history branch. Only that branch
-# gets these commits, so main's history and contributors stay the author's own.
+# Every morning: pull what NYC changed in DOB NOW approved permits since the last cursor, then read a two-minute
+# window of Wikimedia's live edit stream; load both under their reviewed contracts, upsert them into the cloud
+# warehouse when a MOTHERDUCK_TOKEN secret exists, and record each run (failed runs too) on the
+# open-data-history branch. Only that branch gets these commits, so main's history stays the author's own.
 name: open data
 on:
   schedule:
@@ -11,6 +12,8 @@ on:
     paths:
       - "src/plumbline/ingest/**"
       - "sources/open_data/**"
+      - "sources/streams/**"
+      - "src/plumbline/products/publish.py"
       - ".github/workflows/open_data.yml"
 permissions:
   contents: write
@@ -22,8 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m pip install -e .
@@ -39,18 +42,35 @@ jobs:
           mkdir -p docs/results/open_data
           cp -r /tmp/hist/state docs/results/open_data/ 2>/dev/null || true
           cp /tmp/hist/runs.jsonl docs/results/open_data/ 2>/dev/null || true
+          mkdir -p docs/results/streams
+          cp /tmp/hist/stream_runs.jsonl docs/results/streams/runs.jsonl 2>/dev/null || true
       - name: Sync from NYC Open Data
+        id: nyc
+        continue-on-error: true
         env:
           SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
+          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
         run: python -m plumbline.ingest.open_data_daily
+      - name: Read a window of Wikimedia's live stream
+        id: stream
+        continue-on-error: true
+        env:
+          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+        run: python -m plumbline.ingest.stream_daily
       - name: Save the cursor and the run history (after a failed run too)
         if: always()
         run: |
           cp -r docs/results/open_data/state /tmp/hist/ 2>/dev/null || true
           cp docs/results/open_data/runs.jsonl /tmp/hist/ 2>/dev/null || true
+          cp docs/results/streams/runs.jsonl /tmp/hist/stream_runs.jsonl 2>/dev/null || true
           cd /tmp/hist
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "open data run $(date -u +%Y-%m-%d)" || exit 0
           git push origin HEAD:refs/heads/open-data-history
+      - name: Fail the job if either source failed (after the history is saved)
+        if: steps.nyc.outcome == 'failure' || steps.stream.outcome == 'failure'
+        run: |
+          echo "nyc: ${{ steps.nyc.outcome }}  stream: ${{ steps.stream.outcome }}"
+          exit 1

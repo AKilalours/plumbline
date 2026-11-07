@@ -40,7 +40,9 @@ from ..privacy import tombstones
 from .erasure import QUARANTINE_ERASE, RequestIndex, contract_erase_sql
 from .contracts import BadValue, SourceContract, email_hash, normalize, phone_hash
 
-SQL_TYPES = {"date": "DATE", "timestamp": "TIMESTAMP", "int": "INTEGER", "float": "DOUBLE", "flag": "BOOLEAN"}
+# BIGINT, not INTEGER: real ids outgrow 32 bits (Wikimedia's change ids passed 3.5 billion). With INTEGER, one
+# such value failed the cast inside the insert and rolled back the whole delivery instead of loading it.
+SQL_TYPES = {"date": "DATE", "timestamp": "TIMESTAMP", "int": "BIGINT", "float": "DOUBLE", "flag": "BOOLEAN"}
 META_COLUMNS = ["_row_hash", "_first_delivery_id", "_first_version", "_first_seen_at", "_first_row_number"]
 _VERSION = re.compile(r"_v(\d+)(?=\.csv$)")
 

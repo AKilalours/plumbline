@@ -23,6 +23,9 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | The work | Where | Evidence |
 | --- | --- | --- |
 | APIs with rate limits, files that arrive late and get corrected, schemas that drift | `ingest/connectors/store_api.py`, `ingest/engine.py` | 63 failures survived at full scale; v2 supersedes v1; renamed columns |
+| A public API nobody here controls, synced every day | `ingest/connectors/socrata.py`, `ingest/open_data_daily.py`, `.github/workflows/open_data.yml` | NYC Open Data, incremental by keyset, privacy filter, drift held back; every daily run (failures too) on the `open-data-history` branch; the first real run's HTTP 400 traced and the mock made to refuse the same query |
+| A streaming source | `ingest/connectors/sse.py`, `ingest/stream_daily.py`, `store/sse_server.py` | Wikimedia's live stream daily: Last-Event-ID resume, a planned hang-up with a repeat count, batches before checkpoints, one copy in the warehouse after a crash; profiling it found ids past 32 bits the loader would have failed on |
+| A cloud warehouse target | `products/publish.py` | transactional upsert into MotherDuck, safe to rerun, checked after every write; tested against a local file; live only once a token is configured |
 | Reruns, backfills and retries that never duplicate | file ledger, row hashes, `delivery_rows` | 100 random faults change nothing; rerun is a no-op |
 | Bad records quarantined, not loaded | `quarantine` with reason codes | `test_bad_rows_go_to_quarantine_with_reasons` |
 | Onboarding by configuration | one YAML per source | `test_new_source_onboards_with_yaml_only` |
@@ -71,5 +74,6 @@ mechanism with owner-set baselines, not a measured saving.
 
 ## Not covered, by choice so far
 
-Snowflake, Spark, Iceberg, Trino and AWS: everything runs on DuckDB on one machine. The design (file
+Snowflake, Spark, Trino, Kafka and AWS: everything runs on DuckDB on one machine (Iceberg is tested against a
+local S3 API, the stream is Server-Sent Events rather than a Kafka consumer, and the cloud target is MotherDuck). The design (file
 ledger, contracts, dbt models) carries over; the claim that it scales to terabytes is not made here.

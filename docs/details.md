@@ -25,15 +25,17 @@ against the answer key, and the tests that hold each one are named.
 | Income estimate | for people the vendor never covered: within one band of the true income 83.6% of the time, against 79.8% for ZIP income alone; the vendor's own band, where it exists, gets 94.9% |
 | Campaign experiment | a holdout test of a reactivation email, checked against the answer key's true effect: inside the attribution-corrected 95% interval in 7 of 8 runs (20,000 to 1,000,000 people); the run that missed is the one whose readout marked itself untrustworthy; from 100,000 people up, an uplift model sends the next email to the 30% it changes most, for 32 to 39 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (at 20,000 it has too little to learn from and does not win) |
 | Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
-| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 44 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
+| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 43 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | AI features, measured | with gpt-4.1-mini, on held-out halves: the agent picks the right tool for 19 of 20 hard messages (keyword rules: 12 of 20); questions in English answered right 14 of 14 with no contact data ever returned; doc answers refuse what the docs do not say 8 of 9 (quoted: 7 of 9). Where it did not win (doc answers tie, contract types one worse) is in [AI, measured](#ai-measured). Code checks every model output before anything runs, and recorded runs replay without a key |
 | Reason codes | every home-buyer score splits exactly into its reasons, checked for all 30,323 test people (largest gap 5e-17); in the top decile the leading reason is ZIP income for 2,574 people and average order value for 333 |
 | Model release gate | on 100,000 people it held all three challengers, including one with the champion's AUC whose probabilities were off by 0.44 on average: an AUC-only gate would have shipped it |
 | Should we buy this data? | each source taken out of the home-buyer model and refit: without property data AUC falls 0.050 (95% -0.071 to -0.026) and the top decile finds 31 fewer buyers; the vendor's inputs change nothing measurable, because its file arrives after the training cutoffs; its homeowner flag is wrong for 5,718 of the 15,824 people it calls owners; it is the only source for 38,778 of 73,912 people. See [Should we buy this data?](#should-we-buy-this-data) |
 | A public source nobody here controls | NYC Open Data (Socrata) through the same connector rules as the store API, plus a privacy filter that drops columns naming a person; onboarding a new dataset (sync, draft a contract, check it, load) is one command, timed. 12 tests, and 5 of 5 deliberate breaks caught. See [A real public source](#a-real-public-source) |
+| A live stream | Wikimedia's public edit stream (about 30 events a second, Server-Sent Events) read for a two-minute window every day: resume by Last-Event-ID after any dropped connection, a planned hang-up mid-window that counts repeats after the reconnect, micro-batches written before their checkpoint so a crash replays and the warehouse keeps one copy, and lag from each edit to it landing. Profiling the real stream found change ids past 3.5 billion, which the loader's 32-bit integer columns would have failed on. 26 tests. See [A live stream](#a-live-stream) |
+| Cloud warehouse | each daily run upserts what it landed into MotherDuck (DuckDB in the cloud, the same SQL): newest version per key, safe to rerun, new columns added first, every key checked after the write, all in one transaction. Tested against a local file; **live only once a MotherDuck token is added**, and the app says "off" until then. See [A cloud warehouse target](#a-cloud-warehouse-target) |
 | Past one machine | fixed cost plus cost per extra person, from same-machine runs: identity gets dearer per person (17.5 to 29.5 s per 100,000), so it grows faster than the data; the warehouse takes 1,826 bytes a person. See [Past one machine](#past-one-machine) |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 364 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 439 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 
 ## See it work
@@ -65,6 +67,9 @@ places, almost no text; every number has its evidence one click away:
 - **Agent**: "Watch it work" replays real agent runs step by step (the skill the router chose, the read-only
   tool or document used, the answer; for a change, the proposal, the asker's refused self-approval and a
   second admin's approval); incidents with their traces; and a chat.
+- **Sources, Live stream**: each day's window of Wikimedia's live stream, second by second by event type, with the
+  planned hang-up and what came after it; and a "try it" that runs the real connector against a local stream
+  that drops the line, repeats events and throttles, as you set it.
 - **Sources, Lineage**: every product traced back through every dbt model, the identity tables and the loader
   to the delivery it came from, with today's row counts and the tests guarding each table.
 - **Activity**: a timeline of what you did in the app.
@@ -680,7 +685,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 
 | | Result |
 | --- | --- |
-| Right section in the top 3 results | 44 of 49 answerable questions |
+| Right section in the top 3 results | 43 of 49 answerable questions |
 | Answered right, with the right source | 19 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
 | Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
 | Routed to the right skill and tool | 32 of 32 |
@@ -933,11 +938,72 @@ rewrites; a failed run is recorded with the API's reason). The cursor and histor
 `open-data-history` branch; the app's Sources, Open data page reads them. The records themselves stay
 with the city.
 
+**Feed health.** `python -m plumbline.ingest.freshness` reads both daily histories and, for each feed, says
+whether its last success is within its promise (26 hours for a daily job), how many runs in a row
+succeeded, and on how many of the last 7 days it had a good run, with the last failure's reason. It exits 1
+when a feed is late, so it can gate anything downstream. The same numbers head the Open data and Live
+stream pages; they are counted from the run lines, never assumed (`tests/test_freshness.py`).
+
 `python -m plumbline.ingest.onboard_source rbx6-tga4 --name dob_now_permits --since 2026-11-01` onboards a
 dataset nobody has described: sync the first delivery, draft its contract (types, privacy, key), check
 the draft with the loader every contract goes through, and load it into a scratch warehouse, timing each
 step (`docs/results/onboarding_time.json`). The draft goes to `sources/drafts/` for a person to read;
 it is never applied on its own.
+
+### A live stream
+
+Files and APIs end; a stream does not. `src/plumbline/ingest/connectors/sse.py` reads Server-Sent Events,
+the protocol behind most public live feeds, and lands them through the same contract loader as everything
+else. The source is Wikimedia's recent-changes stream (`stream.wikimedia.org`): every edit on every
+Wikipedia, Wikidata and Commons, public, no account.
+
+**What the real stream showed** (profiled from a browser on 2026-11-06, 482 events in 15 seconds):
+
+- Four event types carry different fields: `length` and `revision` only on edits and new pages (247 of
+  482), `log_*` only on log events (20), `patrolled` on 181; 4 events had no change id. So the contract
+  (`sources/streams/wikimedia_recentchange.yaml`) requires only the event's id, time, type and wiki.
+- Change ids are past 3.5 billion (3,523,811,080 in the sample). The loader stored a contract `int` as a
+  32-bit INTEGER, so the first such row would have failed its cast inside the insert and rolled back the
+  whole delivery. It is BIGINT now, and a number past even that is quarantined with a reason instead of
+  failing the load (two tests fail on the old type).
+- Resuming with Last-Event-ID picked up at exactly the next event: the 242nd of the sample, after sending
+  the 241st's id. No repeat, no gap, on that try.
+
+**The rules:** the parser follows the HTML standard (data split over lines, comments as heartbeats, CR,
+LF or CRLF, a byte-order mark, the server's `retry:` hint, a half-sent event thrown away when the line
+drops; tested with the bytes cut every 1, 2, 3 and 5 bytes). Reconnects send the last event id back; 429
+and 5xx back off with jitter, any other 4xx stops with the reason. Events land as CSV micro-batches, each
+written atomically before the checkpoint moves to its last event, so a crash replays that batch under the
+same file name rather than losing it, and the event's own id is the contract key. Recent ids are kept with
+the checkpoint so repeats are dropped on arrival. A field that appears later is drift, held back. Who made
+an edit (user names, and IP addresses for logged-out editors) and free-text comments are dropped before
+anything is written.
+
+**Every day, on the record.** The same scheduled job that syncs NYC Open Data runs
+`python -m plumbline.ingest.stream_daily`: two minutes of the live stream, a planned hang-up half-way that
+counts how many events after the reconnect were already seen, load under the contract, and one line of
+history (events a second, rows loaded and quarantined, repeats dropped, reconnects by cause, lag from edit
+to landing at the median and 95th percentile, and the second-by-second timeline the app draws). Each run
+starts at the live edge rather than yesterday's checkpoint: catching up a day of this stream is millions of
+events for a sample job. Resume is exercised inside every run instead, and by the tests
+(`tests/test_stream.py`, `tests/test_stream_daily.py`, against `src/plumbline/store/sse_server.py`, a local
+stream that drops the connection mid-event, repeats events after a reconnect, throttles and sends health-check
+and malformed events).
+
+### A cloud warehouse target
+
+`src/plumbline/products/publish.py` copies what a run landed into a cloud warehouse. The target is
+MotherDuck, DuckDB in the cloud, so the SQL is the same one the local warehouse runs. Each daily run lands
+only what changed, so the cloud copy is built by upsert: the newest version of each key replaces the cloud's
+(delete then insert, in one transaction, so a failure leaves the cloud as it was), a rerun changes nothing, a
+new column is added to the cloud table first, and afterwards every key of the run is checked to be there once
+and current; a mismatch fails the job. A `_publish_log` table in the cloud records each publish. NYC permits
+build up into a full replica this way, one day's changes at a time (tested: after the city corrects seven rows,
+the cloud copy matches the city row for row).
+
+What is and is not claimed: it is tested against a local DuckDB file standing in for MotherDuck (same engine;
+7 tests plus 2 through the daily job). It runs against MotherDuck only once a `MOTHERDUCK_TOKEN` secret is
+added to the repository; until then the job publishes nothing and the app shows the cloud as "off".
 
 Details and the reasons behind each choice are in `src/plumbline/ingest/engine.py`.
 Recovery steps are in [the runbook](runbooks/ingestion.md).

@@ -324,6 +324,7 @@ def test_a_recorded_paraphrase_is_routed_by_the_model_on_the_public_page(world, 
 
 def test_an_incident_runs_end_to_end_on_the_page_and_the_agent_cannot_approve_itself(world, monkeypatch):
     at = _app(world, monkeypatch, "agent_page")
+    at.segmented_control(key="agent_dest").set_value("Incidents").run()     # "Watch it work" opens first
     at.segmented_control(key="inc_pick").set_value("interrupted_sync").run()
     _button(at, lambda l: l == "Inject incident").click().run()
     _button(at, lambda l: l == "Investigate").click().run()
@@ -528,3 +529,25 @@ def test_the_agent_scenes_are_real_runs_and_a_change_needs_a_second_person(world
             assert s["steps"][1]["refused"] and not s["steps"][2]["refused"]      # the asker cannot; a second admin can
             assert s["steps"][2]["who"] != s["steps"][0]["who"]
     assert by
+
+
+def test_the_live_stream_view_runs_the_real_connector_against_a_misbehaving_stream(world, monkeypatch):
+    at = _app(world, monkeypatch, "sources_page")
+    at.segmented_control(key="src_view").set_value("Live stream").run()
+    assert not at.exception, at.exception
+    _button(at, lambda l: l == "Run the connector now").click().run(timeout=120)
+    assert not at.exception, at.exception
+    r = at.session_state.st_last
+    assert r["rows_loaded"] == r["rows"] and r["rows_quarantined"] == 0
+    assert r["duplicates"] == r["resume_check"]["repeated"] == 25 and r["reconnects_by_cause"]["http_429"] == 2
+
+
+def test_feed_health_renders_from_a_run_history_with_a_failure_in_it():
+    st_testing = pytest.importorskip("streamlit.testing.v1")
+    code = ("import streamlit_app\nfrom datetime import datetime, timedelta, timezone\n"
+            "now = datetime.now(timezone.utc)\n"
+            "runs = [{'run_at': (now - timedelta(days=d, hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'), 'ok': d != 2,"
+            " 'error': None if d != 2 else 'StoreAPIError: HTTP 503'} for d in range(6, -1, -1)]\n"
+            "streamlit_app.feed_health(runs)\nstreamlit_app.feed_health([])\n")
+    at = st_testing.AppTest.from_string(code, default_timeout=60).run()
+    assert not at.exception, at.exception

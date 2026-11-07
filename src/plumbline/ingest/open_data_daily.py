@@ -31,7 +31,7 @@ TITLE = "DOB NOW: Build, Approved Permits"
 
 def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, out: Path = OUT,
         contracts: Path = ROOT / "sources" / "open_data", since: str = "2026-11-01", max_pages: int = 60, page_size: int = 1000,
-        client_kw: dict | None = None, now=lambda: datetime.now(timezone.utc)) -> dict:
+        client_kw: dict | None = None, now=lambda: datetime.now(timezone.utc), publish_to: str | None = None) -> dict:
     from .connectors.socrata import DEFAULT_HOST, SocrataClient, sync_dataset
     from .contracts import load_contracts
     from .engine import ingest
@@ -70,6 +70,7 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
                 with duckdb.connect(str(wh), read_only=True) as con:
                     rec["rows_loaded"] = con.execute(f"SELECT count(*) FROM current_{name}").fetchone()[0]
                     rec["rows_quarantined"] = con.execute("SELECT count(*) FROM quarantine WHERE source = ?", [name]).fetchone()[0]
+                rec["published"] = _publish(wh, name, publish_to, rec["run_at"])
             elif not contract.exists():
                 rec["note"] = f"no reviewed contract at sources/open_data/{name}.yaml yet: synced, not loaded"
             shutil.copy(landing / "_sync_state.json", state_dir / "_sync_state.json")
@@ -82,6 +83,17 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
     rec["seconds"] = round(time.perf_counter() - t0, 2)
     _append(out, rec)
     return rec
+
+
+def _publish(warehouse: Path, name: str, target: str | None, run_at: str) -> dict | None:
+    """Upsert this run's rows into the cloud warehouse when a token is configured; otherwise None."""
+    import os
+    from ..products.publish import Table, publish
+    target = target or ("md:plumbline" if os.environ.get("MOTHERDUCK_TOKEN") else None)
+    if not target:
+        return None
+    r = publish(warehouse, [Table(f"current_{name}", "source_row_id", "source_updated_at")], target, run=run_at)
+    return {"target": r["target"], **{k: v for k, v in r["tables"][0].items() if k != "table"}}
 
 
 def _append(out: Path, rec: dict) -> None:

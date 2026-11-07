@@ -87,3 +87,23 @@ def test_the_history_skips_a_broken_line_and_falls_back_when_the_branch_is_unrea
     runs = OD.history(tmp_path, url="http://127.0.0.1:9/none", timeout=0.5)
     assert runs == [{"run_at": "2026-11-07T11:23:00Z", "ok": True, "rows": 5}]
     assert OD.summary(runs)["rows"] == 5 and OD.summary([])["runs"] == 0
+
+
+def test_each_daily_run_upserts_into_the_cloud_copy_so_it_ends_up_a_full_replica(city, tmp_path):
+    import duckdb
+    ds, kw = city
+    cloud = str(tmp_path / "cloud.duckdb")
+    first = OD.run(**kw, publish_to=cloud)
+    assert first["published"]["rows_new"] == 1200 and first["published"]["rows_after"] == 1200
+    ds.correct(sorted(ds.rows)[:7])                  # the city corrects seven rows overnight
+    second = OD.run(**kw, publish_to=cloud)
+    assert second["published"]["rows_replaced"] >= 7 and second["published"]["rows_after"] == 1200
+    with duckdb.connect(cloud, read_only=True) as con:
+        cloud_rows = dict(con.execute("SELECT source_row_id, source_updated_at FROM current_permits").fetchall())
+    assert {k: v.strftime("%Y-%m-%dT%H:%M:%S.000") for k, v in cloud_rows.items()} == {k: r[":updated_at"] for k, r in ds.rows.items()}
+
+
+def test_without_a_cloud_token_nothing_is_published_or_claimed(city, monkeypatch):
+    monkeypatch.delenv("MOTHERDUCK_TOKEN", raising=False)
+    ds, kw = city
+    assert OD.run(**kw)["published"] is None

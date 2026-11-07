@@ -26,14 +26,18 @@ os.environ.setdefault("PLUMBLINE_DUCKDB_MEMORY", "1GB")
 import streamlit as st  # noqa: E402
 
 
-def fresh_code(src: Path = Path(__file__).resolve().parent / "src" / "plumbline") -> bool:
+def fresh_code(src: Path = Path(__file__).resolve().parent / "src" / "plumbline", main: Path = Path(__file__).resolve()) -> bool:
     """Load all of plumbline again, together, when its files changed under a running app.
 
     A push to a hosted app pulls new files into the live process. This script re-runs, but modules it
     imported stay as they were: the new page called O.unused_words, which the old ops module lacked, and
     an earlier half-reload left two NotRecorded classes. Dropping every plumbline module at once (and the
-    caches built from them) means the next import is one consistent version. True when it reloaded."""
-    stamp = max((f.stat().st_mtime_ns for f in src.rglob("*.py")), default=0)
+    caches built from them) means the next import is one consistent version. True when it reloaded.
+
+    The page script itself is watched too. On 2026-11-07 the hosted app served this file's old version next to
+    the new modules after a push (an old button beside a new option list); Streamlit keeps the page script
+    compiled and only drops that copy when its own file watcher fires, so it is dropped here as well."""
+    stamp = max([f.stat().st_mtime_ns for f in src.rglob("*.py")] + [main.stat().st_mtime_ns if main.exists() else 0])
     seen = getattr(sys, "_plumbline_code_stamp", None)
     sys._plumbline_code_stamp = stamp
     if seen is None or seen == stamp:
@@ -42,10 +46,15 @@ def fresh_code(src: Path = Path(__file__).resolve().parent / "src" / "plumbline"
         del sys.modules[name]
     st.cache_resource.clear()
     st.cache_data.clear()
+    try:                                             # Streamlit's compiled copy of this page script (private API)
+        from streamlit.runtime import Runtime
+        Runtime.instance()._script_cache.clear()
+    except Exception:
+        pass
     return True
 
 
-fresh_code()
+fresh_code()          # no st.rerun() here: called before st.navigation, a rerun drops the page the visitor asked for
 
 from plumbline.app import preflight  # noqa: E402  (standard library only)
 
@@ -1646,8 +1655,18 @@ def footer():
     st.markdown(f'<hr style="margin:2.5rem 0 0.8rem;border:none;border-top:1px solid {LINE}">'
                 f'<p class="note" style="text-align:center">Built by <b>{AUTHOR}</b> · '
                 f'<a href="{REPO}" target="_blank">Code on GitHub</a> · real NYC buildings and Census income, '
-                f'invented people, so every number can be checked</p>',
+                f'invented people, so every number can be checked<br><span style="font-size:11px;opacity:.6">'
+                f'code {code_version()}</span></p>',
                 unsafe_allow_html=True)
+
+
+def code_version() -> str:
+    """The fingerprint of the code this app is running (plumbline.app.version); the live check compares it."""
+    try:
+        from plumbline.app.version import fingerprint
+        return fingerprint()
+    except Exception:
+        return "unknown"
 
 
 if __name__ == "__main__":

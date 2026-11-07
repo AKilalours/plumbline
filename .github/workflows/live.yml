@@ -21,11 +21,12 @@ jobs:
           python-version: "3.12"
       - name: Install a browser
         run: python -m pip install playwright && python -m playwright install --with-deps chromium
-      - name: Give Streamlit Cloud time to redeploy
-        if: github.event_name == 'push'
-        run: sleep 300
-      - name: Click through the live app
-        run: python scripts/clickthrough.py https://minerva-plumbline.streamlit.app/~/+/
+      - name: Check the live app runs this commit's code, then click through it
+        # The footer shows a fingerprint of the code the app runs (plumbline.app.version). A deploy that did not
+        # pick up the push used to pass this check on old code; now it waits up to 20 minutes, then fails as stale.
+        run: |
+          EXPECT=$(PYTHONPATH=src python -m plumbline.app.version)
+          python scripts/clickthrough.py https://minerva-plumbline.streamlit.app/~/+/ --expect-version "$EXPECT" --wait-minutes 20
 
   feeds:
     # A job that never runs cannot report that it did not run. This one, on its own schedule, reads the history the

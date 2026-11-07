@@ -163,8 +163,51 @@ def run(url: str, width: int = 1400) -> tuple[list[str], int]:
         return w.problems, w.steps
 
 
+def deployed_version(url: str, expect: str, wait_minutes: float) -> str | None:
+    """Wait until the app at url reports the code fingerprint `expect` in its footer. Returns None when it does,
+    otherwise what it reports: a stale deploy fails the check instead of passing on old code."""
+    import time
+    from playwright.sync_api import sync_playwright
+    seen, deadline = None, time.time() + wait_minutes * 60
+    with sync_playwright() as pw:
+        b = pw.chromium.launch()
+        page = b.new_page(viewport={"width": 1200, "height": 900})
+        while True:
+            try:
+                page.goto(url)
+                wake = page.get_by_role("button", name=re.compile("get this app back up", re.I))
+                try:
+                    wake.click(timeout=10_000)
+                except Exception:
+                    pass
+                page.wait_for_selector("text=Built by", timeout=300_000)
+                m = re.search(r"code ([0-9a-f]{10}|unknown)", page.locator("body").inner_text())
+                seen = m.group(1) if m else "no fingerprint shown"
+            except Exception as e:                          # a redeploying app may not answer for a while
+                seen = f"not reachable ({type(e).__name__})"
+            if seen == expect or time.time() > deadline:
+                break
+            print(f"deployed app runs {seen}, waiting for {expect}", flush=True)
+            time.sleep(60)
+        b.close()
+    return None if seen == expect else seen
+
+
 if __name__ == "__main__":
-    problems, steps = run(sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8501/")
+    import argparse
+    ap = argparse.ArgumentParser(description="Click through every page of the app; optionally check it runs this code first.")
+    ap.add_argument("url", nargs="?", default="http://localhost:8501/")
+    ap.add_argument("--expect-version", help="fail unless the app's footer shows this code fingerprint (plumbline.app.version)")
+    ap.add_argument("--wait-minutes", type=float, default=20, help="how long to wait for a redeploy to show the expected code")
+    a = ap.parse_args()
+    if a.expect_version:
+        stale = deployed_version(a.url, a.expect_version, a.wait_minutes)
+        if stale:
+            print(f"STALE DEPLOY: the app at {a.url} runs code {stale}, not {a.expect_version} (the code just pushed). "
+                  f"Reboot it from share.streamlit.io and check its logs.")
+            sys.exit(2)
+        print(f"deployed app runs code {a.expect_version}")
+    problems, steps = run(a.url)
     print(f"{steps} checks, {len(problems)} problems")
     for p in problems:
         print(" -", p)

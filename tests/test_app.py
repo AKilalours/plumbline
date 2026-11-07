@@ -354,6 +354,8 @@ def test_the_footer_names_the_author_and_links_the_code_but_no_email():
     text = next(m.value for m in at.markdown if "Built by" in m.value)
     assert "Akila Lourdes Miriyala Francis" in text and "github.com/AKilalours/plumbline" in text
     assert "@" not in text
+    from plumbline.app.version import fingerprint
+    assert f"code {fingerprint()}" in text                      # what the live check compares with the pushed code
 
 
 def test_the_activity_log_shows_a_visitor_only_their_own_actions(world, monkeypatch):
@@ -394,6 +396,35 @@ print("same_module", after is before, "has_new", hasattr(after, "unused_words"))
                        env={**os.environ, "PLUMBLINE_DEMO_DIR": str(tmp_path / "demo")})
     out = r.stdout
     assert "unchanged False" in out and "changed True" in out and "same_module False has_new True" in out, r.stderr[-2000:]
+
+
+def test_a_changed_page_script_alone_reloads_and_drops_streamlits_compiled_copy(tmp_path):
+    """Live on 2026-11-07, after a push the hosted app ran the old page script with the new ops module: an old
+    button beside a new option list. A change to the page script must count as changed code, and Streamlit's
+    compiled copy of it must be dropped. Own process, as above."""
+    import os
+    import subprocess
+    pytest.importorskip("streamlit")
+    script = f"""
+import os, sys, pathlib
+sys.path.insert(0, {str(ROOT)!r})
+import streamlit_app
+from streamlit import runtime
+cleared = []
+class Cache:
+    def clear(self): cleared.append(1)
+class R:
+    _script_cache = Cache()
+runtime.Runtime.instance = staticmethod(lambda: R())
+d = pathlib.Path({str(tmp_path)!r}); (d / "x.py").write_text(""); m = d / "page.py"; m.write_text("old")
+streamlit_app.fresh_code(d, m)
+print("unchanged", streamlit_app.fresh_code(d, m))
+os.utime(m, ns=(1, 10**19))                         # the push changed only the page script
+print("changed", streamlit_app.fresh_code(d, m), "cache_cleared", bool(cleared))
+"""
+    r = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120,
+                       env={**os.environ, "PLUMBLINE_DEMO_DIR": str(tmp_path / "demo")})
+    assert "unchanged False" in r.stdout and "changed True cache_cleared True" in r.stdout, r.stderr[-2000:]
 
 
 def test_clicking_the_open_tab_again_keeps_it_open(world, monkeypatch):

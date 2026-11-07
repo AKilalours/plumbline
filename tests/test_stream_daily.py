@@ -39,3 +39,14 @@ def test_a_stream_that_cannot_be_reached_is_recorded_as_a_failed_run(tmp_path):
                client_kw={**FAST, "max_reconnects": 2})
     (r,) = SD.history(tmp_path / "out")
     assert r["ok"] is False and "gave up after 2 reconnects" in r["error"]
+
+
+def test_a_failed_cloud_publish_is_recorded_without_failing_the_window(live, tmp_path, monkeypatch):
+    from plumbline.products import publish as P
+    s, url = live
+
+    def refuse(*a, **k):
+        raise RuntimeError("Your DuckDB version (v2.0.0) is not yet supported by MotherDuck")
+    monkeypatch.setattr(P, "publish", refuse)
+    r = SD.run(url=url, seconds=2, out=tmp_path / "out", client_kw=FAST, publish_to="md:plumbline")
+    assert r["ok"] and r["rows_loaded"] > 0 and r["published"] is None and "not yet supported" in r["publish_error"]

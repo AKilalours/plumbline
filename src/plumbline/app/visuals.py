@@ -886,8 +886,9 @@ R.stream = () => {
       {label: 'Sent again after the hang-up', value: rc ? rc.repeated : 'n/a', fmt: rc ? 'int' : 'raw',
        sub: rc ? (rc.repeated ? `all dropped; ${F.int(rc.new)} new events after it` : `${F.int(rc.new)} new events after the reconnect, none seen before`)
          : 'the window ended first', tone: rc ? 'pass' : 'info'},
-      {label: 'Cloud warehouse', value: pub ? pub.rows_after : 'off', fmt: pub ? 'int' : 'raw',
-       sub: pub ? `rows in MotherDuck, +${F.int(pub.rows_new)} this run` : 'no cloud token set, so nothing is published or claimed', tone: pub ? 'pass' : 'info'}]));
+      {label: 'Cloud warehouse', value: pub ? pub.rows_after : r.publish_error ? 'failed' : 'off', fmt: pub ? 'int' : 'raw',
+       sub: pub ? `rows in MotherDuck, +${F.int(pub.rows_new)} this run` : r.publish_error ? r.publish_error.split('\n')[0].slice(0, 110)
+         : 'no cloud token set, so nothing is published or claimed', tone: pub ? 'pass' : r.publish_error ? 'fail' : 'info'}]));
     legend.innerHTML = '';
     TY.forEach(t => { const tot = (r.timeline || []).reduce((a, row) => a + row[1 + TY.indexOf(t)], 0); if (!tot) return;
       const b = document.createElement('button'); b.className = 'btn'; b.style.cssText = `padding:5px 12px;font-size:12.5px;opacity:${hidden.has(t) ? .35 : 1}`;

@@ -70,7 +70,12 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
                 with duckdb.connect(str(wh), read_only=True) as con:
                     rec["rows_loaded"] = con.execute(f"SELECT count(*) FROM current_{name}").fetchone()[0]
                     rec["rows_quarantined"] = con.execute("SELECT count(*) FROM quarantine WHERE source = ?", [name]).fetchone()[0]
-                rec["published"] = _publish(wh, name, publish_to, rec["run_at"])
+                # A cloud publish that fails must not cost the source its cursor: the sync is recorded as done
+                # and the failure as publish_error, which alerts and turns the job red (main returns 1).
+                try:
+                    rec["published"] = _publish(wh, name, publish_to, rec["run_at"])
+                except Exception as e:
+                    rec["published"], rec["publish_error"] = None, f"{type(e).__name__}: {e}"[:400]
             elif not contract.exists():
                 rec["note"] = f"no reviewed contract at sources/open_data/{name}.yaml yet: synced, not loaded"
             shutil.copy(landing / "_sync_state.json", state_dir / "_sync_state.json")
@@ -149,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         traceback.print_exc()
         return 1
     print(json.dumps(r, indent=1))
-    return 0
+    return 1 if r.get("publish_error") else 0
 
 
 if __name__ == "__main__":

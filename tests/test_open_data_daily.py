@@ -117,3 +117,25 @@ def test_an_unchanged_source_lands_nothing_new_on_the_next_run(city):
     again = OD.run(**kw)
     assert first["rows"] == 1200 and again["rows"] == 0 and again["reread"] > 0
     assert OD.summary(OD.history(kw["out"]))["rows"] == 1200
+
+
+def test_a_failed_cloud_publish_keeps_the_cursor_and_still_turns_the_job_red(city, monkeypatch):
+    """On 2026-11-07 MotherDuck refused DuckDB 2.0 ("not yet supported"); the exception failed the whole run
+    before the cursor was saved, so every following run pulled the same rows again."""
+    from plumbline.products import publish as P
+    ds, kw = city
+
+    def refuse(*a, **k):
+        raise RuntimeError("Your DuckDB version (v2.0.0) is not yet supported by MotherDuck")
+    monkeypatch.setattr(P, "publish", refuse)
+    first = OD.run(**kw, publish_to="md:plumbline")
+    assert first["ok"] and first["rows"] == 1200 and "not yet supported" in first["publish_error"]
+    again = OD.run(**kw, publish_to="md:plumbline")
+    assert again["rows"] == 0                                   # the cursor was saved despite the failed publish
+    monkeypatch.setattr(OD, "run", lambda **k: first)
+    assert OD.main([]) == 1                                     # and the job still shows red
+    from plumbline.ingest.alerts import problems
+    from plumbline.ingest.freshness import Feed
+    from datetime import datetime, timezone
+    p = problems([Feed("NYC Open Data permits", 26, lambda: [first])], datetime.now(timezone.utc))
+    assert any("cloud publish failed" in t for t in p)

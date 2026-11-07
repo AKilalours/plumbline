@@ -42,6 +42,10 @@ def problems(feeds: list[Feed], now: datetime) -> dict[str, str]:
                    "not have run at all. Check the Actions tab."))
         if last and not last.get("ok"):
             out[f"{f.name}: the latest run failed"] = f"Run at {last['run_at']} failed:\n\n`{last.get('error', 'no reason recorded')}`"
+        if last and last.get("publish_error"):
+            out[f"{f.name}: the cloud publish failed"] = (
+                f"Run at {last['run_at']} synced and loaded, but publishing to the cloud warehouse failed (the cursor was "
+                f"saved, so nothing is re-pulled):\n\n`{last['publish_error']}`")
         if last and last.get("ok") and last.get("rows"):
             share = (last.get("rows_quarantined") or 0) / last["rows"]
             if share > QUARANTINE_ALERT:

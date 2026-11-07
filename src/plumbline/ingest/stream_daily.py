@@ -70,7 +70,12 @@ def run(*, url: str | None = None, seconds: float = 120.0, max_events: int = 50_
                     rec["quarantine_reasons"] = dict(con.execute(
                         "SELECT reason, count(*) FROM quarantine WHERE source = ? GROUP BY 1 ORDER BY 2 DESC LIMIT 5", [NAME]).fetchall())
                     rec["wikis"] = con.execute(f"SELECT count(DISTINCT wiki) FROM current_{NAME}").fetchone()[0]
-                rec["published"] = _publish(wh, publish_to, rec["run_at"])
+                # A cloud publish that fails must not cost the source its cursor: the sync is recorded as done
+                # and the failure as publish_error, which alerts and turns the job red (main returns 1).
+                try:
+                    rec["published"] = _publish(wh, publish_to, rec["run_at"])
+                except Exception as e:
+                    rec["published"], rec["publish_error"] = None, f"{type(e).__name__}: {e}"[:400]
             rec["ok"] = True
     except Exception as e:                           # recorded, then re-raised so the job shows red
         rec["error"] = f"{type(e).__name__}: {e}"[:400]
@@ -123,8 +128,8 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         traceback.print_exc()
         return 1
-    print(json.dumps({k: v for k, v in r.items() if k != "dropped_fields"}, indent=1))
-    return 0
+    print(json.dumps({k: v for k, v in r.items() if k not in ("dropped_fields", "timeline")}, indent=1))
+    return 1 if r.get("publish_error") else 0
 
 
 if __name__ == "__main__":

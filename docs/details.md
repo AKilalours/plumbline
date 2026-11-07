@@ -33,7 +33,7 @@ against the answer key, and the tests that hold each one are named.
 | A public source nobody here controls | NYC Open Data (Socrata) through the same connector rules as the store API, plus a privacy filter that drops columns naming a person; onboarding a new dataset (sync, draft a contract, check it, load) is one command, timed. 12 tests, and 5 of 5 deliberate breaks caught. See [A real public source](#a-real-public-source) |
 | Delivery gate | a whole delivery that breaks its source's normal shape (half the rows, a column suddenly empty, a spike of failing rows) is held with the reason, not loaded, until a person releases it; 0 of 276 real deliveries held on the 100,000-person world, and each of three realistic vendor breaks held. See [The delivery gate](#the-delivery-gate) |
 | A live stream | Wikimedia's public edit stream (about 30 events a second, Server-Sent Events) read for a two-minute window every day: resume by Last-Event-ID after any dropped connection, a planned hang-up mid-window that counts repeats after the reconnect, micro-batches written before their checkpoint so a crash replays and the warehouse keeps one copy, and lag from the stream's event time to landing (a median of 0.05 s on the first live run). Profiling the real stream found change ids past 3.5 billion, which the loader's 32-bit integer columns would have failed on. 26 tests. See [A live stream](#a-live-stream) |
-| Cloud warehouse | each daily run upserts what it landed into MotherDuck (DuckDB in the cloud, the same SQL): newest version per key, safe to rerun, new columns added first, every key checked after the write, all in one transaction. Tested against a local file; **live only once a MotherDuck token is added**, and the app says "off" until then. See [A cloud warehouse target](#a-cloud-warehouse-target) |
+| Cloud warehouse | each daily run upserts what it landed into MotherDuck (DuckDB in the cloud, the same SQL): newest version per key, safe to rerun, new columns added first, every key checked after the write, all in one transaction. **Live since 2026-11-07** (first run: 2,565 permits and 3,483 stream events). See [A cloud warehouse target](#a-cloud-warehouse-target) |
 | Past one machine | fixed cost plus cost per extra person, from same-machine runs: identity gets dearer per person (17.5 to 29.5 s per 100,000), so it grows faster than the data; the warehouse takes 1,826 bytes a person. See [Past one machine](#past-one-machine) |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
 | Tests | 468 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
@@ -1066,9 +1066,12 @@ and current; a mismatch fails the job. A `_publish_log` table in the cloud recor
 build up into a full replica this way, one day's changes at a time (tested: after the city corrects seven rows,
 the cloud copy matches the city row for row).
 
-What is and is not claimed: it is tested against a local DuckDB file standing in for MotherDuck (same engine;
-7 tests plus 2 through the daily job). It runs against MotherDuck only once a `MOTHERDUCK_TOKEN` secret is
-added to the repository; until then the job publishes nothing and the app shows the cloud as "off".
+**Live since 2026-11-07.** The first run with the repository's `MOTHERDUCK_TOKEN` secret (07:59 UTC) upserted
+2,565 NYC permits and 3,483 Wikimedia events into the `plumbline` database on MotherDuck, each checked after the
+write. The run before it failed and taught one more thing: MotherDuck refused DuckDB 2.0.0 ("not yet supported;
+the latest supported version is v1.5.6"), which the local file stand-in could not have caught. The daily job now
+installs DuckDB 1.5.6, and a failed publish no longer fails the sync: the source's cursor is saved, the failure
+is recorded as `publish_error`, an alert issue opens and the job still shows red (two tests fail on the old code).
 
 Details and the reasons behind each choice are in `src/plumbline/ingest/engine.py`.
 Recovery steps are in [the runbook](runbooks/ingestion.md).
@@ -1092,12 +1095,15 @@ Recovery steps are in [the runbook](runbooks/ingestion.md).
   100,000-person world; a Kafka consumer lands each batch before committing its offsets and is run against a
   real Apache Kafka broker in CI. Neither runs on a cluster here ([Past one engine](#past-one-engine-spark-and-kafka)).
 - **"Snowflake, Terraform?"** No. The warehouse is DuckDB; the cloud target is MotherDuck (DuckDB in the cloud),
-  built and tested against a local file and live once its token is added. There is no infrastructure here that
+  live since 2026-11-07. There is no infrastructure here that
   Terraform would manage beyond a repository and two hosted services, so none is written.
 - **"What happens at 3 a.m. when a feed breaks?"** An issue opens and GitHub emails the owner (above), and a
   broken vendor file is held by the delivery gate instead of loading. There is no paging rota: one person owns this.
 - **"How long has it been running?"** The daily jobs started on 2026-11-07; the Open data and Live stream
   pages show every run since, failures included, and how many of the last 7 days were good.
+- **"Who uses it?"** Nobody in production: it is a portfolio project. What stands in for users is a public
+  app where every button does real work on the visitor's own copy, a click-through of every button against the
+  deployed app on every push and every day, and two real feeds that run whether anyone is watching or not.
 
 ## Run it
 

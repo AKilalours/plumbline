@@ -65,6 +65,16 @@ def _ts(v: str) -> str:
     return v.rstrip("Z")
 
 
+WINDOW_CAP = 200_000
+
+
+def _minus(ts: str | None, d: timedelta) -> str:
+    """A timestamp in the API's form, d earlier (string comparison then orders like the API does)."""
+    if not ts:
+        return ""
+    return (datetime.fromisoformat(ts) - d).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+
+
 def _literal(v: str) -> str:
     """A full timestamp for a SoQL comparison, in the form the API returns ('2026-10-01T00:00:00.000').
     Accepts a date, a timestamp, or one ending in Z; anything else is refused before a request is made."""
@@ -133,13 +143,19 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
         "dataset": dataset, "watermark": None, "next_sync": 1, "columns": None, "dropped_personal": [], "drift": []}
     stats = SyncStats()
     stats.by_error = {}
+    stats.reread = 0
+    # Rows already landed inside the last overlap window, as "row id|version time". The overlap re-reads the
+    # last few minutes to catch rows written late with an older time; NYC stamps a whole daily batch with one
+    # time, so without this every run re-landed that entire batch and counted it as new.
+    seen = set(state.get("window_ids") or [])
     if state.get("in_progress"):
         run = state["in_progress"]
         stats.resumed = True
     else:
         start = (datetime.fromisoformat(state["watermark"]) - overlap).strftime("%Y-%m-%dT%H:%M:%S") \
             if state["watermark"] else since
-        run = {"sync_id": state["next_sync"], "page": 0, "since": start, "cursor": None, "max_seen": state["watermark"], "stamps": {}}
+        run = {"sync_id": state["next_sync"], "page": 0, "since": start, "cursor": None, "max_seen": state["watermark"], "stamps": {},
+               "recent": []}
     pages = 0
     while True:
         body, _ = client.get(_query(dataset, tuple(run["cursor"]) if run["cursor"] else None, run["since"], page_size), stats)
@@ -156,7 +172,10 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
             for k in new:
                 if k not in state["drift"]:
                     state["drift"].append(k)
-            _atomic_write(landing / f"{name}_s{run['sync_id']:04d}_p{run['page']:05d}.csv", _to_csv(rows, state["columns"]))
+            fresh = [r for r in rows if f"{r['source_row_id']}|{_ts(r['source_updated_at'])}" not in seen]
+            stats.reread += len(rows) - len(fresh)
+            if fresh:
+                _atomic_write(landing / f"{name}_s{run['sync_id']:04d}_p{run['page']:05d}.csv", _to_csv(fresh, state["columns"]))
             last = rows[-1]
             cursor = [_ts(last["source_updated_at"]), last["source_row_id"]]
             if run["cursor"] == cursor:                  # the API sent the same page again: never loop on it
@@ -168,15 +187,27 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
             for r in rows:
                 t = _ts(r["source_updated_at"])
                 stamps[t] = stamps.get(t, 0) + 1
+            edge = _minus(run["max_seen"], overlap)
+            run["recent"] = [x for x in run.get("recent", []) if x[0] >= edge] + \
+                [[_ts(r["source_updated_at"]), r["source_row_id"]] for r in rows if _ts(r["source_updated_at"]) >= edge]
+            if len(run["recent"]) > WINDOW_CAP:          # a table reloaded under one time: too many to remember
+                run["recent"], run["window_too_big"] = [], True
             if len(stamps) > 50:                       # keep the state small: only the largest groups matter
                 run["stamps"] = dict(sorted(stamps.items(), key=lambda kv: -kv[1])[:50])
         stats.pages += 1
-        stats.orders += len(rows)                 # rows, in the store's counter
+        stats.orders += len(fresh) if rows else 0  # rows landed this run, in the store's counter
         done = len(rows) < page_size or (max_pages is not None and pages >= max_pages)
         state["in_progress"] = None if done else run
         if done:
             state["bulk_rewrite"] = bulk_rewrite(run.get("stamps", {}), page_size)
             state["watermark"] = run["max_seen"]
+            edge = _minus(run["max_seen"], overlap) if run["max_seen"] else None
+            if run.get("window_too_big"):
+                state["window_ids"] = None
+            else:                                       # what this run saw in the new window, plus what it skipped there
+                keep = {f"{i}|{t}" for t, i in run.get("recent", []) if edge and t >= edge}
+                keep |= {k for k in seen if edge and k.rsplit("|", 1)[1] >= edge}
+                state["window_ids"] = sorted(keep)
             state["next_sync"] = run["sync_id"] + 1
             state["last_sync_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         _atomic_write(state_path, json.dumps(state, indent=2))

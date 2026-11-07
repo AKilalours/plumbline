@@ -26,6 +26,7 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | A public API nobody here controls, synced every day | `ingest/connectors/socrata.py`, `ingest/open_data_daily.py`, `.github/workflows/open_data.yml` | NYC Open Data, incremental by keyset, privacy filter, drift held back; every daily run (failures too) on the `open-data-history` branch; the first real run's HTTP 400 traced and the mock made to refuse the same query |
 | A streaming source | `ingest/connectors/sse.py`, `ingest/stream_daily.py`, `store/sse_server.py` | Wikimedia's live stream daily: Last-Event-ID resume, a planned hang-up with a repeat count, batches before checkpoints, one copy in the warehouse after a crash; profiling it found ids past 32 bits the loader would have failed on |
 | Someone is told when a feed breaks | `ingest/freshness.py`, `ingest/alerts.py` | late, failed or quarantine-heavy feeds open one GitHub issue each (emailed to the owner), followed up rather than repeated, closed on recovery; checked from a second scheduled job so a job that stopped is caught too |
+| The design moves to other engines | `ingest/spark_current.py`, `ingest/connectors/kafka_source.py` | the current-version rule on Spark gives the same 282,784 rows as DuckDB; a Kafka consumer commits offsets only after landing, tested against a real broker in CI |
 | A cloud warehouse target | `products/publish.py` | transactional upsert into MotherDuck, safe to rerun, checked after every write; tested against a local file; live only once a token is configured |
 | Reruns, backfills and retries that never duplicate | file ledger, row hashes, `delivery_rows` | 100 random faults change nothing; rerun is a no-op |
 | Bad deliveries held, not loaded | `ingest/gate.py`, `gate:` in each file contract | each delivery profiled against its source's last five of the same kind; truncated files, emptied columns and failing-row spikes held with the reason, released only by a named person; 0 of 276 normal deliveries held |
@@ -76,6 +77,8 @@ mechanism with owner-set baselines, not a measured saving.
 
 ## Not covered, by choice so far
 
-Snowflake, Spark, Trino, Kafka and AWS: everything runs on DuckDB on one machine (Iceberg is tested against a
-local S3 API, the stream is Server-Sent Events rather than a Kafka consumer, and the cloud target is MotherDuck). The design (file
+Snowflake, Trino, Terraform and AWS: everything runs on DuckDB on one machine (Iceberg is tested against a
+local S3 API, and the cloud target is MotherDuck). Spark and Kafka are shown only for the hard parts: the
+loader's current rule on Spark matching DuckDB row for row, and a Kafka consumer run against a real broker in CI;
+neither runs on a cluster here. The design (file
 ledger, contracts, dbt models) carries over; the claim that it scales to terabytes is not made here.

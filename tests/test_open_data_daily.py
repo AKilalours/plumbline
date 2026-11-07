@@ -48,9 +48,9 @@ def test_the_cursor_is_kept_between_runs_so_the_next_run_pulls_only_what_changed
     first = OD.run(**kw)
     ds.correct(sorted(ds.rows)[:7])
     r = OD.run(**kw)
-    edge = datetime.fromisoformat(first["watermark"]) - timedelta(minutes=5)     # the overlap re-reads 5 minutes
-    expected = sum(datetime.fromisoformat(x[":updated_at"]) >= edge for x in ds.rows.values())
-    assert r["ok"] and r["rows"] == expected and 7 <= expected < 20
+    edge = datetime.fromisoformat(first["watermark"]) - timedelta(minutes=5)     # the overlap re-reads 5 minutes...
+    in_window = sum(datetime.fromisoformat(x[":updated_at"]) >= edge for x in ds.rows.values()) - 7
+    assert r["ok"] and r["rows"] == 7 and r["reread"] == in_window              # ...but only the 7 corrections are new
     assert len(OD.history(kw["out"])) == 2
 
 
@@ -107,3 +107,13 @@ def test_without_a_cloud_token_nothing_is_published_or_claimed(city, monkeypatch
     monkeypatch.delenv("MOTHERDUCK_TOKEN", raising=False)
     ds, kw = city
     assert OD.run(**kw)["published"] is None
+
+
+def test_an_unchanged_source_lands_nothing_new_on_the_next_run(city):
+    """NYC stamps a whole daily batch with one time. The 5-minute overlap re-read that whole batch on every run
+    and the history counted it as new rows: 2,565 "new" rows at 05:21, 06:03 and 07:02 on 2026-11-07."""
+    ds, kw = city
+    first = OD.run(**kw)
+    again = OD.run(**kw)
+    assert first["rows"] == 1200 and again["rows"] == 0 and again["reread"] > 0
+    assert OD.summary(OD.history(kw["out"]))["rows"] == 1200

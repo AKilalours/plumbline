@@ -193,3 +193,16 @@ def test_a_since_that_is_not_a_date_is_refused_before_any_request(api, tmp_path)
     _, url = api(rows=10)
     with pytest.raises(SocrataError, match="not a date"):
         sync_dataset(_client(url), "x", tmp_path / "l", name="x", since="last tuesday")
+
+
+def test_a_row_written_late_inside_the_overlap_still_lands_but_rows_already_landed_there_do_not(api, tmp_path):
+    from datetime import datetime, timedelta
+    ds, url = api(400)
+    sync_dataset(_client(url), "abcd-1234", tmp_path, name="permits", since="2026-09-01", page_size=100)
+    wm = json.loads((tmp_path / "_sync_state.json").read_text())["watermark"]
+    late = (datetime.fromisoformat(wm) - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%S.000")
+    ds.rows["row-late01"] = {":id": "row-late01", ":updated_at": late, "job__": "1", "street_name": "KENT AVENUE"}
+    before = set(tmp_path.glob("*.csv"))
+    st = sync_dataset(_client(url), "abcd-1234", tmp_path, name="permits", page_size=100)
+    landed = [r["source_row_id"] for p in set(tmp_path.glob("*.csv")) - before for r in csv.DictReader(open(p))]
+    assert landed == ["row-late01"] and st.orders == 1 and st.reread >= 1

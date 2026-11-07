@@ -141,3 +141,15 @@ def test_a_contract_with_impossible_gate_settings_is_refused(tmp_path, bad):
     (tmp_path / "v.yaml").write_text(text)
     with pytest.raises(ContractError, match="gate|unknown gate"):
         load_contract(tmp_path / "v.yaml")
+
+
+def test_a_corrected_old_file_without_a_later_optional_column_is_not_held_for_it(run, tmp_path):
+    """Week 4 predates the vendor's optional source_confidence column. Its correction (_v2), arriving after
+    week 8, was held as "source_confidence empty in 100% of rows": a missing column counted as an empty one."""
+    week4 = run / "sources/vendor/vendor_week_04_2025-12-03.csv"
+    assert "source_confidence" not in week4.read_text().splitlines()[0]
+    lines = week4.read_text().splitlines()
+    (week4.parent / "vendor_week_04_2025-12-03_v2.csv").write_text("\n".join(lines[:1] + lines[11:]) + "\n")
+    wh = tmp_path / "w.duckdb"
+    ingest(run, wh, CONTRACTS)
+    assert _status(wh, "sources/vendor/vendor_week_04_2025-12-03_v2.csv")[0] == "loaded"

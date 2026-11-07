@@ -53,7 +53,7 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
             client = SocrataClient(host or DEFAULT_HOST, os.environ.get("SOCRATA_APP_TOKEN"), **(client_kw or {}))
             st = sync_dataset(client, dataset, landing, name=name, since=since, max_pages=max_pages, page_size=page_size)
             state = json.loads((landing / "_sync_state.json").read_text())
-            rec.update(rows=st.orders, pages=st.pages, requests=st.requests, retries=st.retries,
+            rec.update(rows=st.orders, reread=getattr(st, "reread", 0), pages=st.pages, requests=st.requests, retries=st.retries,
                        retries_by_cause=dict(st.by_error), resumed=st.resumed, watermark=state["watermark"],
                        complete=state.get("in_progress") is None, dropped_personal=state["dropped_personal"],
                        drift=state["drift"], bulk_rewrite=state.get("bulk_rewrite"))

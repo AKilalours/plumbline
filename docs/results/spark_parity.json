@@ -1,0 +1,35 @@
+{
+ "warehouse_rows": {
+  "crm": 35814,
+  "email": 126332,
+  "store": 61036,
+  "vendor": 59602
+ },
+ "spark_rows": {
+  "crm": 35814,
+  "email": 126332,
+  "store": 61036,
+  "vendor": 59602
+ },
+ "only_in_duckdb": {
+  "crm": 0,
+  "email": 0,
+  "store": 0,
+  "vendor": 0
+ },
+ "only_in_spark": {
+  "crm": 0,
+  "email": 0,
+  "store": 0,
+  "vendor": 0
+ },
+ "seconds": {
+  "crm": 8.8,
+  "email": 4.1,
+  "store": 2.3,
+  "vendor": 2.6
+ },
+ "export_seconds": 0.6,
+ "spark_version": "4.0.1",
+ "identical": true
+}

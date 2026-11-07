@@ -232,7 +232,9 @@ def load_delivery(con, c: SourceContract, run_dir: Path, d: Delivery,
     seen: dict[tuple, str] = {}
     out_rows: list[dict] = []
     blocked: list[dict] = []
-    empties = dict.fromkeys(c.columns, 0) if c.gate else None
+    # Only columns this file has: an optional column it leaves out entirely is a shape the contract allows (a
+    # corrected file in an older format), not a column that arrived empty.
+    empties = {n: 0 for n in c.columns if n in mapped} if c.gate else None
     for i, row in enumerate(reader, start=1):
         if not row:
             continue

@@ -63,3 +63,59 @@ jobs:
           docker run --rm --entrypoint sh plumbline:ci -c 'pip install --user --quiet pytest "moto[server]" boto3 fastavro && python -m pytest -q -p no:cacheprovider tests/test_synth.py tests/test_ingest.py tests/test_access.py tests/test_lake.py'
       - name: Compose file is valid
         run: docker compose config -q && docker compose --profile lake config -q
+
+  spark:
+    # The loader's "current" rule written again in Spark, compared row for row with DuckDB (tests/test_spark.py).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev,spark]"
+      - name: Spark agrees with DuckDB, and the comparison catches a broken rule
+        run: |
+          java -version
+          python -m pytest -q -p no:cacheprovider -rs tests/test_spark.py | tee spark.out
+          grep -q "3 passed" spark.out
+
+  kafka:
+    # The Kafka consumer against a real Apache Kafka broker: crash between landing and committing, then restart.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      kafka:
+        image: apache/kafka:3.8.0
+        ports:
+          - 9092:9092
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev,kafka]"
+      - name: Wait for the broker
+        run: |
+          python - <<'PY'
+          import time
+          from confluent_kafka.admin import AdminClient
+          a = AdminClient({"bootstrap.servers": "localhost:9092"})
+          for _ in range(60):
+              try:
+                  a.list_topics(timeout=2); print("broker up"); break
+              except Exception as e:
+                  time.sleep(2)
+          else:
+              raise SystemExit("no Kafka broker on localhost:9092")
+          PY
+      - name: Consume from real Kafka, crash, restart, reconcile (the real-broker test must run, not skip)
+        env:
+          KAFKA_BOOTSTRAP: localhost:9092
+        run: |
+          python -m pytest -q -p no:cacheprovider -rs tests/test_kafka.py | tee kafka.out
+          grep -q "5 passed" kafka.out

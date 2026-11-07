@@ -36,7 +36,7 @@ against the answer key, and the tests that hold each one are named.
 | Cloud warehouse | each daily run upserts what it landed into MotherDuck (DuckDB in the cloud, the same SQL): newest version per key, safe to rerun, new columns added first, every key checked after the write, all in one transaction. Tested against a local file; **live only once a MotherDuck token is added**, and the app says "off" until then. See [A cloud warehouse target](#a-cloud-warehouse-target) |
 | Past one machine | fixed cost plus cost per extra person, from same-machine runs: identity gets dearer per person (17.5 to 29.5 s per 100,000), so it grows faster than the data; the warehouse takes 1,826 bytes a person. See [Past one machine](#past-one-machine) |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 457 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 468 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 
 ## See it work
@@ -949,6 +949,13 @@ addresses stay.
   tie-break exists for. It is the dataset the daily job syncs; its contract
   (`sources/open_data/dob_now_permits.yaml`) was written from the published columns and loads real rows
   with nothing quarantined.
+- The daily job's own history showed the next lesson: runs at 05:21, 06:03 and 07:02 on 2026-11-07 each
+  reported the same 2,565 "new" rows. The 5-minute overlap (there to catch rows written late with an older
+  time) re-read the whole day's batch every run, because the city stamps it with one time. Nothing was stored
+  twice (the loader keeps a row once), but the history overstated what changed. The cursor now remembers which
+  rows it already landed inside the overlap window; those are counted as `reread` and not landed again, while a
+  genuinely late row still lands (three tests fail on the old connector). The three runs' lines are kept as
+  recorded.
 
 **Every day, on the record.** `.github/workflows/open_data.yml` runs
 `python -m plumbline.ingest.open_data_daily` each morning: read the cursor, pull what changed, load it
@@ -1025,6 +1032,29 @@ and malformed events).
 second; after the planned hang-up, the first 200 events were all new (0 repeats); 3,893 rows loaded, 0
 quarantined, 0 duplicates; lag 0.05 s at the median and 0.09 s at the 95th percentile.
 
+### Past one engine: Spark and Kafka
+
+Everything else runs on DuckDB. Two pieces show the hard parts move:
+
+**Spark.** `src/plumbline/ingest/spark_current.py` writes the loader's "current" rule again with Spark's
+DataFrame operations (only the newest version of each delivered file counts; a row is live if that file
+contains it; the same email-and-phone deletion rule as an anti-join; the newest version of each key by a
+window), reads the warehouse's tables as Parquet, and compares with DuckDB's views. On the 100,000-person world
+(Spark 4.0.1, local mode): **282,784 current rows on both, 0 differing** in either direction, every key holding
+the same row version (`docs/results/spark_parity.json`). The comparison is shown to bite: a Spark version that
+forgets the deletion rule, or lets a corrected file's dropped rows back, is caught (`tests/test_spark.py`, run
+in its own CI job). Writing it found a false alarm in the delivery gate: a corrected copy of an old vendor file,
+sent in the format from before the vendor added an optional column, was held as "that column empty in 100% of
+rows". A column the file does not have is now the contract's business, not the gate's.
+
+**Kafka.** `src/plumbline/ingest/connectors/kafka_source.py` consumes a topic in batches with auto-commit off:
+write the batch, then commit its offsets. A crash between the two makes Kafka redeliver the batch, which lands
+again and is kept once by the event id; a message that is not JSON goes to a dead-letter file with its partition
+and offset instead of stopping the topic. Unit tests use a stand-in broker with Kafka's committed-offset
+behaviour; the `kafka` CI job starts a real Apache Kafka 3.8 broker, produces 2,000 events over 3 partitions,
+kills the consumer after it lands a batch but before it commits, restarts it in the same group, and checks every
+offset is committed and the warehouse holds 1,999 events once each (one was the deliberate bad message).
+
 ### A cloud warehouse target
 
 `src/plumbline/products/publish.py` copies what a run landed into a cloud warehouse. The target is
@@ -1057,10 +1087,13 @@ Recovery steps are in [the runbook](runbooks/ingestion.md).
   stage is a projection from same-machine runs, labelled as one ([Past one machine](#past-one-machine)). The
   design moves (file ledger, contracts, keyset cursors, dbt SQL) carry to Spark or a cloud warehouse; that move
   is not shown here.
-- **"Snowflake, Spark, Kafka, Terraform?"** None of them. Everything runs on DuckDB. The cloud target is
-  MotherDuck (DuckDB in the cloud), built and tested against a local file and live once its token is added.
-  The stream is Server-Sent Events, not a Kafka consumer: the resume, dedupe and batch-before-checkpoint logic
-  is the same idea as consumer offsets, but no Kafka broker was run here, so no Kafka claim is made.
+- **"Spark? Kafka?"** Both, for the parts that matter to ingestion, and no further. The loader's rule for which
+  version of each record is live is written again in Spark and gives the same 282,784 rows as DuckDB on the
+  100,000-person world; a Kafka consumer lands each batch before committing its offsets and is run against a
+  real Apache Kafka broker in CI. Neither runs on a cluster here ([Past one engine](#past-one-engine-spark-and-kafka)).
+- **"Snowflake, Terraform?"** No. The warehouse is DuckDB; the cloud target is MotherDuck (DuckDB in the cloud),
+  built and tested against a local file and live once its token is added. There is no infrastructure here that
+  Terraform would manage beyond a repository and two hosted services, so none is written.
 - **"What happens at 3 a.m. when a feed breaks?"** An issue opens and GitHub emails the owner (above), and a
   broken vendor file is held by the delivery gate instead of loading. There is no paging rota: one person owns this.
 - **"How long has it been running?"** The daily jobs started on 2026-11-07; the Open data and Live stream

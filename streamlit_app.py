@@ -1045,7 +1045,7 @@ def release_page():
 from plumbline.app import scenarios as SC  # noqa: E402
 
 RUNS = ROOT.parent / f"{ROOT.name}-runs"
-SHORT = {"clean": "Clean", "stale": "Current", "conflicts": "Conflicts", "identity": "Identity",
+SHORT = {"clean": "Held back", "stale": "Stale", "conflicts": "Conflicts", "identity": "Identity",
          "consent": "Consent", "deletion": "Deletion"}
 INCIDENTS = {"false_merge": ("Identity", "False merge"), "interrupted_sync": ("Sources", "Interrupted sync"),
              "stale_restore": ("Privacy", "Stale backup restore"), "future_feature": ("Models", "Future-dated feature")}
@@ -1118,6 +1118,12 @@ def game_pairs(_d, key):
         return VD.game(con, _d.run)
 
 
+# What the number on each overview card counts, in a few words, so "7 / 12,439" cannot be read as "7 rows are clean".
+CARD_UNIT = {"clean": "rows held back by a contract, of {of}", "stale": "people with a stale address, of {of}",
+             "conflicts": "people whose sources disagree, of {of}", "identity": "pairwise precision vs the answer key",
+             "consent": "unsubscribed people still emailable, of {of}", "deletion": "deleted people with data left"}
+
+
 def overview():
     d = demo()
     header("Overview")
@@ -1129,8 +1135,8 @@ def overview():
     for col, c in zip(cols, rows):
         with col.container(key=f"card_{c['id']}"):
             value = num(c["value"]) if isinstance(c["value"], float) else f"{c['value']:,}"
-            stat(SHORT[c["id"]], value, f"/ {c['of']:,}" if c["of"] else "", c["status"])
-            with st.popover("Rows", width="stretch"):
+            stat(SHORT[c["id"]], value, CARD_UNIT[c["id"]].format(of=f"{c['of']:,}" if c["of"] else ""), c["status"])
+            with st.popover("Evidence", width="stretch"):
                 st.markdown(f"**{c['title']}**  \n{c['unit']}. {c['note']}.")
                 ev = c["evidence"].head(500)      # mixed-type columns (a number here, a JSON object there) shown as text
                 st.dataframe(ev.astype({k: str for k in ev.columns[ev.dtypes == object]}), hide_index=True, width="stretch")

@@ -36,7 +36,7 @@ against the answer key, and the tests that hold each one are named.
 | Cloud warehouse | each daily run upserts what it landed into MotherDuck (DuckDB in the cloud, the same SQL): newest version per key, safe to rerun, new columns added first, every key checked after the write, all in one transaction. Tested against a local file; **live only once a MotherDuck token is added**, and the app says "off" until then. See [A cloud warehouse target](#a-cloud-warehouse-target) |
 | Past one machine | fixed cost plus cost per extra person, from same-machine runs: identity gets dearer per person (17.5 to 29.5 s per 100,000), so it grows faster than the data; the warehouse takes 1,826 bytes a person. See [Past one machine](#past-one-machine) |
 | Access and questionnaires | roles granted, removed and offboarded only by an admin who neither asked nor is the person; every change recorded with who approved it and through which request; security questionnaires drafted from the controls page with a source per answer, and controls we do not have left for a person |
-| Tests | 451 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
+| Tests | 457 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 
 ## See it work
@@ -964,6 +964,15 @@ succeeded, and on how many of the last 7 days it had a good run, with the last f
 when a feed is late, so it can gate anything downstream. The same numbers head the Open data and Live
 stream pages; they are counted from the run lines, never assumed (`tests/test_freshness.py`).
 
+**Alerts reach a person.** `python -m plumbline.ingest.alerts` turns each problem (a failed run, a feed past
+its promise, more than 5% of a real feed's rows quarantined) into one GitHub issue labelled `feed-alert`, opened
+with the Actions token the workflow already has; GitHub emails the repository owner, so no extra account is
+needed. The same problem the next day adds a comment instead of a second issue; when it clears, the issue is
+closed with the time it recovered. A `SLACK_WEBHOOK_URL` secret, if set, gets new and resolved alerts too. A job
+that never runs cannot report that it did not run, so the check runs twice: inside the daily data job, and in the
+separate daily app job (`--remote`, reading the published history), which catches a data job that silently
+stopped (`tests/test_alerts.py`, against a local stand-in for GitHub's issues API).
+
 `python -m plumbline.ingest.onboard_source rbx6-tga4 --name dob_now_permits --since 2026-11-01` onboards a
 dataset nobody has described: sync the first delivery, draft its contract (types, privacy, key), check
 the draft with the loader every contract goes through, and load it into a scratch warehouse, timing each
@@ -1034,6 +1043,28 @@ added to the repository; until then the job publishes nothing and the app shows 
 Details and the reasons behind each choice are in `src/plumbline/ingest/engine.py`.
 Recovery steps are in [the runbook](runbooks/ingestion.md).
 
+
+## Honest limits, and the questions they raise
+
+*What this project does not show, said before an interviewer has to ask*
+
+- **"Your people are invented. Why should I trust the numbers?"** Because they are invented, every number
+  can be checked: each person has a hidden answer key (who they really are, where they really live, whether
+  they really bought), so identity F1, deletion leaks and model lift are measured against the truth, which no
+  real customer file has. The places are real (25,000 NYC tax lots, Census ZIP incomes), and two feeds are
+  fully real: NYC Open Data permits and Wikimedia's live stream, synced daily with every run on the record.
+- **"Have you run this at scale?"** Measured up to 1,000,000 people on one machine; past that, the cost per
+  stage is a projection from same-machine runs, labelled as one ([Past one machine](#past-one-machine)). The
+  design moves (file ledger, contracts, keyset cursors, dbt SQL) carry to Spark or a cloud warehouse; that move
+  is not shown here.
+- **"Snowflake, Spark, Kafka, Terraform?"** None of them. Everything runs on DuckDB. The cloud target is
+  MotherDuck (DuckDB in the cloud), built and tested against a local file and live once its token is added.
+  The stream is Server-Sent Events, not a Kafka consumer: the resume, dedupe and batch-before-checkpoint logic
+  is the same idea as consumer offsets, but no Kafka broker was run here, so no Kafka claim is made.
+- **"What happens at 3 a.m. when a feed breaks?"** An issue opens and GitHub emails the owner (above), and a
+  broken vendor file is held by the delivery gate instead of loading. There is no paging rota: one person owns this.
+- **"How long has it been running?"** The daily jobs started on 2026-11-07; the Open data and Live stream
+  pages show every run since, failures included, and how many of the last 7 days were good.
 
 ## Run it
 

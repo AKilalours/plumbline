@@ -573,3 +573,14 @@ def test_the_gate_lab_control_file_loads_without_a_hold(world):
     assert r["status"] == "loaded" and r["held_total"] == 0
     for fault in ("blank_email", "zip_format"):
         assert O.gate_lab(world[0], fault)["status"] == "held", fault
+
+
+def test_every_overview_card_says_what_its_number_counts(world, monkeypatch):
+    """A card read "CLEAN 7 / 12,439": 7 rows held back, which a reader took as 7 clean rows."""
+    import streamlit_app as A
+    at = _app(world, monkeypatch, "overview")
+    assert not at.exception, at.exception
+    html = " ".join(m.value for m in at.markdown)
+    for unit in A.CARD_UNIT.values():
+        assert unit.split(",")[0] in html, unit
+    assert "Clean</" not in html and ">Current<" not in html

@@ -26,3 +26,23 @@ jobs:
         run: sleep 300
       - name: Click through the live app
         run: python scripts/clickthrough.py https://minerva-plumbline.streamlit.app/~/+/
+
+  feeds:
+    # A job that never runs cannot report that it did not run. This one, on its own schedule, reads the history the
+    # daily data job publishes and opens an issue if a feed has gone quiet past its promise.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Are the real feeds on time?
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PYTHONPATH: src
+        run: python -m plumbline.ingest.alerts --remote

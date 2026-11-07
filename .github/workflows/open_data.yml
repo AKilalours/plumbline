@@ -17,6 +17,7 @@ on:
       - ".github/workflows/open_data.yml"
 permissions:
   contents: write
+  issues: write                  # to open an issue when a feed needs a person (ingest/alerts.py)
 concurrency:
   group: open-data
   cancel-in-progress: false
@@ -69,6 +70,12 @@ jobs:
           git add -A
           git commit -m "open data run $(date -u +%Y-%m-%d)" || exit 0
           git push origin HEAD:refs/heads/open-data-history
+      - name: Tell a person if a feed needs one (opens, follows up on or closes a feed-alert issue)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python -m plumbline.ingest.alerts
       - name: Fail the job if either source failed (after the history is saved)
         if: steps.nyc.outcome == 'failure' || steps.stream.outcome == 'failure'
         run: |

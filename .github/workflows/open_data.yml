@@ -1,11 +1,11 @@
-# Every morning: pull what NYC changed in DOB NOW approved permits since the last cursor, then read a two-minute
+# Every 3 hours: pull what NYC changed in DOB NOW approved permits since the last cursor, then read a two-minute
 # window of Wikimedia's live edit stream; load both under their reviewed contracts, upsert them into the cloud
 # warehouse when a MOTHERDUCK_TOKEN secret exists, and record each run (failed runs too) on the
 # open-data-history branch. Only that branch gets these commits, so main's history stays the author's own.
 name: open data
 on:
   schedule:
-    - cron: "23 11 * * *"        # 06:23 New York time in winter
+    - cron: "23 */3 * * *"       # every 3 hours: eight real runs a day, so a streak of green runs builds in days, not weeks
   workflow_dispatch:
   push:                          # and when the connector, the job or the contract changes
     branches: [main]

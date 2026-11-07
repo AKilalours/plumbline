@@ -471,48 +471,86 @@ def failure_lab_page():
 
 
 def gate_lab():
-    """Break a vendor file the way vendor files really break; the real loader decides whether it loads."""
+    """Send a vendor file, broken the way vendor files really break or edited by you; the real loader decides."""
     d = demo()
-    st.markdown('<div class="mono" style="margin-top:2rem">Break a vendor file: does the delivery gate hold it?</div>', unsafe_allow_html=True)
+    st.markdown('<div class="mono" style="margin-top:2rem">Send a vendor file: does the delivery gate let it in?</div>',
+                unsafe_allow_html=True)
     fault = choose("Fault", list(O.GATE_FAULTS), default="truncated", key="gate_fault", format_func=O.GATE_FAULTS.get,
                    label_visibility="collapsed")
-    c = st.columns([1, 1, 2])
-    go = c[0].button("Send the file", type="primary", key="gate_go")
-    rel = c[1].button("Release it as data ops", key="gate_rel", disabled=not (st.session_state.get("gate_last") or {}).get("status") == "held")
+    upload = None
+    if fault == "upload":
+        name, data = O.gate_lab_file(d)
+        a, b = st.columns([1, 2], vertical_alignment="center")
+        a.download_button(f"Download this week's file ({name})", data, file_name=name, mime="text/csv", key="gate_dl")
+        b.caption("Open it in Excel or a text editor, break it the way a vendor would (delete rows, blank a column, change a "
+                  "date format, drop a column), save as CSV and send it back. It is loaded as this week's delivery.")
+        f = st.file_uploader("Your edited vendor file (CSV, up to 5 MB)", type=["csv"], key="gate_up")
+        upload = f.getvalue() if f else None
+    last = st.session_state.get("gate_last") or {}
+    c = st.columns([1, 2, 1], vertical_alignment="bottom")
+    go = c[0].button("Send the file", type="primary", key="gate_go", disabled=fault == "upload" and not upload)
+    reason = c[1].text_input("Why is it safe to load anyway?", key="gate_reason", disabled=last.get("status") != "held",
+                             placeholder="e.g. vendor confirmed a smaller file this week")
+    rel = c[2].button("Release it", key="gate_rel", disabled=last.get("status") != "held" or not reason.strip())
     if go or rel:
+        sent = upload if go else st.session_state.get("gate_sent")
         with st.spinner("Loading every delivery of the city with the real loader"):
-            st.session_state.gate_last = O.gate_lab(d, fault, release_by="data ops (you)" if rel else None)
+            try:
+                st.session_state.gate_last = O.gate_lab(d, fault if go else last["fault"], upload=sent,
+                                                        release_by="data ops (you)" if rel else None, release_reason=reason.strip())
+                st.session_state.gate_sent = sent
+            except ValueError as e:
+                st.error(str(e))
+                return
         r = st.session_state.gate_last
         log("ingestion: gate lab", {k_: r[k_] for k_ in ("fault", "status", "rows_stored")})
         st.rerun()
     r = st.session_state.get("gate_last")
     if not r:
         return
-    held = r["status"] == "held"
-    verdict(not held, (f"Held: {r['file']} was not loaded. Nothing from it was stored. " + " · ".join(r["reasons"])) if held else
-            (f"Loaded: {r['file']}, {r['rows_stored']:,} rows" + (f", released by {r['reviews'][0][0]} and recorded" if r["reviews"] else
-             ", inside its normal shape") + "."))
+    if r["status"] == "rejected":
+        verdict(False, f"Rejected: {r['file']} was not loaded at all. The contract refused the whole file: {r['note'].replace('_', ' ')}.")
+    elif r["status"] == "held":
+        verdict(False, f"Held: {r['file']} ({r['rows_in_file']:,} rows) was not loaded and nothing from it was stored. "
+                       f"It waits for a person to release it, with a reason.")
+    else:
+        how_ = (f"released by {r['reviews'][0][0]}: \"{r['reviews'][0][1]}\"" if r["reviews"] else "inside its normal shape")
+        verdict(True, f"Loaded: {r['file']}, {r['rows_stored']:,} rows stored" +
+                (f", {r['rows_quarantined']:,} held back by the contract" if r["rows_quarantined"] else "") + f"; {how_}.")
+    if r["checks"]:
+        st.markdown('<div class="mono" style="margin-top:1rem">Delivery report</div>', unsafe_allow_html=True)
+        rep = pd.DataFrame([{"Check": c_["check"], "This file": c_["this"], "Usual": c_["usual"], "Allowed": c_["allowed"],
+                             "Result": "outside" if c_["outside"] else "normal"} for c_ in r["checks"]])
+        st.dataframe(rep.style.map(lambda v: f"color: {RED}; font-weight: 600" if v == "outside" else f"color: {MUTED}", subset=["Result"]),
+                     hide_index=True, width="stretch")
+    if not r["weeks"]:
+        return
+    flags = {c_["measure"] for c_ in r["checks"] if c_.get("outside")}
     wk = pd.DataFrame(r["weeks"])
     wk["Week"] = wk.file.str.extract(r"week_(\d+)")[0].fillna("?").radd("week ") + wk.file.str.contains("_v2").map({True: " (v2)", False: ""})
-    wk["Decision"] = wk.status.map({"loaded": "loaded", "held": "held"})
     wk["Email empty"] = wk.email_empty
+    paint = lambda measure: wk.apply(lambda x: ("this file: outside" if measure in flags else "this file") if x["this"] else "earlier files", axis=1)
+    wk["rows_c"], wk["email_c"] = paint("rows"), paint("empty:email")
+    scale = alt.Scale(domain=["earlier files", "this file", "this file: outside"], range=[BLUE, NAVY, RED])
     a, b = st.columns(2, gap="large")
     a.markdown("**Rows per weekly vendor file**")
     b.markdown("**Share of rows with no email**")
     a.altair_chart(alt.Chart(wk).mark_bar(cornerRadiusEnd=4).encode(
         x=alt.X("Week:N", sort=None, title=None), y=alt.Y("rows:Q", title="Rows in the file"),
-        color=alt.Color("Decision:N", scale=alt.Scale(domain=["loaded", "held"], range=[BLUE, RED]), legend=None),
-        tooltip=["file", "rows", "Decision"]).properties(height=220), width="stretch")
+        color=alt.Color("rows_c:N", scale=scale, legend=None), tooltip=["file", "rows", alt.Tooltip("rows_c:N", title="")]
+    ).properties(height=220), width="stretch")
     b.altair_chart(alt.Chart(wk).mark_bar(cornerRadiusEnd=4).encode(
         x=alt.X("Week:N", sort=None, title=None), y=alt.Y("Email empty:Q", title="Share with no email", axis=alt.Axis(format="%")),
-        color=alt.Color("Decision:N", scale=alt.Scale(domain=["loaded", "held"], range=[BLUE, RED]), legend=None),
-        tooltip=["file", alt.Tooltip("Email empty:Q", format=".0%"), "Decision"]).properties(height=220),
+        color=alt.Color("email_c:N", scale=scale, legend=None),
+        tooltip=["file", alt.Tooltip("Email empty:Q", format=".0%"), alt.Tooltip("email_c:N", title="")]).properties(height=220),
         width="stretch")
-    how("Every delivery of a gated source is profiled before anything is written (rows, rows failing validation, how often each "
+    st.caption("Dark blue: this week's file. Red: a measure outside its allowed range. Light blue: the files before it.")
+    how("Every delivery of a gated source is profiled before anything is written (rows, rows failing the contract, how often each "
         "column is empty) and compared with the median of the last five loaded files of the same kind. Outside its limits, the whole "
-        "delivery is held: nothing is stored, the ledger says why, and a rerun does not retry it until a person releases it "
-        "(`python -m plumbline.ingest.gate release`), which is recorded with who and why. Row checks alone would have loaded the "
-        "truncated file and the emptied emails. Tests: tests/test_gate.py.")
+        "delivery is held: nothing is stored, the ledger says why, and a rerun does not retry it until a person releases it with a "
+        "reason (`python -m plumbline.ingest.gate release`), recorded with who and why. A file the contract cannot read at all "
+        "(wrong encoding, a required column missing) is rejected before the gate. Row checks alone would have loaded the truncated "
+        "file and the emptied emails. Tests: tests/test_gate.py.")
 
 
 def deletion():

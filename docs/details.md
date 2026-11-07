@@ -1099,8 +1099,9 @@ Recovery steps are in [the runbook](runbooks/ingestion.md).
   Terraform would manage beyond a repository and two hosted services, so none is written.
 - **"What happens at 3 a.m. when a feed breaks?"** An issue opens and GitHub emails the owner (above), and a
   broken vendor file is held by the delivery gate instead of loading. There is no paging rota: one person owns this.
-- **"How long has it been running?"** The daily jobs started on 2026-11-07; the Open data and Live stream
-  pages show every run since, failures included, and how many of the last 7 days were good.
+- **"How long has it been running?"** The scheduled jobs started on 2026-11-07 and run every 3 hours; the Open
+  data and Live stream pages show every run since, failures included, the current streak of successful runs, and
+  how many of the last 7 days were good. A streak of runs is claimed as a streak of runs, not as weeks.
 - **"Who uses it?"** Nobody in production: it is a portfolio project. What stands in for users is a public
   app where every button does real work on the visitor's own copy, a click-through of every button against the
   deployed app on every push and every day, and two real feeds that run whether anyone is watching or not.

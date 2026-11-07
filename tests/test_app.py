@@ -561,10 +561,13 @@ def test_the_gate_lab_holds_a_truncated_vendor_file_and_loads_it_once_released(w
     assert not at.exception, at.exception
     r = at.session_state.gate_last
     assert r["status"] == "held" and r["rows_stored"] == 0 and any("rows against a usual" in x for x in r["reasons"])
-    _button(at, lambda l: l.startswith("Release it")).click().run(timeout=180)
+    assert any(c["outside"] and c["check"] == "Rows in the file" for c in r["checks"])
+    at.text_input(key="gate_reason").input("vendor confirmed a smaller file this week").run()
+    _button(at, lambda l: l == "Release it").click().run(timeout=180)
     assert not at.exception, at.exception
     r = at.session_state.gate_last
-    assert r["status"] == "loaded" and r["rows_stored"] == r["rows_in_file"] and r["reviews"][0][0] == "data ops (you)"
+    assert r["status"] == "loaded" and r["rows_stored"] == r["rows_in_file"]
+    assert r["reviews"][0] == ("data ops (you)", "vendor confirmed a smaller file this week")
 
 
 def test_the_gate_lab_control_file_loads_without_a_hold(world):
@@ -584,3 +587,24 @@ def test_every_overview_card_says_what_its_number_counts(world, monkeypatch):
     for unit in A.CARD_UNIT.values():
         assert unit.split(",")[0] in html, unit
     assert "Clean</" not in html and ">Current<" not in html
+
+
+def test_an_uploaded_vendor_file_is_rejected_held_or_loaded_by_the_real_loader(world):
+    """The gate lab takes a file a visitor edited: unchanged it loads; cut short it is held; without a required
+    column the contract rejects it before the gate ever sees it."""
+    from plumbline.app import ops as O
+    d = world[0]
+    name, data = O.gate_lab_file(d)
+    assert name.startswith("vendor_week_") and data.count(b"\n") > 50
+    assert O.gate_lab(d, "upload", upload=data)["status"] == "loaded"
+    lines = data.decode().splitlines()
+    cut = ("\n".join(lines[: len(lines) // 3]) + "\n").encode()
+    held = O.gate_lab(d, "upload", upload=cut)
+    assert held["status"] == "held" and any(c["outside"] for c in held["checks"])
+    header = lines[0].split(",")
+    i = header.index("full_name")
+    no_name = ("\n".join(",".join(x for j, x in enumerate(l.split(",")) if j != i) for l in lines) + "\n").encode()
+    rej = O.gate_lab(d, "upload", upload=no_name)
+    assert rej["status"] == "rejected" and "full_name" in rej["note"]
+    with pytest.raises(ValueError, match="choose a CSV"):
+        O.gate_lab(d, "upload")

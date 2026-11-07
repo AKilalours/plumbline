@@ -169,13 +169,59 @@ GATE_FAULTS = {
     "blank_email": "A broken join empties 45% of emails",
     "zip_format": "30% of ZIP codes arrive in a new format",
     "none": "Nothing wrong (control)",
+    "upload": "Upload your own file",
 }
+MAX_UPLOAD = 5_000_000
 
 
-def gate_lab(demo: Demo, fault: str, release_by: str | None = None, work: str | Path | None = None) -> dict:
-    """Break the city's newest vendor file the way vendor files really break, load every delivery with the real
-    loader into a private warehouse, and report what the delivery gate decided and why. With release_by, a
-    person releases the held file and the run is repeated, as `python -m plumbline.ingest.gate release` does."""
+def _newest_vendor_file(run: Path) -> Path:
+    files = sorted(p for p in (run / "sources" / "vendor").glob("vendor_week_*.csv") if "_v" not in p.stem.split("_")[-1])
+    return files[-1]
+
+
+def gate_lab_file(demo: Demo) -> tuple[str, bytes]:
+    """The city's newest weekly vendor file, as delivered: download it, change it, send it back."""
+    f = _newest_vendor_file(demo.run)
+    return f.name, f.read_bytes()
+
+
+def _checks(con, did: str, gate_cfg: dict) -> list[dict]:
+    """Every measure the gate compared for one delivery: this file, the usual, the allowed range, and whether it was
+    outside. The usual is the median of the last loaded files of the same kind that arrived before it."""
+    import statistics
+    row = con.execute("SELECT source, family, delivered_at, rows_in, quarantine_share, empty_share FROM delivery_profiles "
+                      "WHERE delivery_id = ?", [did]).fetchone()
+    if not row:
+        return []
+    source, fam, at, n, q, empty = row
+    hist = con.execute("""SELECT rows_in, quarantine_share, empty_share FROM delivery_profiles WHERE source = ? AND family = ?
+        AND status = 'loaded' AND delivery_id <> ? AND delivered_at <= ? ORDER BY delivered_at DESC LIMIT ?""",
+                       [source, fam, did, at, gate_cfg["baseline"]]).fetchall()
+    if len(hist) < gate_cfg["min_history"]:
+        return [{"check": "Too few earlier files to compare with", "this": "", "usual": "", "allowed": "", "outside": False}]
+    lo, hi = gate_cfg["rows"]
+    usual = statistics.median(h[0] for h in hist)
+    out = [{"check": "Rows in the file", "this": f"{n:,}", "usual": f"{usual:,.0f}", "allowed": f"{lo * usual:,.0f} to {hi * usual:,.0f}",
+            "outside": not lo <= n / usual <= hi, "measure": "rows"}]
+    uq = statistics.median(h[1] for h in hist)
+    out.append({"check": "Rows failing the contract", "this": f"{q:.0%}", "usual": f"{uq:.0%}", "allowed": f"up to {uq + gate_cfg['quarantine_jump']:.0%}",
+                "outside": q - uq > gate_cfg["quarantine_jump"], "measure": "failing"})
+    for col, share in sorted(json.loads(empty).items()):
+        prev = [json.loads(h[2]).get(col) for h in hist if col in json.loads(h[2])]
+        if len(prev) < gate_cfg["min_history"]:
+            continue
+        ue = statistics.median(prev)
+        out.append({"check": f"{col} empty", "this": f"{share:.0%}", "usual": f"{ue:.0%}", "allowed": f"up to {ue + gate_cfg['empty_jump']:.0%}",
+                    "outside": share - ue > gate_cfg["empty_jump"], "measure": f"empty:{col}"})
+    return sorted(out, key=lambda c: (not c["outside"], c["check"] not in ("Rows in the file", "Rows failing the contract")))
+
+
+def gate_lab(demo: Demo, fault: str, release_by: str | None = None, release_reason: str = "", upload: bytes | None = None,
+             work: str | Path | None = None) -> dict:
+    """Send the city's newest vendor file broken the way vendor files really break, or a file the visitor uploaded,
+    through the real loader into a private warehouse, and report what the delivery gate decided, check by check.
+    With release_by, a person releases the held file (with a reason) and the run is repeated, as
+    `python -m plumbline.ingest.gate release` does."""
     import csv
     import io
     from ..ingest import gate
@@ -183,28 +229,36 @@ def gate_lab(demo: Demo, fault: str, release_by: str | None = None, work: str | 
     from ..ingest.engine import ingest
     if fault not in GATE_FAULTS:
         raise ValueError(f"unknown fault {fault!r}")
+    if fault == "upload" and not upload:
+        raise ValueError("choose a CSV file to send")
+    if upload and len(upload) > MAX_UPLOAD:
+        raise ValueError(f"the file is over {MAX_UPLOAD // 1_000_000} MB")
     work = Path(work or tempfile.mkdtemp(prefix="plumbline-gatelab-"))
     run = work / "run"
     shutil.copytree(demo.run, run, ignore=shutil.ignore_patterns("truth", "campaign", "*.duckdb"))
-    files = sorted(p for p in (run / "sources" / "vendor").glob("vendor_week_*.csv") if "_v" not in p.stem.split("_")[-1])
-    last = files[-1]
-    rows = list(csv.DictReader(io.StringIO(last.read_text())))
-    fields = list(rows[0])
-    if fault == "truncated":
-        rows = rows[: len(rows) * 2 // 5]
-    elif fault == "blank_email":
-        for i, r in enumerate(rows):
-            if i % 20 < 9:
-                r["email"] = ""
-    elif fault == "zip_format":
-        for i, r in enumerate(rows):
-            if i % 10 < 3:
-                r["zip"] = r["zip"][:4] + " " + r["zip"][4:]
-    buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=fields, lineterminator="\n")
-    w.writeheader()
-    w.writerows(rows)
-    last.write_text(buf.getvalue())
+    last = _newest_vendor_file(run)
+    if fault == "upload":
+        last.write_bytes(upload)                     # the loader judges it as delivered: encoding, header, rows, shape
+        n_rows = max(0, upload.count(b"\n") - 1)
+    else:
+        rows = list(csv.DictReader(io.StringIO(last.read_text())))
+        fields = list(rows[0])
+        if fault == "truncated":
+            rows = rows[: len(rows) * 2 // 5]
+        elif fault == "blank_email":
+            for i, r in enumerate(rows):
+                if i % 20 < 9:
+                    r["email"] = ""
+        elif fault == "zip_format":
+            for i, r in enumerate(rows):
+                if i % 10 < 3:
+                    r["zip"] = r["zip"][:4] + " " + r["zip"][4:]
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=fields, lineterminator="\n")
+        w.writeheader()
+        w.writerows(rows)
+        last.write_text(buf.getvalue())
+        n_rows = len(rows)
     rel = last.relative_to(run).as_posix()
     wh = work / "gate.duckdb"
     contracts = load_contracts(CONTRACTS)
@@ -214,20 +268,23 @@ def gate_lab(demo: Demo, fault: str, release_by: str | None = None, work: str | 
     with duckdb.connect(str(wh)) as con:
         status, note, did = con.execute("SELECT status, note, delivery_id FROM ingest_ledger WHERE path = ?", [rel]).fetchone()
     if release_by and status == "held":
-        released = gate.release(str(wh), did, by=release_by, reason="checked with the vendor in the gate lab")
+        released = gate.release(str(wh), did, by=release_by, reason=release_reason or "no reason given")
         report = ingest(run, wh, contracts)
         with duckdb.connect(str(wh)) as con:
             status, note, did = con.execute("SELECT status, note, delivery_id FROM ingest_ledger WHERE path = ?", [rel]).fetchone()
     with duckdb.connect(str(wh), read_only=True) as con:
-        weeks = con.execute("""SELECT l.path, p.rows_in, p.quarantine_share, p.empty_share, p.status
+        weeks = con.execute("""SELECT l.path, p.rows_in, p.quarantine_share, p.empty_share, p.status, p.delivery_id
             FROM delivery_profiles p JOIN ingest_ledger l USING (delivery_id) WHERE p.source = 'vendor' ORDER BY l.path""").fetchall()
         stored = con.execute("SELECT count(*) FROM delivery_rows WHERE delivery_id = ?", [did]).fetchone()[0]
         reviews = con.execute("SELECT by_whom, reason FROM delivery_reviews WHERE delivery_id = ?", [did]).fetchall()
-    return {"fault": fault, "file": rel.rsplit("/", 1)[-1], "status": status, "reasons": (note or "").split("; ") if status == "held" else [],
-            "rows_in_file": len(rows), "rows_stored": stored, "released": released, "reviews": reviews,
+        quarantined = con.execute("SELECT count(*) FROM quarantine WHERE delivery_id = ?", [did]).fetchone()[0]
+        checks = _checks(con, did, contracts["vendor"].gate)
+    return {"fault": fault, "file": rel.rsplit("/", 1)[-1], "status": status, "note": note or "",
+            "reasons": (note or "").split("; ") if status == "held" else [], "rows_in_file": n_rows, "rows_stored": stored,
+            "rows_quarantined": quarantined, "released": released, "reviews": reviews, "checks": checks,
             "held_total": report.totals()["deliveries_held"], "seconds": round(time.perf_counter() - t0, 1),
             "weeks": [{"file": p.rsplit("/", 1)[-1], "rows": n, "quarantined": q, "email_empty": json.loads(e).get("email", 0),
-                       "status": st} for p, n, q, e, st in weeks]}
+                       "status": st, "this": dd == did} for p, n, q, e, st, dd in weeks]}
 
 
 def failure_lab(demo: Demo, p_429: float, p_503: float, p_drop: float, crash_after_page: int | None,

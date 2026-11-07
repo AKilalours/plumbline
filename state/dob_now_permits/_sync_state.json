@@ -1,7 +1,7 @@
 {
   "dataset": "rbx6-tga4",
   "watermark": "2026-11-06T19:56:23.228",
-  "next_sync": 2,
+  "next_sync": 3,
   "columns": [
     "source_row_id",
     "source_updated_at",
@@ -53,6 +53,11 @@
     "apt_condo_no_s"
   ],
   "in_progress": null,
-  "bulk_rewrite": null,
-  "last_sync_at": "2026-11-07T03:46:39Z"
+  "bulk_rewrite": {
+    "timestamp": "2026-11-06T19:56:23.228",
+    "rows": 2565,
+    "of": 2565,
+    "share": 1.0
+  },
+  "last_sync_at": "2026-11-07T05:21:14Z"
 }

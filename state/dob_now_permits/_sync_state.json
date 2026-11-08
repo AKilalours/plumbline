@@ -1,7 +1,7 @@
 {
   "dataset": "rbx6-tga4",
   "watermark": "2026-11-07T19:42:29.016",
-  "next_sync": 9,
+  "next_sync": 10,
   "columns": [
     "source_row_id",
     "source_updated_at",
@@ -53,8 +53,13 @@
     "apt_condo_no_s"
   ],
   "in_progress": null,
-  "bulk_rewrite": null,
-  "last_sync_at": "2026-11-07T22:03:25Z",
+  "bulk_rewrite": {
+    "timestamp": "2026-11-07T19:42:29.016",
+    "rows": 2342,
+    "of": 2342,
+    "share": 1.0
+  },
+  "last_sync_at": "2026-11-08T06:18:41Z",
   "window_ids": [
     "row-22ve~6a4f~zjgy|2026-11-07T19:42:29.016",
     "row-22wv_brfp-nut6|2026-11-07T19:42:29.016",

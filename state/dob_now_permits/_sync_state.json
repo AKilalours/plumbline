@@ -1,7 +1,7 @@
 {
   "dataset": "rbx6-tga4",
   "watermark": "2026-11-07T19:42:29.016",
-  "next_sync": 10,
+  "next_sync": 11,
   "columns": [
     "source_row_id",
     "source_updated_at",
@@ -59,7 +59,7 @@
     "of": 2342,
     "share": 1.0
   },
-  "last_sync_at": "2026-11-08T06:18:41Z",
+  "last_sync_at": "2026-11-08T06:21:46Z",
   "window_ids": [
     "row-22ve~6a4f~zjgy|2026-11-07T19:42:29.016",
     "row-22wv_brfp-nut6|2026-11-07T19:42:29.016",

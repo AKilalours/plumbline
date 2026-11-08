@@ -112,6 +112,26 @@ def test_every_visual_draws_in_a_browser_without_an_error_or_a_nan(width):
     assert not errors, errors
 
 
+@pytest.mark.parametrize("width", [1100, 375])
+def test_no_onboarding_step_shows_a_cut_off_name(width):
+    """With load taking most of the time, "draft" and "validate" were drawn as "draf" and "vali"."""
+    pw = pytest.importorskip("playwright.sync_api")
+    run = {**json.loads((RES / "onboarding_time.json").read_text()),
+           "seconds": {"sync": 0.35, "draft": 0.02, "validate": 0.01, "load": 1.52}, "total_seconds": 1.90}
+    with pw.sync_playwright() as p:
+        try:
+            b = p.chromium.launch()
+        except Exception as e:
+            pytest.skip(f"no browser: {e}")
+        pg = b.new_page(viewport={"width": width, "height": 800})
+        pg.set_content(V.page("onboard", {"run": run}))
+        pg.wait_for_timeout(900)
+        segs = pg.eval_on_selector_all('div[title$=" s"]', "es => es.map(e => [e.textContent, e.scrollWidth > e.clientWidth])")
+        b.close()
+    assert len(segs) == 4 and not [t for t, cut in segs if t and cut], segs
+    assert "load" in [t for t, _ in segs]                                   # a step with room keeps its name
+
+
 def test_the_worth_slider_recomputes_in_the_browser():
     pw = pytest.importorskip("playwright.sync_api")
     with pw.sync_playwright() as p:

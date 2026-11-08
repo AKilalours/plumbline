@@ -448,7 +448,7 @@ def test_worth_buying_prices_a_record_only_where_the_loss_is_measured():
     assert all(x["hi"] < 0 for x in w.values() if x["measured"])
 
 
-def test_open_data_onboards_a_live_dataset_through_failures_and_drops_people(world, monkeypatch):
+def test_open_data_onboards_a_test_dataset_through_failures_and_drops_people(world, monkeypatch):
     at = _app(world, monkeypatch, "open_data")
     at.slider(key="od_429").set_value(25).run()
     _button(at, lambda l: l == "Onboard it now").click().run()
@@ -458,6 +458,18 @@ def test_open_data_onboards_a_live_dataset_through_failures_and_drops_people(wor
     assert r["rows_loaded"] == 5_000                                   # corrected rows kept once
     assert "owner_s_first_name" in r["dropped_personal"] and "filing_status" in r["drift"]
     assert "owner" not in at.session_state["od_last"]["draft"]
+
+
+def test_the_onboarding_demo_says_it_runs_on_a_test_server_not_nyc(world, monkeypatch):
+    """The demo's result read like a real NYC pull, and its draft named a real NYC dataset (ipu4-2q9a), while every row
+    came from the local test server. A visitor could not tell; now the result and the draft both say so."""
+    at = _app(world, monkeypatch, "open_data")
+    _button(at, lambda l: l == "Onboard it now").click().run()
+    assert not at.exception, at.exception
+    said = [m.value for m in at.markdown] + [c.value for c in at.caption]
+    assert any("local test server" in t and "current rows" in t for t in said), "the result must say where its rows came from"
+    draft = at.session_state["od_last"]["draft"]
+    assert "ipu4-2q9a" not in draft and "local-test-permits" in draft
 
 
 def test_the_scale_projection_offers_only_stages_it_can_project():

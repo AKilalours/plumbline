@@ -320,14 +320,17 @@ R.onboard = () => {
     {label: 'Personal columns', value: r.dropped_personal.length, fmt: 'int', sub: 'dropped before writing', tone: 'pass'}]));
   const t = document.createElement('div'); t.style.marginTop = '16px';
   t.innerHTML = `<div class="mono">Each step, timed</div><div style="display:flex;height:34px;border-radius:12px;overflow:hidden;margin-top:8px;background:#F2F3F6">
-    ${Object.entries(r.seconds).map(([k, v], n) => `<div class="grow" title="${k}: ${v.toFixed(2)} s" style="width:${Math.max(3, 100 * v / tot)}%;
+    ${Object.entries(r.seconds).map(([k, v], n) => `<div title="${k}: ${v.toFixed(2)} s" style="width:${Math.max(3, 100 * v / tot)}%;
       background:${['var(--navy)', 'var(--blue)', 'var(--gold)', 'var(--green)'][n % 4]};animation-delay:${n * 160}ms;color:#fff;
-      font:500 12px Geist,sans-serif;display:flex;align-items:center;padding-left:8px;white-space:nowrap;overflow:hidden">${k}</div>`).join('')}</div>
+      font:500 12px Geist,sans-serif;display:flex;align-items:center;padding-left:8px;white-space:nowrap;overflow:hidden" class="grow seg">${k}</div>`).join('')}</div>
     <div class="row" style="gap:16px;margin-top:6px">${Object.entries(r.seconds).map(([k, v], n) => `<span class="cap" style="margin:0">
       <span style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:${['var(--navy)', 'var(--blue)', 'var(--gold)', 'var(--green)'][n % 4]}"></span>${k} ${v.toFixed(2)} s</span>`).join('')}</div>
     <div style="margin-top:14px"><div class="mono">Columns that name a person, never written</div>${r.dropped_personal.map(c => `<span class="chip gone">${esc(c)}</span>`).join('') || '<span class="cap">none</span>'}</div>
     ${r.drift.length ? `<div style="margin-top:10px"><div class="mono">New columns, reported and held back</div>${r.drift.map(c => `<span class="chip new">${esc(c)}</span>`).join('')}</div>` : ''}`;
   app.appendChild(t);
+  // A step too short to hold its own name shows only its colour; the legend below names it. Cut-off names ("draf",
+  // "vali") read as typos.
+  t.querySelectorAll('.seg').forEach(e => { if (e.scrollWidth > e.clientWidth) e.textContent = ''; });
 };
 
 // Every scheduled run against the live API: rows pulled, and the whole record on hover. Failed runs stay red.

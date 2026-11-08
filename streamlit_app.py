@@ -1248,6 +1248,10 @@ def feed_health(runs: list[dict], promise_hours: float = 26):
          "tone": "pass" if h["good_days_of_7"] == 7 else "info" if not h["failed_7"] else "warn"}]}, 120)
 
 
+DEMO_API = "local test server that imitates NYC Open Data's API"
+DEMO_DATASET = "local-test-permits"     # not a real NYC dataset id, so the drafted contract cannot pass for one
+
+
 def open_data():
     """A real public source: NYC Open Data, synced by a scheduled job (every 3 hours, best effort), every run on the record."""
     from plumbline.ingest import open_data_daily as OD
@@ -1264,6 +1268,8 @@ def open_data():
             st.caption("Measured against the local test API. `python -m plumbline.ingest.onboard_source rbx6-tga4 --name dob_now_permits "
                        "--since 2026-11-01` on a machine with internet replaces it with a real run.")
     st.markdown('<div class="mono" style="margin-top:1rem">Try it: onboard a dataset nobody has described</div>', unsafe_allow_html=True)
+    st.caption(f"This runs on a {DEMO_API}: made-up permit rows shaped like NYC's, with the throttling and server errors you set "
+               "below, and a few rows corrected while the sync is running. The real NYC feed is the run history above.")
     c = st.columns(3)
     p429 = c[0].slider("Throttled (429)", 0, 40, 15, 5, format="%d%%", key="od_429")
     p503 = c[1].slider("Server errors (503)", 0, 40, 10, 5, format="%d%%", key="od_503")
@@ -1275,7 +1281,7 @@ def open_data():
         srv, url = serve(ds)
         try:
             with tempfile.TemporaryDirectory() as tmp:
-                r = onboard("ipu4-2q9a", "permits", host=url, since=None, workdir=Path(tmp), drafts=Path(tmp) / "drafts",
+                r = onboard(DEMO_DATASET, "permits", host=url, since=None, workdir=Path(tmp), drafts=Path(tmp) / "drafts",
                             page_size=1000, max_pages=None,
                             client_kw=dict(base_delay=0.0, max_delay=0.0, max_retries=20, sleep=lambda s: None))
                 draft = (Path(tmp) / "drafts" / "permits.yaml").read_text()
@@ -1286,7 +1292,7 @@ def open_data():
     last = st.session_state.get("od_last")
     if last:
         r = last["r"]
-        verdict(not r["rows_quarantined"], f"{r['rows_loaded']:,} current rows from {r['rows_landed']:,} landed, through {r['retries']} "
+        verdict(not r["rows_quarantined"], f"On the {DEMO_API}: {r['rows_loaded']:,} current rows from {r['rows_landed']:,} landed, through {r['retries']} "
                 f"retries; {last['changed']} rows corrected mid-sync, each kept once at its latest version.")
         viz("onboard", {"run": r}, 120)
         with st.expander("The drafted contract (goes to sources/drafts/ for a person to read)"):

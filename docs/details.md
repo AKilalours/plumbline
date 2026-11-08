@@ -1099,9 +1099,11 @@ Recovery steps are in [the runbook](runbooks/ingestion.md).
   Terraform would manage beyond a repository and two hosted services, so none is written.
 - **"What happens at 3 a.m. when a feed breaks?"** An issue opens and GitHub emails the owner (above), and a
   broken vendor file is held by the delivery gate instead of loading. There is no paging rota: one person owns this.
-- **"How long has it been running?"** The scheduled jobs started on 2026-11-07 and run every 3 hours; the Open
-  data and Live stream pages show every run since, failures included, the current streak of successful runs, and
-  how many of the last 7 days were good. A streak of runs is claimed as a streak of runs, not as weeks.
+- **"How long has it been running?"** The jobs started on 2026-11-07 and are scheduled every 3 hours. GitHub runs
+  scheduled jobs on a best-effort basis: on the first day it ran 2 of the 6 scheduled slots, hours late, so the
+  real rate is lower than the schedule. That is why freshness is promised as "a success within 26 hours", not
+  "every 3 hours", and why the Open data and Live stream pages count the runs that happened (failures included),
+  the current streak, and how many of the last 7 days were good. A streak of runs is claimed as runs, not weeks.
 - **"Who uses it?"** Nobody in production: it is a portfolio project. What stands in for users is a public
   app where every button does real work on the visitor's own copy, a click-through of every button against the
   deployed app on every push and every day, and two real feeds that run whether anyone is watching or not.

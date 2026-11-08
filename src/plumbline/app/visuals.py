@@ -335,8 +335,8 @@ R.history = () => {
   const runs = D.runs, S = D.summary;
   if (!runs.length) {
     app.innerHTML = `<div class="card fade"><div class="mono">Scheduled sync</div>
-      <div style="font-size:22px;font-weight:600;margin:8px 0">The first daily run has not happened yet</div>
-      <div class="cap" style="margin:0">Each morning the job pulls what NYC changed since its last cursor and records the run here, failures included.</div></div>`;
+      <div style="font-size:22px;font-weight:600;margin:8px 0">The first scheduled run has not happened yet</div>
+      <div class="cap" style="margin:0">Every few hours the job pulls what NYC changed since its last cursor and records the run here, failures included.</div></div>`;
     return;
   }
   const last = S.last, days = Math.max(1, Math.round((Date.parse(last.run_at) - Date.parse(S.first)) / 864e5) + 1);
@@ -863,8 +863,8 @@ R.stream = () => {
   if (D.local) all.push({...D.local, label: 'Local test stream, your settings', real: false});
   if (!all.length) {
     app.innerHTML = `<div class="card fade"><div class="mono">Live stream</div>
-      <div style="font-size:22px;font-weight:600;margin:8px 0">The first daily window has not run yet</div>
-      <div class="cap" style="margin:0">Each morning the job reads two minutes of Wikimedia's live edit stream, hangs up half-way on purpose and resumes, and records the run here, failures included. Try the connector below meanwhile.</div></div>`;
+      <div style="font-size:22px;font-weight:600;margin:8px 0">The first scheduled window has not run yet</div>
+      <div class="cap" style="margin:0">Every few hours the job reads two minutes of Wikimedia's live edit stream, hangs up half-way on purpose and resumes, and records the run here, failures included. Try the connector below meanwhile.</div></div>`;
     return;
   }
   let cur = all.length - 1; const hidden = new Set();

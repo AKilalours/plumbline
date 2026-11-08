@@ -5,7 +5,7 @@
 name: open data
 on:
   schedule:
-    - cron: "23 */3 * * *"       # every 3 hours: eight real runs a day, so a streak of green runs builds in days, not weeks
+    - cron: "23 */3 * * *"       # asked for every 3 hours; GitHub's scheduler is best effort and drops or delays some
   workflow_dispatch:
   push:                          # and when the connector, the job or the contract changes
     branches: [main]

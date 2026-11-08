@@ -1230,7 +1230,7 @@ def open_data_runs() -> list[dict]:
 
 
 def feed_health(runs: list[dict], promise_hours: float = 26):
-    """On time, streak and the last 7 days, counted from the run history the daily job writes (failures included)."""
+    """On time, streak and the last 7 days, counted from the run history the scheduled job writes (failures included)."""
     from datetime import datetime as _dt, timezone as _tz
     from plumbline.ingest.freshness import health
     h = health(runs, promise_hours, _dt.now(_tz.utc))
@@ -1249,11 +1249,11 @@ def feed_health(runs: list[dict], promise_hours: float = 26):
 
 
 def open_data():
-    """A real public source: NYC Open Data, synced every day by a scheduled job, every run on the record."""
+    """A real public source: NYC Open Data, synced by a scheduled job (every 3 hours, best effort), every run on the record."""
     from plumbline.ingest import open_data_daily as OD
     runs = open_data_runs()
     st.markdown(f'<span class="chip blue">NYC Open Data · {OD.DATASET}</span><span class="chip">{OD.TITLE}</span>'
-                '<span class="chip">synced daily</span>', unsafe_allow_html=True)
+                '<span class="chip">scheduled every 3 hours</span>', unsafe_allow_html=True)
     feed_health(runs)
     viz("history", {"runs": runs[-60:], "summary": OD.summary(runs), "title": OD.TITLE}, 120)
     od = json.loads((Path(__file__).parent / "docs/results/onboarding_time.json").read_text())
@@ -1291,7 +1291,7 @@ def open_data():
         viz("onboard", {"run": r}, 120)
         with st.expander("The drafted contract (goes to sources/drafts/ for a person to read)"):
             st.code(last["draft"], language="yaml")
-    how("Every morning a scheduled job (.github/workflows/open_data.yml) pulls the permits NYC changed since its last cursor and "
+    how("A scheduled job (.github/workflows/open_data.yml, every 3 hours; GitHub runs schedules best effort, so some are late or skipped) pulls the permits NYC changed since its last cursor and "
         "loads them under a reviewed contract (sources/open_data/); each run, failed ones included, is one line of history on the "
         "open-data-history branch. The connector pulls only rows changed since the last sync (by the city's own update time, with a 5-minute overlap), pages by "
         "(update time, row id) so a row corrected mid-sync is not skipped, retries throttles and server errors, saves each page before "
@@ -1342,10 +1342,10 @@ def try_stream(drop_every: int, replay: int, busy: bool) -> dict:
 
 
 def live_stream():
-    """A real streaming source: Wikimedia's live edit stream, read in a daily window by a scheduled job."""
+    """A real streaming source: Wikimedia's live edit stream, read in a two-minute window by a scheduled job."""
     runs = stream_runs()
     st.markdown('<span class="chip blue">stream.wikimedia.org · Server-Sent Events</span><span class="chip">recent changes, all wikis</span>'
-                '<span class="chip">a two-minute window daily</span>', unsafe_allow_html=True)
+                '<span class="chip">a two-minute window, every 3 hours</span>', unsafe_allow_html=True)
     feed_health(runs)
     viz("stream", {"runs": runs[-30:], "local": st.session_state.get("st_last")}, 120)
     st.markdown('<div class="mono" style="margin-top:1rem">Try it: make the stream misbehave</div>', unsafe_allow_html=True)
@@ -1360,7 +1360,7 @@ def live_stream():
         r = st.session_state.st_last
         log("stream: tried", {k_: r[k_] for k_ in ("events", "rows_loaded", "duplicates", "reconnects")})
         st.rerun()
-    how("Every morning the same job that syncs NYC Open Data reads two minutes of Wikimedia's public recent-changes stream with the "
+    how("On each scheduled run (every 3 hours, best effort), the same job that syncs NYC Open Data reads two minutes of Wikimedia's public recent-changes stream with the "
         "SSE connector (src/plumbline/ingest/connectors/sse.py). It resumes after any dropped connection by sending the last event id "
         "back; half-way through it hangs up on purpose, and counts how many events after the reconnect it had already seen. Events land "
         "in micro-batches, each written before the checkpoint moves, so a crash replays a batch rather than losing it, and the event's "

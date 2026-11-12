@@ -1275,6 +1275,31 @@ def reconcile_tiles(runs: list[dict]):
          "tone": "warn" if total["gone"] else "pass"}]}, 120)
 
 
+def slo_panel():
+    """The real feeds' service level objectives, measured from their run history (ingest/slo.py)."""
+    from datetime import datetime, timezone
+    from plumbline.ingest.slo import LABEL, UNIT, measure
+    st.markdown('<div class="mono">Promises the real feeds make, measured from every run</div>', unsafe_allow_html=True)
+    now = datetime.now(timezone.utc)
+    for name, runs in (("NYC Open Data permits", open_data_runs()), ("Wikimedia live stream", stream_runs())):
+        m = measure(runs, now)
+        items = []
+        for k in ("runs", "fresh", "matches"):
+            x = m[k]
+            if x["sli"] is None:
+                items.append({"label": LABEL[k], "value": "not yet", "fmt": "raw", "sub": "no measurement yet: not claimed", "tone": "info"})
+                continue
+            items.append({"label": LABEL[k], "value": f"{x['sli']:.1%}", "fmt": "raw",
+                          "sub": f"of {x['total']:,} {UNIT[k]}, target {x['target']:.1%}; budget left {x['budget_left']:.0%}",
+                          "tone": "pass" if x["status"] == "met" and x["budget_left"] > 0 else ("warn" if x["status"] == "met" else "fail")})
+        w = m.get("window", {})
+        st.markdown(f'<div class="note" style="margin:.6rem 0 .2rem"><b>{name}</b> · since {w.get("from", "-")} '
+                    f'({w.get("days", 0)} of 28 days)</div>', unsafe_allow_html=True)
+        viz("tiles", {"items": items}, 120)
+    st.caption("An error budget is what a target allows to go wrong. Spent means no new features for that feed until the "
+               "postmortem's actions are done (docs/reliability/slo.md). Small samples move fast: one failed run of 26 is 4 points.")
+
+
 def feed_health(runs: list[dict], promise_hours: float = 26):
     """On time, streak and the last 7 days, counted from the run history the scheduled job writes (failures included)."""
     from datetime import datetime as _dt, timezone as _tz
@@ -1452,6 +1477,15 @@ def database_cdc():
         {"label": "Crash, then read again", "value": r["crash"]["read_again"], "fmt": "int", "sub": "changes Postgres handed out again: none lost", "tone": "pass"},
         {"label": "Matches the database", "value": "yes" if r["matches_database"] else "no", "fmt": "raw",
          "sub": f"every row, {r['quarantined']} quarantined", "tone": "pass" if r["matches_database"] else "fail"}]}, 120)
+    bp = Path(__file__).parent / "docs/results/postgres_cdc_bench.json"
+    if bp.exists():
+        b = json.loads(bp.read_text())
+        big = max(b["bursts"], key=lambda x: x["changes"])
+        viz("tiles", {"items": [
+            {"label": "Keeps up at", "value": big["changes_per_second"], "fmt": "int", "sub": "changes a second: read, decode, land, confirm", "tone": "info"},
+            {"label": f"A burst of {big['changes']:,}", "value": f"{big['catch_up_seconds']} s", "fmt": "raw", "sub": "to catch up, every change read once", "tone": "pass"},
+            {"label": "Log the slot held", "value": f"{big['log_held_back_mb']} MB", "fmt": "raw", "sub": "until read: what an unread slot costs the database", "tone": "warn"},
+            {"label": "Starting copy", "value": b["starting_copy"]["rows_per_second"], "fmt": "int", "sub": f"rows a second · {b['machine']}", "tone": "info"}]}, 120)
     n = st.slider("Replay the log", 0, len(ch), len(ch), key="cdc_step", help="Drag back to watch the warehouse rebuild change by change")
     state = {}
     for c in [c for c in log if c["op"] == "r"] + ch[:n]:
@@ -1517,6 +1551,7 @@ def sources_page():
         worth_buying()
         return
     if v == "Health":
+        slo_panel()
         d = demo()
         with Q.connect(d) as con:
             led = con.execute("""SELECT source AS Source, count(*) FILTER (WHERE status = 'loaded') AS Loaded,

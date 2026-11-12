@@ -203,7 +203,10 @@ def test_reconcile_takes_the_next_slice_each_run_and_wraps(city):
     assert seen == [(0, 500, 500), (500, 500, 1000), (1000, 500, 300)]
 
 
-def test_without_rows_held_nothing_is_claimed(city):
+def test_without_rows_held_nothing_is_claimed_and_off_publishes_nowhere(city, tmp_path, monkeypatch):
+    """publish_to="off" turned publishing off for the stream, but the NYC job took it as a DuckDB file name: the
+    test left a database file called "off" in the working directory and the run claimed it had published."""
+    monkeypatch.chdir(tmp_path)
     ds, kw = city
     r = OD.run(**kw, publish_to="off", reconcile_by="job__")
-    assert r["reconcile"] is None
+    assert r["reconcile"] is None and r.get("published") is None and not (tmp_path / "off").exists()

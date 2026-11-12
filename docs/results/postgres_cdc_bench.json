@@ -1,0 +1,48 @@
+{
+ "measured_at": "2026-11-12T13:57:44Z",
+ "postgres": "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+ "machine": "x86_64, 2 cores, Linux",
+ "batch": 10000,
+ "starting_copy": {
+  "rows": 50000,
+  "seconds": 0.41,
+  "rows_per_second": 121660
+ },
+ "bursts": [
+  {
+   "changes": 9999,
+   "read": 9999,
+   "write_seconds": 0.09,
+   "catch_up_seconds": 0.14,
+   "changes_per_second": 70567,
+   "log_held_back_mb": 1.6,
+   "polls": 2,
+   "lag_after_mb": [
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "changes": 99999,
+   "read": 99999,
+   "write_seconds": 0.97,
+   "catch_up_seconds": 1.32,
+   "changes_per_second": 75705,
+   "log_held_back_mb": 15.9,
+   "polls": 11,
+   "lag_after_mb": [
+    14.25,
+    12.63,
+    11.0,
+    8.76,
+    6.33,
+    3.91,
+    2.1,
+    1.38,
+    0.67,
+    0.0,
+    0.0
+   ]
+  }
+ ]
+}

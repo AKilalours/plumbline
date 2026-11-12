@@ -191,3 +191,54 @@ def test_a_column_added_mid_day_is_landed_and_held_back_by_the_contract(db, tmp_
     con2 = duckdb.connect(str(tmp_path / "w.duckdb"), read_only=True)
     cols = [r[0] for r in con2.execute("DESCRIBE current_pg_customers").fetchall()]
     assert "referral_code" not in cols                                # held back until a person adds it
+
+
+@pytest.mark.parametrize("raw,want", [("2026-11-12 07:43:46.32-05", "2026-11-12 12:43:46.320000"),
+                                      ("2026-11-12 07:43:46.3-05", "2026-11-12 12:43:46.300000"),
+                                      ("2026-11-12 07:43:46-05", "2026-11-12 12:43:46"),
+                                      ("2026-11-12 07:43:46.123456+05:30", "2026-11-12 02:13:46.123456")])
+def test_a_timestamp_with_trimmed_fraction_digits_parses_on_every_supported_python(raw, want):
+    """Postgres writes 46.32, not 46.320000, and Python 3.10's parser takes only 3 or 6 digits: the CI job on 3.10
+    failed with "Invalid isoformat string", and a 3.10 deployment would have crashed on such a change."""
+    from plumbline.ingest.connectors.postgres_cdc import _utc
+    assert _utc(raw) == want
+
+
+@needs_pg
+def test_the_benchmark_reads_every_change_it_committed(tmp_path):
+    pytest.importorskip("psycopg2")
+    from plumbline.ingest.cdc_bench import run
+    r = run(DSN, sizes=(900,), batch=200, seed_rows=200, out=tmp_path / "b.json")
+    (b,) = r["bursts"]
+    # whole transactions only: the burst commits 500-row transactions, so a 200-change limit still reads 500 at a time
+    assert b["changes"] == b["read"] == 900 and 2 <= b["polls"] <= 5 and b["lag_after_mb"][-1] == 0
+
+
+def test_a_large_value_the_log_left_out_is_taken_from_the_old_row_when_it_is_logged():
+    t, op, row = parse("table public.tt: UPDATE: old-key: id[integer]:1 note[text]:'a long note' plan[text]:'pro' "
+                       "new-tuple: id[integer]:1 note[text]:unchanged-toast-datum plan[text]:'team'")
+    assert row == {"id": "1", "note": "a long note", "plan": "team"}
+    from plumbline.ingest.connectors.postgres_cdc import UNCHANGED
+    t, op, row = parse("table public.tt: UPDATE: id[integer]:1 note[text]:unchanged-toast-datum plan[text]:'pro'")
+    assert row["note"] is UNCHANGED and row["plan"] == "pro"
+
+
+@needs_pg
+@pytest.mark.parametrize("identity", ["DEFAULT", "FULL"])
+def test_a_long_note_survives_an_update_that_does_not_touch_it(db, tmp_path, identity):
+    """Postgres stores values over about 2 kB out of line (TOAST) and does not log one an update leaves alone:
+    test_decoding writes "unchanged-toast-datum", and the connector stored that text as the customer's note."""
+    con, slot, shop = db
+    cur = con.cursor()
+    cur.execute("ALTER TABLE customers ADD COLUMN note text")
+    cur.execute(f"ALTER TABLE customers REPLICA IDENTITY {identity}")
+    long = "".join(f"{i:05d}-a long free-text note " for i in range(600))      # about 14 kB
+    cdc = _cdc(tmp_path, slot)
+    cdc.start()
+    shop.play(con, [[f"UPDATE customers SET note = '{long}' WHERE id = 1"], ["UPDATE customers SET plan = 'pro' WHERE id = 1"]])
+    r = cdc.poll()
+    assert r.toast_filled == (1 if identity == "DEFAULT" else 0)
+    lake = duckdb.connect()
+    notes = lake.execute(f"SELECT note FROM read_csv_auto('{tmp_path}/run/sources/pg_customers/*_c000002.csv', all_varchar=true) "
+                         "WHERE id = '1'").fetchall()
+    assert [n for (n,) in notes] == [long, long]                       # both versions carry the real note

@@ -185,6 +185,12 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
             if state["watermark"] else since
         run = {"sync_id": state["next_sync"], "page": 0, "since": start, "cursor": None, "max_seen": state["watermark"], "stamps": {},
                "recent": []}
+    # An approved column already called drift by an earlier sync (before `accepted` existed) is a column now,
+    # whether or not this run's pages happen to carry it: NYC omits a field that is empty on a whole page.
+    for k in [k for k in state.get("drift", []) if k in accepted]:
+        state["drift"].remove(k)
+        if state["columns"] is not None and k not in state["columns"]:
+            state["columns"].append(k)
     pages = 0
     while True:
         body, _ = client.get(_query(dataset, tuple(run["cursor"]) if run["cursor"] else None, run["since"], page_size,

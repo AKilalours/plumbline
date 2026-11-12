@@ -1047,8 +1047,16 @@ taken arrives once, by the log; a slot nobody reads reports how much log it hold
 real database and are fixed with tests that fail on the old code: the loader's file rule called two versions of
 one key in one batch a conflict and quarantined the later (the current view said "paid" for a shipped order),
 and the starting copy was tagged with the slot's own log position, which the first change after it can share,
-leaving "newest" to tie-breaks. The app's Database view replays one recorded run (`python -m
-plumbline.ingest.cdc_demo`); the public app has no database to connect to.
+leaving "newest" to tie-breaks. A third surfaced when a 14 kB note was added: Postgres does not log a large
+value an update leaves alone, test_decoding writes "unchanged-toast-datum" instead, and the connector stored that
+text as the note. It now takes the value from the old row when the table logs full rows, and otherwise reads it
+back by primary key (tested under both settings). Measured on a 2-core machine
+(`python -m plumbline.ingest.cdc_bench`): 64,000 to 76,000 changes a second end to end over two runs, a
+100,000-change burst caught up in 1.3 to 1.6 seconds while the unread slot held 16 MB of log, the starting copy at about 120,000 rows a
+second; a batch is whole transactions, so one huge transaction is one huge batch. Why this design and not
+pgoutput streaming or Debezium, and when to switch: [ADR 0006](adr/0006-cdc-with-test-decoding.md). The app's
+Database view replays one recorded run (`python -m plumbline.ingest.cdc_demo`); the public app has no database
+to connect to.
 
 **Feed health.** `python -m plumbline.ingest.freshness` reads both daily histories and, for each feed, says
 whether its last success is within its promise (26 hours for a daily job), how many runs in a row

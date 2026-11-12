@@ -277,3 +277,17 @@ def test_the_test_server_refuses_row_id_lookups_like_nyc_does(api):
     for where in (f":id = '{k}'", f":id in ('{k}')"):
         with pytest.raises(BadQuery):
             ds.query({"$select": "*, :id, :updated_at", "$where": where})
+
+
+def test_an_approved_column_already_called_drift_is_promoted_even_when_no_page_carries_it(api, tmp_path):
+    """The first run after the fix re-read pages where every apartment number was empty, so NYC left the field
+    out and apt_condo_no_s stayed on the drift list although the contract approves it."""
+    ds, url = api(rows=300)
+    sync_dataset(_client(url), "x", tmp_path, name="p", since="2026-01-01", page_size=100)
+    p = tmp_path / "_sync_state.json"
+    st = json.loads(p.read_text())
+    st["drift"] = ["apt_condo_no_s"]                       # as an older connector left it
+    p.write_text(json.dumps(st))
+    sync_dataset(_client(url), "x", tmp_path, name="p", page_size=100, accepted={"apt_condo_no_s"})
+    st = json.loads(p.read_text())
+    assert st["drift"] == [] and "apt_condo_no_s" in st["columns"]

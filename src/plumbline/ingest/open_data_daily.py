@@ -149,6 +149,8 @@ def _publish(warehouse: Path, name: str, target: str | None, run_at: str) -> dic
     """Upsert this run's rows into the cloud warehouse when a token is configured; otherwise None."""
     import os
     from ..products.publish import Table, publish
+    if target == "off":                 # as in stream_daily: "off" turns publishing off (it once made a file named off)
+        return None
     target = target or ("md:plumbline" if os.environ.get("MOTHERDUCK_TOKEN") else None)
     if not target:
         return None

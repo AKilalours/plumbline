@@ -16,7 +16,7 @@ Ingest · resolve · predict · act</p>
 <a href="https://minerva-plumbline.streamlit.app/try"><b>📤 Try it on your own files</b></a> · drop customer CSVs with any column names, get one clean customer list back (nothing is stored)</p>
 
 <p align="center"><b>Real, every day:</b> NYC Open Data permits and Wikimedia's live edit stream → loaded under reviewed contracts → upserted into a <b>MotherDuck</b> cloud warehouse, every run on the record (<a href="docs/details.md#a-cloud-warehouse-target">how</a>).<br>
-<sub>The people are invented on purpose, each with a hidden answer key, so every number below is measured against the truth. <a href="docs/details.md#honest-limits-and-the-questions-they-raise">Honest limits</a>.</sub></p>
+<sub>The people are invented on purpose, each with a hidden answer key, so every number below is measured against the truth. <a href="docs/details.md#honest-limits-and-the-questions-they-raise">Honest limits</a> · <a href="docs/adr/README.md">Design decisions, with what was rejected and when to revisit</a>.</sub></p>
 
 <table>
 <tr>
@@ -36,6 +36,9 @@ Ingest · resolve · predict · act</p>
 <td align="center"><b>🧭 Where every product comes from</b><br><sub>dbt's own graph, live row counts</sub></td>
 </tr>
 </table>
+
+<p align="center"><b>Run like a service:</b> <a href="docs/reliability/slo.md">objectives with error budgets</a>, measured from every run ·
+<a href="docs/postmortems/">postmortems</a> of three real incidents · <a href="docs/adr/">decision records</a> · contract changes that would break consumers fail CI</p>
 
 <p align="center"><a href="docs/video/plumbline-demo.mp4"><img src="docs/img/video.png" width="880" alt="Watch the 80-second tour of the live app"></a></p>
 

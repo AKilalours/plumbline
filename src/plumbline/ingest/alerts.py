@@ -47,6 +47,15 @@ def problems(feeds: list[Feed], now: datetime) -> dict[str, str]:
                 f"connector cannot get past, or a page budget too small for the day's changes.")
         if last and not last.get("ok"):
             out[f"{f.name}: the latest run failed"] = f"Run at {last['run_at']} failed:\n\n`{last.get('error', 'no reason recorded')}`"
+        # a column the source keeps sending and the contract does not have: someone has to decide (apt_condo_no_s
+        # sat on every run line for five days, reported and never alerted)
+        recent = [r for r in sorted(runs, key=lambda r: r["run_at"]) if r.get("ok")][-3:]
+        if len(recent) == 3:
+            waiting = set.intersection(*(set(r.get("drift") or []) for r in recent))
+            if waiting:
+                out[f"{f.name}: new column{'s' if len(waiting) > 1 else ''} waiting for review: {', '.join(sorted(waiting))}"] = (
+                    f"The source has sent {', '.join(sorted(waiting))} in each of the last 3 runs and the contract does not "
+                    "list it, so it is held back. Add it to the contract (or decide to drop it) so it stops being lost.")
         rc = (last or {}).get("reconcile")
         if isinstance(rc, dict) and rc.get("error"):
             out[f"{f.name}: the check against the source failed"] = f"Run at {last['run_at']}: `{rc['error']}`. The sync itself succeeded."

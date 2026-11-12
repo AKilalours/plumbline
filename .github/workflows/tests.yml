@@ -143,5 +143,23 @@ jobs:
           PLUMBLINE_PG_DSN: host=localhost port=5432 user=postgres dbname=postgres
         run: |
           python -m pytest -q -p no:cacheprovider -rs tests/test_postgres_cdc.py | tee pg.out
-          grep -q "12 passed" pg.out
+          grep -q "20 passed" pg.out
           python -m plumbline.ingest.cdc_demo --dsn "$PLUMBLINE_PG_DSN" --out /tmp/postgres_cdc.json
+
+  contracts:
+    # A contract is a promise to whoever reads its tables: a change that would break them (a column removed or
+    # retyped, a value made required, the key changed) fails here unless the contract's version goes up.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: No contract change breaks its consumers unannounced
+        run: |
+          python -m pip install -q pyyaml
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          PYTHONPATH=src python -m plumbline.ingest.contract_check --base "$BASE"

@@ -16,7 +16,10 @@ How it stays correct, in the order a real CDC tool (Debezium, Fivetran's log-bas
 3. **Every change carries its log position** (`_lsn`, a number that only grows), and the contract's
    `latest_by: [_lsn]` makes the newest change win; `deleted_when` drops a key whose newest change is a delete.
    Row versions are ordered by the database's log, not by a clock that can skew.
-4. **Not consuming is not free:** a slot nobody reads keeps the database's log on disk. `lag_bytes` reports how
+4. **A batch is whole transactions.** pg_logical_slot_peek_changes stops at a transaction boundary, so a batch
+   can exceed max_changes by up to one transaction: memory per batch is the limit rounded up to the transaction
+   that crosses it. An application that commits a million rows at once is read as one batch of a million.
+5. **Not consuming is not free:** a slot nobody reads keeps the database's log on disk. `lag_bytes` reports how
    much the slot is holding back, so a stalled reader is visible before the disk fills.
 
 The log is decoded with test_decoding, Postgres's built-in plugin (no extension to install); `parse` reads its
@@ -54,6 +57,8 @@ def _utc(v) -> str | None:
         t = v.strip()
         if re.search(r"[+-]\d\d$", t):
             t += ":00"
+        # Postgres trims trailing zeros ("46.32"); Python 3.10 parses only 3 or 6 fraction digits, so pad to 6
+        t = re.sub(r"\.(\d{1,6})(?=[+-]|$)", lambda m: "." + m.group(1).ljust(6, "0"), t)
         v = datetime.fromisoformat(t)
     if v.tzinfo is not None:
         v = v.astimezone(timezone.utc).replace(tzinfo=None)
@@ -69,17 +74,43 @@ def parse(data: str) -> tuple[str, str, dict] | None:
     if not m:
         return None
     table, op, rest = m.group(1), m.group(2), m.group(3) or ""
+    old = {}
+    if rest.startswith("old-key: ") and " new-tuple: " in rest:   # REPLICA IDENTITY FULL (or a changed key)
+        before, rest = rest[len("old-key: "):].split(" new-tuple: ", 1)
+        old = _fields(before)
+    row = _fields(rest)
+    # A large value (TOAST) that an update did not touch is not in the log: test_decoding writes a placeholder.
+    # Stored as is, a customer's long note became the text "unchanged-toast-datum". Taken from the old row
+    # when the table logs it in full; otherwise left as UNCHANGED for poll() to read from the table.
+    for k, v in row.items():
+        if v == TOAST:
+            row[k] = old[k] if k in old and old[k] != TOAST else UNCHANGED
+    return table.replace('"', ""), OPS[op], row
+
+
+TOAST = "unchanged-toast-datum"
+
+
+class _Unchanged:
+    def __repr__(self):
+        return "UNCHANGED"
+
+
+UNCHANGED = _Unchanged()
+
+
+def _fields(text: str) -> dict:
     row = {}
-    for name, type_, raw in _FIELD.findall(rest):
+    for name, type_, raw in _FIELD.findall(text):
         if raw == "null":
             row[name] = None
         elif raw.startswith("'"):
             row[name] = raw[1:-1].replace("''", "'")
         else:
             row[name] = raw
-        if type_.startswith("timestamp") and row[name] is not None:
+        if type_.startswith("timestamp") and row[name] not in (None, TOAST):
             row[name] = _utc(row[name])
-    return table.replace('"', ""), OPS[op], row
+    return row
 
 
 @dataclass
@@ -92,6 +123,7 @@ class PollResult:
     first_lsn: str | None = None
     last_lsn: str | None = None
     lag_bytes: int | None = None
+    toast_filled: int = 0          # large unchanged values read from the table (its replica identity is not FULL)
 
 
 class PostgresCDC:
@@ -205,6 +237,7 @@ class PostgresCDC:
                 res.first_lsn = res.first_lsn or lsn
                 res.last_lsn = lsn
             res.transactions = len(xid_seen)
+            res.toast_filled = self._fill_unchanged(cur, rows)
             for table, rs in rows.items():
                 cols = st.get("columns", {}).get(table) or self._columns(cur, table)
                 extra = [c for r in rs for c in r if not c.startswith("_") and c not in cols]
@@ -223,6 +256,32 @@ class PostgresCDC:
         finally:
             con.close()
         return res
+
+    def _fill_unchanged(self, cur, rows: dict[str, list[dict]]) -> int:
+        """Read the large values the log left out from the table itself, by primary key. Exact for the current
+        view: any later change to that column is logged in full and lands after this one. Only this version's
+        history row may show the value as of the read, which is why REPLICA IDENTITY FULL is the better setting."""
+        n = 0
+        for table, rs in rows.items():
+            need = [r for r in rs if any(v is UNCHANGED for v in r.values())]
+            if not need:
+                continue
+            schema, t = table.split(".")
+            cur.execute("""SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                           WHERE i.indrelid = %s::regclass AND i.indisprimary ORDER BY a.attnum""", (table,))
+            pk = [r[0] for r in cur.fetchall()]
+            if not pk:
+                raise RuntimeError(f"{table}: an unchanged large value needs a primary key to be read back; "
+                                   f"run ALTER TABLE {table} REPLICA IDENTITY FULL")
+            for r in need:
+                cols = [k for k, v in r.items() if v is UNCHANGED]
+                cur.execute(f"SELECT {', '.join(cols)} FROM {table} WHERE " + " AND ".join(f"{k} = %s" for k in pk),
+                            [r[k] for k in pk])
+                got = cur.fetchone()
+                for k, v in zip(cols, got or [None] * len(cols)):
+                    r[k] = v                 # a row deleted since: its delete is later in the log and removes it
+                n += len(cols)
+        return n
 
     def drop(self) -> None:
         """Remove the slot (it would otherwise keep the database's log forever)."""

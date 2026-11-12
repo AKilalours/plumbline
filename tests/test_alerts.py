@@ -130,3 +130,11 @@ def test_rows_gone_from_the_source_are_named_for_a_person_not_deleted():
     assert list(found) == ["NYC Open Data permits: rows we hold are gone from the source"] and "row-a" in next(iter(found.values()))
     quiet = Feed("x", 26, lambda: [run(d) for d in range(8, 14)] + [run(14, reconcile={"checked": 2000, "same": 1999, "changed": 0, "gone": 1})])
     assert problems([quiet], NOW) == {}
+
+
+def test_a_new_column_held_back_three_runs_running_asks_a_person_to_decide():
+    feed = Feed("NYC Open Data permits", 26, lambda: [run(d) for d in range(8, 11)] +
+                [run(d, drift=["apt_condo_no_s"]) for d in range(11, 14)])
+    assert list(problems([feed], NOW)) == ["NYC Open Data permits: new column waiting for review: apt_condo_no_s"]
+    two = Feed("x", 26, lambda: [run(d) for d in range(8, 12)] + [run(d, drift=["c"]) for d in range(12, 14)])
+    assert problems([two], NOW) == {}

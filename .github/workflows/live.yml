@@ -9,7 +9,9 @@ permissions:
   contents: read
 concurrency:
   group: live-app
-  cancel-in-progress: true
+  # A newer push replaces an older check, but the daily scheduled run waits its turn: it used to cancel the
+  # check of a fresh push (run #31 on 2026-11-12), which showed as cancelled on a commit that never failed.
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 jobs:
   clickthrough:
     runs-on: ubuntu-latest

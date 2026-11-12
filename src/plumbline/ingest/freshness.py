@@ -3,7 +3,9 @@
     python -m plumbline.ingest.freshness            # prints each feed's health; exits 1 if any is late
 
 A feed is on time when its last successful run is within its promise (26 hours for a daily job: a day plus
-slack for a slow or delayed runner). Reliability is read from the run history, failures included: the streak
+slack for a slow or delayed runner) and, where the run measured it, the data it landed is within the promise of
+the publisher's newest update. A run that succeeds while the data stops moving is "behind", not on time: on
+2026-11-10 to 12 every NYC run passed while the landed permits fell a day behind the city's. Reliability is read from the run history, failures included: the streak
 of successful runs ending at the latest one, and how many of the last 7 days had at least one success.
 Nothing here is estimated: every number is counted from the run lines the jobs wrote.
 """
@@ -38,8 +40,11 @@ def health(runs: list[dict], promise_hours: float, now: datetime) -> dict:
     last_ok = _at(ok[-1]) if ok else None
     since = None if last_ok is None else round((now - last_ok).total_seconds() / 3600, 1)
     status = "never ran" if not runs else "no success yet" if last_ok is None else "on time" if since <= promise_hours else "late"
+    behind = ok[-1].get("hours_behind_source") if ok and ok[-1].get("source_newest") else None   # older runs measured something else
+    if status == "on time" and behind is not None and behind > promise_hours:
+        status = "behind"
     week = [r for r in runs if _at(r) >= now - timedelta(days=7)]
-    return {"status": status, "promise_hours": promise_hours, "hours_since_success": since,
+    return {"status": status, "promise_hours": promise_hours, "hours_since_success": since, "hours_behind": behind,
             "last_success": last_ok.strftime("%Y-%m-%dT%H:%M:%SZ") if last_ok else None,
             "streak": streak, "good_days_of_7": sum(d in good_days for d in days), "runs_7": len(week),
             "failed_7": sum(not r.get("ok") for r in week), "first_run": runs[0]["run_at"] if runs else None,

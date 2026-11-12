@@ -93,7 +93,9 @@ function count(el, to, fmt, from) {
   const f = F[fmt] || F.int;
   if (typeof to !== 'number' || reduce) { el.textContent = typeof to === 'number' ? f(to) : to; return; }
   const a = (typeof from === 'number') ? from : 0, t0 = performance.now(), dur = 850;
-  const step = t => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+  // rAF's timestamp is when the frame began, which can be before t0: unclamped, the first frame drew "-336 rows",
+  // and in a collapsed section (no further frames) it stayed that way.
+  const step = t => { const p = Math.max(0, Math.min(1, (t - t0) / dur)), e = 1 - Math.pow(1 - p, 3);
     el.textContent = f(a + (to - a) * e); if (p < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
@@ -206,7 +208,11 @@ R.worth = () => {
   app.appendChild(w);
   const bars = w.querySelector('#bars'), max = Math.max(...D.sources.map(s => s.lost_per_person)) * 10000 || 1;
   D.sources.forEach(s => { const r = document.createElement('div'); r.className = 'b';
-    r.innerHTML = `<div class="lab">${esc(s.label)}<small>${esc(s.cost)} · AUC ${F.plus4(s.auc_change)} [${F.plus4(s.lo)}, ${F.plus4(s.hi)}]</small></div>
+    // "AUC -0.0496" under a source read as the source's own score; it is the change when the source is removed.
+    // A source the model has no inputs from cannot be measured this way, and is said so rather than shown as $0.
+    const note = !s.used ? 'not an input to this model, so not measured'
+      : `without it, AUC ${F.plus4(s.auc_change)} (95%: ${F.plus4(s.lo)} to ${F.plus4(s.hi)})`;
+    r.innerHTML = `<div class="lab">${esc(s.label)}<small>${esc(s.cost)} · ${note}</small></div>
       <div class="track"><div class="fill" style="background:${s.measured ? s.color : '#C9C9C9'};width:0"></div></div><div class="val num">$0.000</div>`;
     r.onmouseenter = () => w.querySelector('#cap').textContent = s.why; r.onmouseleave = () => w.querySelector('#cap').textContent = D.hint;
     bars.appendChild(r); s.el = r; });
@@ -214,7 +220,9 @@ R.worth = () => {
   const upd = v => { w.querySelector('#vv').textContent = F.usd0(v);
     D.sources.forEach(s => { const p = s.measured ? s.lost_per_person * v : 0;
       s.el.querySelector('.fill').style.width = (100 * p / (max * D.max_value / 10000)) + '%';
-      count(s.el.querySelector('.val'), p, 'usd3', prev[s.label] || 0); prev[s.label] = p; });
+      if (s.measured) count(s.el.querySelector('.val'), p, 'usd3', prev[s.label] || 0);
+      else s.el.querySelector('.val').textContent = s.used ? 'no effect' : 'n/a';
+      prev[s.label] = p; });
     const per10k = D.sources[0].lost_per_person * v * 10000;
     const dec = w.querySelector('#dec');
     dec.innerHTML = D.decisions.map(d => `<div class="card ${d.tone} fade"><div class="mono">${esc(d.label)}</div><div class="w">${esc(d.word)}</div>
@@ -347,7 +355,17 @@ R.history = () => {
     {label: 'On schedule since', value: S.first.slice(0, 10), fmt: 'raw', sub: `${days} day${days > 1 ? 's' : ''}`, tone: 'info'},
     {label: 'Runs that succeeded', value: S.succeeded, fmt: 'int', sub: `of ${S.runs}`, tone: S.succeeded === S.runs ? 'pass' : 'warn'},
     {label: 'Rows pulled from NYC', value: S.rows, fmt: 'int', sub: `${F.int(S.retries)} requests retried`, tone: 'info'},
-    {label: 'Behind the source', value: last.hours_behind_source ?? 0, fmt: 'raw', sub: 'hours, at the last run', tone: (last.hours_behind_source ?? 99) <= 30 ? 'pass' : 'warn'}]));
+    last.source_newest
+      ? {label: 'Behind the source', value: last.hours_behind_source ?? 0, fmt: 'raw', sub: "hours behind NYC's newest update, at the last run",
+         tone: (last.hours_behind_source ?? 99) <= 26 ? 'pass' : 'fail'}
+      : {label: 'Newest row landed', value: last.hours_behind_source ?? 0, fmt: 'raw', sub: 'hours old at the last run', tone: 'info'}]));
+  if (last.reload_skipped) {
+    const b = document.createElement('div'); b.className = 'card fade'; b.style.marginTop = '12px'; b.style.borderColor = 'var(--gold)';
+    b.innerHTML = `<div class="mono">Publisher reload skipped</div><div style="margin-top:6px;font-size:14px">NYC stamped ${F.int(last.reload_skipped.rows)} rows
+      with one update time (${esc(last.reload_skipped.timestamp)}): the table republished, not that many changes. The run counted it with one
+      request, recorded it here and moved past it, so the real changes after it landed.</div>`;
+    app.appendChild(b);
+  }
   if (last.bulk_rewrite) {
     const b = document.createElement('div'); b.className = 'card fade'; b.style.marginTop = '12px'; b.style.borderColor = 'var(--gold)';
     b.innerHTML = `<div class="mono">Publisher reloaded the table</div><div style="margin-top:6px;font-size:14px">${F.int(last.bulk_rewrite.rows)} of ${F.int(last.bulk_rewrite.of)} rows
@@ -366,10 +384,13 @@ R.history = () => {
     <text x="${W - 10}" y="${H + 16}" font-size="11" fill="#6B6B6B" text-anchor="end">${esc(last.run_at.slice(0, 10))}</text></svg>`;
   box.innerHTML = svg; app.appendChild(box);
   const cap = document.createElement('div'); cap.className = 'cap';
-  const tell = r => r.ok ? `${r.run_at.slice(0, 16).replace('T', ' ')} UTC: ${F.int(r.rows)} rows in ${r.pages} pages, ${r.retries} retried`
+  const tell = r => r.ok ? `${r.run_at.slice(0, 16).replace('T', ' ')} UTC: ${F.int(r.rows)} new rows`
+      + (r.reread ? ` (${F.int(r.reread)} read again and already held)` : '') + ` in ${r.pages} pages, ${r.retries} retried`
       + (Object.keys(r.retries_by_cause || {}).length ? ` (${Object.entries(r.retries_by_cause).map(([k, v]) => v + '×' + k).join(', ')})` : '')
       + (r.rows_loaded !== undefined ? `; ${F.int(r.rows_loaded)} loaded, ${F.int(r.rows_quarantined)} quarantined` : '') + `; ${r.seconds} s`
       + (r.drift && r.drift.length ? `; new columns held back: ${r.drift.join(', ')}` : '')
+      + (r.capped ? '; stopped at its page budget, the next run continues from there' : '')
+      + (r.reload_skipped ? `; skipped a reload of ${F.int(r.reload_skipped.rows)} rows` : '')
     : `${r.run_at.slice(0, 16).replace('T', ' ')} UTC: failed. ${r.error || ''}`;
   cap.textContent = tell(last); app.appendChild(cap);
   box.querySelectorAll('.hr').forEach(e => { e.onmouseenter = () => cap.textContent = tell(runs[+e.dataset.i]); e.onmouseleave = () => cap.textContent = tell(last); });
@@ -731,7 +752,7 @@ R.people = () => {
     const boxes = [...new Set([...p.keys, ...p.records.map(r => r.person_key).filter(Boolean)])];
     const verdict = p.kind === 'correct' ? `${p.records.length} records from ${new Set(p.records.map(r => r.source)).size} sources, joined into one person. Nobody else mixed in.`
       : p.kind === 'split' ? `Their records landed in ${boxes.length} persons: one real person counted ${boxes.length} times.`
-      : `Someone else's record was joined to them: ${p.strangers.map(s => s.really).join(', ')}.`;
+      : `Someone else's record was joined to them: ${[...new Set(p.strangers.map(s => s.really === p.name ? `another person also named ${s.really}` : s.really))].join(', ')}.`;
     stage.innerHTML = `<div class="card fade" style="margin-top:4px"><div class="row" style="justify-content:space-between">
         <div><div class="mono">Answer key</div><div style="font-size:24px;font-weight:600">${esc(p.name)}</div></div>
         <span class="pill p-${tone}">${esc(kl)}</span></div><div class="cap" style="margin-top:4px">${esc(verdict)}</div>
@@ -748,7 +769,7 @@ R.people = () => {
           <div class="cap" style="margin:2px 0 0;overflow-wrap:anywhere">${esc(r.email || 'no email')}${r.phone ? ' · ' + esc(r.phone) : ''}<br>${esc(r.address)}</div>`; box.appendChild(c); });
       strange.forEach((s_, i) => { const c = document.createElement('div'); c.className = 'rec';
         c.style.cssText = `margin-top:8px;border:1px solid #F2C9C0;background:#FDF5F3;animation:fly1 .6s ${bi * 200 + (mine.length + i) * 160}ms both`;
-        c.innerHTML = `<div class="mono" style="color:var(--red)">${esc(s_.source)} record of someone else</div><div style="font-weight:600;font-size:14px;color:var(--red)">really ${esc(s_.really)}</div>`; box.appendChild(c); });
+        c.innerHTML = `<div class="mono" style="color:var(--red)">${esc(s_.source)} record of someone else</div><div style="font-weight:600;font-size:14px;color:var(--red)">${s_.really === p.name ? `another ${esc(s_.really)}: same name, a different person` : `really ${esc(s_.really)}`}</div>`; box.appendChild(c); });
       lanes.appendChild(box); });
     const gold = stage.querySelector('#gold'), why = stage.querySelector('#why'), byAttr = {};
     p.fields.filter(f => f.person_key === boxes[0]).forEach(f => (byAttr[f.attr] = byAttr[f.attr] || []).push(f));

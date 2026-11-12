@@ -341,12 +341,15 @@ def identity():
                 unsafe_allow_html=True)
     show = Q.showcase(o, k=40)
     p = Q.people(d.run).set_index("person_id")
-    label = lambda pid: f"{p.at[pid, 'first_name']} {p.at[pid, 'last_name']}"
+    name = lambda pid: f"{p.at[pid, 'first_name']} {p.at[pid, 'last_name']}"
     kinds = {"Found despite typos": "correct", "Split in two": "split", "Merged with someone": "merged"}
     a, b = st.columns([3, 1], vertical_alignment="bottom")
     with a:
         kind = choose("Show", list(kinds), default="Merged with someone", key="id_kind")
     pool = show[kinds[kind]]
+    twice = {n for n in map(name, pool) if sum(name(x) == n for x in pool) > 1}
+    # two people can share a name (here, one's record was joined to the other's): the list told them apart by nothing
+    label = lambda pid: f"{name(pid)} · {str(pid)[-4:]}" if name(pid) in twice else name(pid)
     if not pool:
         st.info("Nobody of that kind in this city.")
         return
@@ -997,7 +1000,17 @@ def onboarding_page():
         not_recorded_note("onboarding")
         return
     rows = sm["rows"]
-    name = choose("Partner file", [r["partner"] for r in rows], default=rows[0]["partner"], key="ob_pick")
+    held = [r for r in rows if r["split"] == "test"]
+    t = sm.get("test", {})
+    if t.get("model") and t.get("heuristic"):
+        m_, h_ = t["model"], t["heuristic"]
+        st.markdown(f'<div class="note">On the {len(held)} held-out files (graded, never used to tune either drafter): column types '
+                    f'<b>model {m_["types"]}</b> vs rules {h_["types"]}; identity roles <b>model {m_["identity_roles"]}</b> vs rules '
+                    f'{h_["identity_roles"]}; keys <b>model {m_["keys"]}</b> vs rules {h_["keys"]}; email and phone found '
+                    f'{m_["privacy_columns_found"]} by both. Neither is perfect, which is why a person approves every draft.</div>',
+                    unsafe_allow_html=True)
+    first = (held or rows)[0]["partner"]           # open on a held-out file: the practice files flatter both drafters
+    name = choose("Partner file", [r["partner"] for r in rows], default=first, key="ob_pick")
     r = next(x for x in rows if x["partner"] == name)
     st.caption("These partner files come from the small city the recorded model runs were made on. That city keeps the test "
                "fixtures' invented addresses (\"Fixture Street\"), so each recording replays exactly; the rest of the app runs on "
@@ -1014,27 +1027,20 @@ def onboarding_page():
     with k[0]:
         stat("Email and phone caught", f"{g['privacy_found']}/{g['privacy_total']}", "", "pass" if g["privacy_found"] == g["privacy_total"] else "fail")
     with k[1]:
-        stat("Types right", f"{g['type']}/{g['columns']}")
+        stat("Types right", f"{g['type']}/{g['columns']}", "", "pass" if g["type"] == g["columns"] else "fail")
     with k[2]:
-        stat("Identity roles right", f"{g['identity']}/{g['columns']}")
+        stat("Identity roles right", f"{g['identity']}/{g['columns']}", "", "pass" if g["identity"] == g["columns"] else "fail")
     with k[3]:
         stat("Key right", "yes" if g["key"] else "no", "", "pass" if g["key"] else "fail")
     samples = {c["name"]: ", ".join(map(str, c["samples"][:2])) for c in r["profile"]}
-    table = []
-    for c in dft["columns"]:
-        gold = r["gold"].get(c["name"], {})
-        table.append({"Column": c["name"], "Sample": samples.get(c["name"], ""), "Type": c["type"],
-                      "Privacy": c.get("privacy") or "", "Identity": c.get("identity") or "",
-                      "Answer key": f"{gold.get('type', '')} {gold.get('privacy') or ''} {gold.get('identity') or ''}".strip(),
-                      "Check": c.get("unsure", "")})
+    table = [O.draft_row(c, r["gold"].get(c["name"], {}), samples.get(c["name"], "")) for c in dft["columns"]]
     tdf = pd.DataFrame(table)
-
-    def color(row):
-        gold = r["gold"].get(row["Column"], {})
-        fam = lambda t: "date" if t in ("date", "loose_date") else t
-        ok = fam(row["Type"]) == fam(gold.get("type")) and (row["Privacy"] or None) == gold.get("privacy") and (row["Identity"] or None) == gold.get("identity")
-        return [f"background-color: {'#F1F8F4' if ok else '#FBEDEA'}"] * len(row)
-    st.dataframe(tdf.style.apply(color, axis=1), hide_index=True, width="stretch")
+    if not tdf["Drafter was unsure"].any():
+        tdf = tdf.drop(columns="Drafter was unsure")
+    st.dataframe(tdf.style.apply(lambda row: [f"background-color: {'#F1F8F4' if row['Right?'] == '✓' else '#FBEDEA'}"] * len(row), axis=1),
+                 hide_index=True, width="stretch")
+    st.caption("Contact: an email or phone column, which the loader hashes so deletion and unsubscribe can find it. Names "
+               "and addresses are kept for matching people (identity), not hashed.")
     if st.button("Approve into sources/drafts/ (on a private copy)", type="primary"):
         import yaml as _y
         from plumbline.ai.onboard import Draft, to_contract
@@ -1171,6 +1177,15 @@ CARD_UNIT = {"clean": "rows held back by a contract, of {of}", "stale": "people 
              "consent": "unsubscribed people still emailable, of {of}", "deletion": "deleted people with data left"}
 
 
+def snapshot_date() -> str:
+    """The products' as-of date, read from the dbt project so the page cannot drift from it."""
+    try:
+        import yaml as _y
+        return str(_y.safe_load((Path(__file__).parent / "dbt/dbt_project.yml").read_text())["vars"]["as_of"])
+    except Exception:
+        return "the snapshot date"
+
+
 def overview():
     d = demo()
     header("Overview")
@@ -1187,6 +1202,9 @@ def overview():
                 st.markdown(f"**{c['title']}**  \n{c['unit']}. {c['note']}.")
                 ev = c["evidence"].head(500)      # mixed-type columns (a number here, a JSON object there) shown as text
                 st.dataframe(ev.astype({k: str for k in ev.columns[ev.dtypes == object]}), hide_index=True, width="stretch")
+    st.markdown(f'<p class="note">The cards count people in the data products, a snapshot as of {snapshot_date()} so that '
+                'nothing later can leak into a model. The animation above counts everyone the identity graph knows today, '
+                'including people first seen after that date, so its number is larger.</p>', unsafe_allow_html=True)
     st.write("")
     left, right = st.columns([3, 2], gap="large")
     with left:
@@ -1229,6 +1247,12 @@ def open_data_runs() -> list[dict]:
     return OD.history(url=OD.HISTORY_URL)
 
 
+def short(text: str, n: int) -> str:
+    """At most n characters, cut at a word with an ellipsis: "Initialization f" read like a typo."""
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[:n].rsplit(" ", 1)[0].rstrip(":;,.") + "…"
+
+
 def feed_health(runs: list[dict], promise_hours: float = 26):
     """On time, streak and the last 7 days, counted from the run history the scheduled job writes (failures included)."""
     from datetime import datetime as _dt, timezone as _tz
@@ -1237,14 +1261,19 @@ def feed_health(runs: list[dict], promise_hours: float = 26):
     if h["status"] == "never ran":
         return
     since = h["hours_since_success"]
+    sub = f"last success {since:g} h ago; promise: within {promise_hours:g} h" if since is not None else "no successful run yet"
+    if h["hours_behind"] is not None:
+        sub += f"; data {h['hours_behind']:g} h behind the source"
+    days = (_dt.now(_tz.utc) - _dt.strptime(h["first_run"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz.utc)).days + 1
     viz("tiles", {"items": [
-        {"label": "Feed status", "value": h["status"], "fmt": "raw",
-         "sub": f"last success {since:g} h ago; promise: within {promise_hours:g} h" if since is not None else "no successful run yet",
+        {"label": "Feed status", "value": h["status"], "fmt": "raw", "sub": sub,
          "tone": "pass" if h["status"] == "on time" else "fail"},
         {"label": "Successful runs in a row", "value": h["streak"], "fmt": "int", "sub": f"since {h['first_run'][:10]}",
          "tone": "pass" if h["streak"] else "warn"},
         {"label": "Good days, last 7", "value": f"{h['good_days_of_7']} of 7", "fmt": "raw",
-         "sub": f"{h['failed_7']} failed run{'s' if h['failed_7'] != 1 else ''} this week" + (f": {h['last_error'][:60]}" if h["failed_7"] and h["last_error"] else ""),
+         "sub": (f"the feed is {days} day{'s' if days != 1 else ''} old; " if days < 7 else "")
+                + f"{h['failed_7']} failed run{'s' if h['failed_7'] != 1 else ''} this week"
+                + (f": {short(h['last_error'], 70)}" if h["failed_7"] and h["last_error"] else ""),
          "tone": "pass" if h["good_days_of_7"] == 7 else "info" if not h["failed_7"] else "warn"}]}, 120)
 
 

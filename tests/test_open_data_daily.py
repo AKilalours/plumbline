@@ -139,3 +139,30 @@ def test_a_failed_cloud_publish_keeps_the_cursor_and_still_turns_the_job_red(cit
     from datetime import datetime, timezone
     p = problems([Feed("NYC Open Data permits", 26, lambda: [first])], datetime.now(timezone.utc))
     assert any("cloud publish failed" in t for t in p)
+
+
+def test_lag_is_measured_against_the_publishers_newest_update_not_the_clock(city):
+    """The old measure, now minus the newest row landed, read a quiet weekend at the city as lag and could not tell
+    it from a stuck sync. Caught up means 0 hours behind, however old the newest row is."""
+    ds, kw = city
+    r = OD.run(**kw)
+    newest = max(x[":updated_at"] for x in ds.rows.values())
+    assert r["source_newest"] == newest.rstrip("Z") and r["hours_behind_source"] == 0.0
+
+
+def test_after_a_reload_bigger_than_a_runs_budget_the_next_run_lands_the_changes_after_it(city):
+    """What happened on 2026-11-10 to 12: one time on every row, more rows than a run reads. Each run used to stop
+    at its budget inside the block and start over at its top the next time, so later changes never landed."""
+    from datetime import timedelta
+    from plumbline.store.socrata_server import ts
+    ds, kw = city
+    OD.run(**kw)
+    t = ds.now_max() + timedelta(days=1)
+    for x in ds.rows.values():
+        x[":updated_at"] = ts(t)
+    later = sorted(ds.rows)[:9]
+    for i, k in enumerate(later):
+        ds.rows[k][":updated_at"] = ts(t + timedelta(hours=26, seconds=i))
+    r = OD.run(**kw, max_pages=3, reload_rows=1000)
+    assert r["ok"] and r["complete"] and r["reload_skipped"]["rows"] == 1191 and r["rows"] == 9
+    assert r["hours_behind_source"] == 0.0

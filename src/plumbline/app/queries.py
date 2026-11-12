@@ -305,7 +305,8 @@ def person_dot(recs: pd.DataFrame, strangers: pd.DataFrame, truth_name: str) -> 
             typo = own and sorted(sent.split()) != sorted(want.split())
             fill = SOURCE_COLOR.get(kind, "white") if own else "#F8E1DC"
             extra = ' color="#B3432F" penwidth=2' if not own else (' fontcolor="#B3432F"' if typo else "")
-            tag = "\\n(spelled differently)" if typo else ("" if own else "\\nsomeone else")
+            same = not own and sorted(sent.split()) == sorted(want.split())
+            tag = "\\n(spelled differently)" if typo else ("" if own else "\\nanother person, same name" if same else "\\nsomeone else")
             out.append(f'{node} [label="{_dot(kind)}\\n{_dot(name)}{tag}" fillcolor="{fill}"{extra}];')
             if own:
                 edges.append(f"{node} -> truth;")

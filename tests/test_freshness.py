@@ -38,3 +38,15 @@ def test_runs_out_of_order_are_sorted_by_time_first():
 def test_no_history_says_so_rather_than_guessing():
     assert health([], 26, NOW)["status"] == "never ran"
     assert health([run(14, ok=False)], 26, NOW)["status"] == "no success yet"
+
+
+def test_runs_that_succeed_while_the_data_falls_behind_the_source_are_behind_not_on_time():
+    """2026-11-10 to 12: every NYC run passed and the feed read "on time" while the landed permits fell a day behind."""
+    runs = [run(d) for d in range(8, 14)] + [{**run(14), "source_newest": "2026-11-14T10:00:00.000", "hours_behind_source": 38.3}]
+    h = health(runs, 26, NOW)
+    assert h["status"] == "behind" and h["hours_behind"] == 38.3
+
+
+def test_a_run_from_before_lag_was_measured_against_the_source_is_not_read_as_lag():
+    h = health([run(d) for d in range(8, 14)] + [{**run(14), "hours_behind_source": 40.1}], 26, NOW)
+    assert h["status"] == "on time" and h["hours_behind"] is None

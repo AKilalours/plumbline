@@ -86,7 +86,7 @@ def worth(sv: dict, value: int = 2_000) -> dict:
                else "Its interval spans zero: no measurable effect on this model, so it is not priced.")
         out.append({"label": groups[g]["label"], "cost": groups[g]["cost"], "auc_change": w["auc_change"], "lo": w["ci95"][0],
                     "hi": w["ci95"][1], "measured": measured, "lost_per_person": lost / m["test_people"] if measured else 0.0,
-                    "color": color.get(g, BLUE), "why": why})
+                    "color": color.get(g, BLUE), "why": why, "used": bool(w["inputs"])})
     h = vt["homeowner"]
     decisions = [
         {"label": "Property and census", "word": "Keep", "tone": "pass",

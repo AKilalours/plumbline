@@ -651,3 +651,49 @@ def test_an_uploaded_vendor_file_is_rejected_held_or_loaded_by_the_real_loader(w
     assert rej["status"] == "rejected" and "full_name" in rej["note"]
     with pytest.raises(ValueError, match="choose a CSV"):
         O.gate_lab(d, "upload")
+
+
+def test_a_drafted_column_says_what_was_wrong_in_words():
+    """The table showed the answer key as "address street" and an empty Check column."""
+    from plumbline.app import ops as A
+    gold = {"type": "date", "privacy": None, "identity": None}
+    bad = A.draft_row({"name": "JoinDate", "type": "string", "privacy": None, "identity": None, "unsure": ""}, gold, "2024-01-01")
+    assert bad["Right?"] == "type should be date" and bad["Answer key"] == "date"
+    ok = A.draft_row({"name": "Email", "type": "email", "privacy": "email", "identity": None, "unsure": ""},
+                     {"type": "email", "privacy": "email", "identity": None}, "a@b.test")
+    assert ok["Right?"] == "✓" and ok["Drafted"] == "email · contact: email"
+    missed = A.draft_row({"name": "Cell", "type": "string", "privacy": None, "identity": None, "unsure": ""},
+                         {"type": "phone", "privacy": "phone", "identity": None}, "555")
+    assert "missed contact: phone" in missed["Right?"]
+
+
+def test_the_onboarding_page_opens_on_a_held_out_file(world, monkeypatch):
+    """It opened on a practice file both drafters get fully right, which flattered them."""
+    at = _app(world, monkeypatch, "onboarding_page")
+    assert not at.exception, at.exception
+    if not at.session_state["ob_pick"]:
+        pytest.skip("no recorded model run")
+    import json
+    rows = json.loads((ROOT / "docs/results/ai/summary.json").read_text())["onboarding"]["rows"]
+    assert next(r for r in rows if r["partner"] == at.session_state["ob_pick"])["split"] == "test"
+    assert any("held-out files" in m.value for m in at.markdown)
+
+
+def test_the_overview_says_why_its_cards_count_fewer_people_than_the_animation(world, monkeypatch):
+    """The cards said "of 2,762" and the animation "2,958 people" on one page, with nothing saying why."""
+    import yaml
+    at = _app(world, monkeypatch, "overview")
+    as_of = str(yaml.safe_load((ROOT / "dbt/dbt_project.yml").read_text())["vars"]["as_of"])
+    assert any(f"snapshot as of {as_of}" in m.value for m in at.markdown)
+
+
+def test_a_wrongly_joined_namesake_is_called_another_person_with_the_same_name():
+    """Two Cynthia Glovers: the graph labelled the other one's record "Cynthia Glover, someone else" beside an answer
+    key also reading "Cynthia Glover", which looked like a contradiction."""
+    import pandas as pd
+    from plumbline.app import queries as Q
+    recs = pd.DataFrame([{"kind": "CRM", "record_id": "C1", "name": "Cynthia Glover", "person_key": "PK1"}])
+    strangers = pd.DataFrame([{"source": "vendor", "record_id": "V9", "really": "Cynthia Glover", "person_key": "PK1"},
+                              {"source": "store", "record_id": "O3", "really": "Ann Lee", "person_key": "PK1"}])
+    dot = Q.person_dot(recs, strangers, "Cynthia Glover")
+    assert "Cynthia Glover\\nanother person, same name" in dot and "Ann Lee\\nsomeone else" in dot

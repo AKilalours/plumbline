@@ -40,6 +40,11 @@ def problems(feeds: list[Feed], now: datetime) -> dict[str, str]:
                 f"{f.promise_hours:g} h. Successful runs in the last 7 days: {h['good_days_of_7']} of 7."
                 + (f"\n\nLast error: `{h['last_error']}`" if h["last_error"] else "\n\nNo failed run is recorded: the job may "
                    "not have run at all. Check the Actions tab."))
+        if h["status"] == "behind":
+            out[f"{f.name}: the data is {h['hours_behind']:g} hours behind the source"] = (
+                f"Runs succeed, but the newest update landed is {h['hours_behind']:g} h older than the publisher's newest "
+                f"(promise: {f.promise_hours:g} h). A sync that passes without moving forward: check for a reload the "
+                f"connector cannot get past, or a page budget too small for the day's changes.")
         if last and not last.get("ok"):
             out[f"{f.name}: the latest run failed"] = f"Run at {last['run_at']} failed:\n\n`{last.get('error', 'no reason recorded')}`"
         if last and last.get("publish_error"):

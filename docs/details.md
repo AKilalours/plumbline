@@ -956,12 +956,28 @@ addresses stay.
   rows it already landed inside the overlap window; those are counted as `reread` and not landed again, while a
   genuinely late row still lands (three tests fail on the old connector). The three runs' lines are kept as
   recorded.
+- **Green runs, stale data (2026-11-10 to 12).** At 19:43:03.479 on 2026-11-10 the city re-stamped 803,457
+  rows of rbx6-tga4 with one update time (counted on the API afterwards): the table republished, not 800,000
+  changes. Every run after that read 60 pages (its budget), all inside that one block, and stopped. Two faults
+  met. A run stopped by its budget threw its cursor away, so the next run started again at the top of the block,
+  re-read the same 60,000 rows and never got further. And "hours behind the source" was measured as now minus
+  the newest row landed, which cannot tell a quiet weekend at the city from a stuck sync, so nothing alerted.
+  Seven runs passed while 2,438 real changes after the block (to 2026-11-11 19:49) never landed; the
+  measure read 3.9, 11.1, 21.6 and 29.2 hours, and the feed still said "on time". Fixed at the root, each with
+  a test that fails on the old code: a run stopped by its budget keeps its cursor and the next run continues
+  from it; a block under one update time larger than 100,000 rows is counted with one request, recorded as a
+  skipped reload and passed, so the changes after it land in the same run (a daily batch, a few thousand rows
+  under one time, is still read); and lag is now the publisher's newest update minus the newest landed, asked
+  each run, with a feed status of "behind" and an alert when it passes the 26-hour promise even though the
+  runs succeed. The cost of skipping: if the city also changed some rows inside that reload, the incremental
+  does not see it. Catching that needs a reconcile that compares the reloaded rows by hash; it is not built.
 
 **Every day, on the record.** `.github/workflows/open_data.yml` runs
 `python -m plumbline.ingest.open_data_daily` each morning: read the cursor, pull what changed, load it
 under the contract into a scratch warehouse, and append one line to the run history (rows, pages,
-retries by cause, seconds, hours behind the source, rows loaded and quarantined, new columns, bulk
-rewrites; a failed run is recorded with the API's reason). The cursor and history live on the
+retries by cause, seconds, hours behind the publisher's newest update, rows loaded and quarantined, new
+columns, bulk rewrites and skipped reloads, and whether the run finished or stopped at its page budget; a failed
+run is recorded with the API's reason). The cursor and history live on the
 `open-data-history` branch; the app's Sources, Open data page reads them. The records themselves stay
 with the city.
 
@@ -972,7 +988,8 @@ when a feed is late, so it can gate anything downstream. The same numbers head t
 stream pages; they are counted from the run lines, never assumed (`tests/test_freshness.py`).
 
 **Alerts reach a person.** `python -m plumbline.ingest.alerts` turns each problem (a failed run, a feed past
-its promise, more than 5% of a real feed's rows quarantined) into one GitHub issue labelled `feed-alert`, opened
+its promise, data behind the publisher past its promise while runs pass, more than 5% of a real feed's rows
+quarantined) into one GitHub issue labelled `feed-alert`, opened
 with the Actions token the workflow already has; GitHub emails the repository owner, so no extra account is
 needed. The same problem the next day adds a comment instead of a second issue; when it clears, the issue is
 closed with the time it recovered. A `SLACK_WEBHOOK_URL` secret, if set, gets new and resolved alerts too. A job
@@ -1104,6 +1121,12 @@ Recovery steps are in [the runbook](runbooks/ingestion.md).
   real rate is lower than the schedule. That is why freshness is promised as "a success within 26 hours", not
   "every 3 hours", and why the Open data and Live stream pages count the runs that happened (failures included),
   the current streak, and how many of the last 7 days were good. A streak of runs is claimed as runs, not weeks.
+  Measured on 2026-11-12 (00:57 UTC): NYC permits 21 of 23 runs succeeded, the stream 20 of 22, across 6 days
+  (2026-11-07 to 12, a good run on each). Both failures per feed were on 2026-11-07, when the cloud warehouse
+  refused a newer DuckDB; every run since the fix, 17 in a row for each feed, succeeded, and both alert issues
+  that day opened and closed on their own. One honest qualifier: from 2026-11-10 the NYC runs passed while the
+  data stopped moving (see "Green runs, stale data" above), so a green streak alone is not proof of fresh data;
+  that is why lag against the publisher is now measured and alerted on.
 - **"Who uses it?"** Nobody in production: it is a portfolio project. What stands in for users is a public
   app where every button does real work on the visitor's own copy, a click-through of every button against the
   deployed app on every push and every day, and two real feeds that run whether anyone is watching or not.

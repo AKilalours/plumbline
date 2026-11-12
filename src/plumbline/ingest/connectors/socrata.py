@@ -9,7 +9,12 @@ What makes it safe (the store connector's rules, applied to a source we do not o
   (:updated_at, :id). Offset paging is not stable here: a row corrected mid-sync moves to the end
   and shifts every later row back by one, so one row would be skipped.
 - Retries: 429 honours Retry-After; 5xx and dropped or half-sent responses back off with jitter.
-- Resumable: each page is written atomically, then the cursor; a crash resumes from the last cursor.
+- Resumable: each page is written atomically, then the cursor; a crash resumes from the last cursor, and so does
+  a run that stopped at its page budget (max_pages): the next run continues where it stopped, it does not start over.
+- A publisher reload is skipped, not re-read: when one update time covers more than `reload_rows` rows (counted
+  with one request), the run records it and moves past it. On 2026-11-10 NYC stamped 803,457 permits of
+  rbx6-tga4 with one time; each run read the first 60 pages of that block, stopped at its budget, started over
+  at the top the next time, and never reached the 2,438 real changes after it, while every run passed.
 - A fixed column set per landing folder: the first sync records it. Fields a row leaves out are
   written empty; a column that appears later is reported as drift and not written, so a delivery
   never changes shape under its contract.
@@ -86,11 +91,13 @@ def _literal(v: str) -> str:
     return d.strftime("%Y-%m-%dT%H:%M:%S") + f".{d.microsecond // 1000:03d}"
 
 
-def _query(dataset: str, cursor: tuple[str, str] | None, since: str | None, limit: int) -> str:
+def _query(dataset: str, cursor: tuple[str, str] | None, since: str | None, limit: int, after: str | None = None) -> str:
     if cursor:
         t, rid = cursor
         t = _literal(t)
         where = f":updated_at > '{t}' OR (:updated_at = '{t}' AND :id > '{rid}')"
+    elif after:                                       # strictly past a skipped reload
+        where = f":updated_at > '{_literal(after)}'"
     elif since:
         where = f":updated_at >= '{_literal(since)}'"
     else:
@@ -120,6 +127,23 @@ def _to_csv(rows: list[dict], columns: list[str]) -> str:
     return buf.getvalue()
 
 
+def _aggregate(client, dataset: str, select: str, where: str | None, stats) -> dict:
+    q = {"$select": select} | ({"$where": where} if where else {})
+    body, _ = client.get(f"/resource/{dataset}.json?" + urllib.parse.urlencode(q, quote_via=urllib.parse.quote), stats)
+    return body[0] if isinstance(body, list) and body else {}
+
+
+def rows_at(client, dataset: str, t: str, stats) -> int:
+    """How many rows carry exactly this update time (one request)."""
+    return int(_aggregate(client, dataset, "count(*)", f":updated_at = '{_literal(t)}'", stats).get("count", 0))
+
+
+def source_newest(client, dataset: str, stats) -> str | None:
+    """The newest update time the publisher has, to measure how far behind the landed data is."""
+    v = _aggregate(client, dataset, "max(:updated_at)", None, stats).get("max_updated_at")
+    return _ts(v) if v else None
+
+
 def bulk_rewrite(stamps: dict, page_size: int, share: float = 0.9) -> dict | None:
     """Did one update time cover most of this sync? NYC's DOB permit issuance (ipu4-2q9a) stamped 3,898,188
     of its 3,991,259 rows with one time on 2026-11-05: the publisher reloaded the table, so "changed since
@@ -134,7 +158,7 @@ def bulk_rewrite(stamps: dict, page_size: int, share: float = 0.9) -> dict | Non
 
 def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *, name: str, page_size: int = 1000,
                  since: str | None = None, overlap: timedelta = timedelta(minutes=5), max_pages: int | None = None,
-                 after_page: Callable[[int], None] | None = None) -> SyncStats:
+                 after_page: Callable[[int], None] | None = None, reload_rows: int | None = 100_000) -> SyncStats:
     """Fetch rows added or changed since the last sync into landing_dir as CSV pages."""
     landing = Path(landing_dir)
     landing.mkdir(parents=True, exist_ok=True)
@@ -144,6 +168,8 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
     stats = SyncStats()
     stats.by_error = {}
     stats.reread = 0
+    stats.capped = False
+    stats.reload_skipped = None
     # Rows already landed inside the last overlap window, as "row id|version time". The overlap re-reads the
     # last few minutes to catch rows written late with an older time; NYC stamps a whole daily batch with one
     # time, so without this every run re-landed that entire batch and counted it as new.
@@ -158,10 +184,25 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
                "recent": []}
     pages = 0
     while True:
-        body, _ = client.get(_query(dataset, tuple(run["cursor"]) if run["cursor"] else None, run["since"], page_size), stats)
+        body, _ = client.get(_query(dataset, tuple(run["cursor"]) if run["cursor"] else None, run["since"], page_size,
+                                    run.get("after")), stats)
         rows = [_flat(r) for r in (body if isinstance(body, list) else [])]
         run["page"] += 1
         pages += 1
+        skip = None
+        if reload_rows and len(rows) == page_size and len({r["source_updated_at"] for r in rows}) == 1:
+            t = _ts(rows[0]["source_updated_at"])          # a full page under one time: how big is that block?
+            if t not in run.setdefault("checked", []):
+                run["checked"].append(t)
+                n = rows_at(client, dataset, t, stats)
+                if n > reload_rows:
+                    skip = {"timestamp": t, "rows": n}
+        if skip:                                       # a reload, not changes: record it and move past it
+            run["skipped"] = skip
+            run["cursor"], run["after"] = None, skip["timestamp"]
+            run["max_seen"] = max(run["max_seen"] or skip["timestamp"], skip["timestamp"])
+            stats.reload_skipped = skip
+            rows = []
         if rows:
             if state["columns"] is None:          # the first page fixes the delivery's shape
                 keys = sorted({k for r in rows for k in r} - set(SYSTEM.values()))
@@ -196,8 +237,11 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
                 run["stamps"] = dict(sorted(stamps.items(), key=lambda kv: -kv[1])[:50])
         stats.pages += 1
         stats.orders += len(fresh) if rows else 0  # rows landed this run, in the store's counter
-        done = len(rows) < page_size or (max_pages is not None and pages >= max_pages)
-        state["in_progress"] = None if done else run
+        done = not skip and len(rows) < page_size                      # the source has nothing further
+        capped = not done and max_pages is not None and pages >= max_pages
+        state["in_progress"] = None if done else run                  # a capped run keeps its place for the next one
+        stats.capped = capped
+        stats.reload_skipped = stats.reload_skipped or run.get("skipped")
         if done:
             state["bulk_rewrite"] = bulk_rewrite(run.get("stamps", {}), page_size)
             state["watermark"] = run["max_seen"]
@@ -213,7 +257,7 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
         _atomic_write(state_path, json.dumps(state, indent=2))
         if after_page:
             after_page(run["page"])
-        if done:
+        if done or capped:
             return stats
 
 

@@ -5,8 +5,11 @@
 Each run: read the saved cursor (docs/results/open_data/state/), pull only rows changed since then
 (retries, privacy filter, keyset paging), load them under the reviewed contract
 (sources/open_data/<name>.yaml) into a scratch warehouse, and append one line to
-docs/results/open_data/runs.jsonl: rows, pages, retries by cause, seconds, how stale the newest row is,
-rows loaded and quarantined, columns that appeared, and a bulk rewrite if the publisher reloaded the table.
+docs/results/open_data/runs.jsonl: rows, pages, retries by cause, seconds, rows loaded and quarantined, columns
+that appeared, a bulk rewrite or a skipped reload if the publisher reloaded the table, whether the run finished or
+stopped at its page budget (the next run continues from there), and how far the landed data is behind the
+publisher: hours from the newest update landed here to the newest update the publisher has (asked each run).
+That is not "hours since the newest row": a quiet weekend at the city is not lag, and a stuck sync is.
 A failed run is recorded too, with the API's reason, so the history cannot look better than it was.
 
 The landed rows themselves are not kept: this proves the pipeline runs on data nobody here controls; the
@@ -30,9 +33,9 @@ TITLE = "DOB NOW: Build, Approved Permits"
 
 
 def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, out: Path = OUT,
-        contracts: Path = ROOT / "sources" / "open_data", since: str = "2026-11-01", max_pages: int = 60, page_size: int = 1000,
+        contracts: Path = ROOT / "sources" / "open_data", since: str = "2026-11-01", max_pages: int = 60, page_size: int = 1000, reload_rows: int = 100_000,
         client_kw: dict | None = None, now=lambda: datetime.now(timezone.utc), publish_to: str | None = None) -> dict:
-    from .connectors.socrata import DEFAULT_HOST, SocrataClient, sync_dataset
+    from .connectors.socrata import source_newest, DEFAULT_HOST, SocrataClient, sync_dataset
     from .contracts import load_contracts
     from .engine import ingest
     import duckdb
@@ -51,15 +54,19 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
             shutil.copy(state_dir / "_sync_state.json", landing / "_sync_state.json")
         try:
             client = SocrataClient(host or DEFAULT_HOST, os.environ.get("SOCRATA_APP_TOKEN"), **(client_kw or {}))
-            st = sync_dataset(client, dataset, landing, name=name, since=since, max_pages=max_pages, page_size=page_size)
+            st = sync_dataset(client, dataset, landing, name=name, since=since, max_pages=max_pages, page_size=page_size,
+                              reload_rows=reload_rows)
             state = json.loads((landing / "_sync_state.json").read_text())
             rec.update(rows=st.orders, reread=getattr(st, "reread", 0), pages=st.pages, requests=st.requests, retries=st.retries,
                        retries_by_cause=dict(st.by_error), resumed=st.resumed, watermark=state["watermark"],
                        complete=state.get("in_progress") is None, dropped_personal=state["dropped_personal"],
-                       drift=state["drift"], bulk_rewrite=state.get("bulk_rewrite"))
-            if state["watermark"]:
-                newest = datetime.fromisoformat(state["watermark"]).replace(tzinfo=timezone.utc)
-                rec["hours_behind_source"] = round((started - newest).total_seconds() / 3600, 1)
+                       drift=state["drift"], bulk_rewrite=state.get("bulk_rewrite"), capped=st.capped,
+                       reload_skipped=st.reload_skipped)
+            have = state["watermark"] if rec["complete"] else (state.get("in_progress") or {}).get("max_seen") or state["watermark"]
+            rec["source_newest"] = source_newest(client, dataset, st)
+            if have and rec["source_newest"]:
+                gap = datetime.fromisoformat(rec["source_newest"]) - datetime.fromisoformat(have)
+                rec["hours_behind_source"] = round(max(0.0, gap.total_seconds() / 3600), 1)
             contract = contracts / f"{name}.yaml"
             if contract.exists() and st.orders:
                 cdir = Path(tmp) / "contracts"

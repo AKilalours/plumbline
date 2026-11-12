@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from plumbline.store.socrata_server import Dataset, make_rows, serve  # noqa: E402
+from plumbline.store.socrata_server import Dataset, make_rows, serve, ts  # noqa: E402
 
 from plumbline.ingest.connectors.socrata import SocrataClient, SocrataError, sync_dataset  # noqa: E402
 
@@ -130,7 +130,7 @@ def test_an_api_that_ignores_the_cursor_stops_the_sync_instead_of_looping(api, t
     """A broken filter would return the same page forever; the sync must stop and leave the watermark alone."""
     import plumbline.ingest.connectors.socrata as S
     ds, url = api(rows=100)
-    monkeypatch.setattr(S, "_query", lambda dataset, cursor, since, limit: f"/resource/{dataset}.json?$limit={limit}")
+    monkeypatch.setattr(S, "_query", lambda dataset, cursor, since, limit, after=None: f"/resource/{dataset}.json?$limit={limit}")
     with pytest.raises(SocrataError, match="no progress"):
         sync_dataset(_client(url), "ipu4-2q9a", tmp_path, name="permits", page_size=10)
     assert json.loads((tmp_path / "_sync_state.json").read_text())["watermark"] is None
@@ -206,3 +206,49 @@ def test_a_row_written_late_inside_the_overlap_still_lands_but_rows_already_land
     st = sync_dataset(_client(url), "abcd-1234", tmp_path, name="permits", page_size=100)
     landed = [r["source_row_id"] for p in set(tmp_path.glob("*.csv")) - before for r in csv.DictReader(open(p))]
     assert landed == ["row-late01"] and st.orders == 1 and st.reread >= 1
+
+
+def _reloaded(ds: Dataset, n_newer: int = 30):
+    """What NYC did to rbx6-tga4 on 2026-11-10: every row re-stamped with one update time, then a few real
+    changes after it."""
+    from datetime import datetime, timedelta
+    from plumbline.store.socrata_server import ts
+    t = ds.now_max() + timedelta(days=1)
+    for r in ds.rows.values():
+        r[":updated_at"] = ts(t)
+    for i, k in enumerate(sorted(ds.rows)[:n_newer]):
+        ds.rows[k][":updated_at"] = ts(t + timedelta(hours=1, seconds=i))
+    return t
+
+
+def test_a_run_stopped_by_its_page_budget_continues_where_it_stopped_not_from_the_top(api, tmp_path):
+    """Under one update time the old code threw the cursor away at the page budget: every run re-read the same first
+    pages and never reached the rest. 2,500 rows, 2 pages a run: three runs must land all of them, once each."""
+    ds, url = api(rows=2500)
+    _reloaded(ds, n_newer=0)
+    got = [sync_dataset(_client(url), "x", tmp_path, name="p", since="2026-01-01", page_size=500, max_pages=2, reload_rows=None)
+           for _ in range(3)]
+    assert [g.capped for g in got] == [True, True, False]
+    assert [g.orders for g in got] == [1000, 1000, 500]
+    assert set(_landed(tmp_path)) == set(ds.rows)
+
+
+def test_a_publisher_reload_is_counted_skipped_and_the_real_changes_after_it_land_in_the_same_run(api, tmp_path):
+    ds, url = api(rows=2500)
+    first = sync_dataset(_client(url), "x", tmp_path, name="p", since="2026-01-01", page_size=500)
+    assert first.orders == 2500
+    t = _reloaded(ds, n_newer=30)
+    r = sync_dataset(_client(url), "x", tmp_path, name="p", page_size=500, max_pages=3, reload_rows=1000)
+    assert r.reload_skipped == {"timestamp": t.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3], "rows": 2470} and not r.capped
+    newer = {k for k, v in ds.rows.items() if v[":updated_at"] > ts(t)}
+    latest = _landed(tmp_path)
+    assert len(newer) == 30 and all(latest[k]["source_updated_at"] == ds.rows[k][":updated_at"].rstrip("Z") for k in newer)
+    assert r.orders == 30                                            # the reload itself was not re-landed
+
+
+def test_a_daily_batch_under_one_time_below_the_reload_limit_is_still_read(api, tmp_path):
+    """NYC stamps each day's batch with one time; only a block bigger than reload_rows is treated as a reload."""
+    ds, url = api(rows=1500)
+    _reloaded(ds, n_newer=0)
+    r = sync_dataset(_client(url), "x", tmp_path, name="p", since="2026-01-01", page_size=500, reload_rows=100_000)
+    assert r.reload_skipped is None and r.orders == 1500

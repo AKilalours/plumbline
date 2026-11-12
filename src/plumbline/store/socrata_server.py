@@ -78,6 +78,18 @@ class Dataset:
         # As strict as NYC's API where it was found to refuse (checked on data.cityofnewyork.us, 2026-11-06):
         # a star selection that is not first, and a timestamp or row id that does not parse. This server
         # once accepted ":id,:updated_at,*", so the connector's first real run failed with HTTP 400.
+        at = lambda v: datetime.fromisoformat(v.rstrip("Z"))      # compared as times, as the API does, not as text
+        agg = q.get("$select", "")
+        if agg in ("count(*)", "max(:updated_at)"):              # the two aggregates the connector asks for
+            rows = list(self.rows.values())
+            if (m := re.fullmatch(r":updated_at = '([^']+)'", where)):
+                rows = [r for r in rows if at(r[":updated_at"]) == at(m.group(1))]
+            elif where:
+                raise ValueError(f"unexpected $where {where!r}")
+            if agg == "count(*)":
+                return [{"count": str(len(rows))}]
+            newest = max((r[":updated_at"] for r in rows), key=at, default=None)
+            return [{"max_updated_at": newest.rstrip("Z") + "Z"}] if newest else [{}]
         sel = [c.strip() for c in q.get("$select", "*").split(",")]
         if "*" in sel and sel[0] != "*":
             raise BadQuery("Star selections must come at the start of the select-list")
@@ -89,7 +101,6 @@ class Dataset:
         for lit in re.findall(r":id [<>=]+ '([^']*)'", where):
             if lit not in self.rows and not re.fullmatch(r"row-[\w.~-]+", lit):
                 raise BadQuery("Type mismatch for op$>, is text")
-        at = lambda v: datetime.fromisoformat(v.rstrip("Z"))      # compared as times, as the API does, not as text
         rows = sorted(self.rows.values(), key=lambda r: (at(r[":updated_at"]), r[":id"]))
         m = re.fullmatch(r":updated_at > '([^']+)' OR \(:updated_at = '([^']+)' AND :id > '([^']+)'\)", where)
         if m:
@@ -98,6 +109,8 @@ class Dataset:
             rows = [r for r in rows if at(r[":updated_at"]) > t or (at(r[":updated_at"]) == t and r[":id"] > rid)]
         elif (m := re.fullmatch(r":updated_at >= '([^']+)'", where)):
             rows = [r for r in rows if at(r[":updated_at"]) >= at(m.group(1))]
+        elif (m := re.fullmatch(r":updated_at > '([^']+)'", where)):
+            rows = [r for r in rows if at(r[":updated_at"]) > at(m.group(1))]
         elif where:
             raise ValueError(f"unexpected $where {where!r}")
         out = []

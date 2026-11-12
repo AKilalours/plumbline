@@ -114,3 +114,10 @@ def test_slack_hears_new_and_resolved_alerts_only(gh):
 def test_without_a_token_alerts_are_printed_and_nothing_is_sent(capsys):
     r = reconcile({"NYC: the latest run failed": "x"}, None, NOW)
     assert r["sent"] is False and "ALERT NYC: the latest run failed" in capsys.readouterr().out
+
+
+def test_a_feed_whose_data_stops_moving_while_runs_pass_is_named():
+    feed = Feed("NYC Open Data permits", 26, lambda: [run(d) for d in range(8, 14)] +
+                [run(14, source_newest="2026-11-14T10:00:00.000", hours_behind_source=38.3)])
+    found = problems([feed], NOW)
+    assert list(found) == ["NYC Open Data permits: the data is 38.3 hours behind the source"]

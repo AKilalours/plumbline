@@ -512,3 +512,20 @@ class ActivityLog:
                 if len(rows) == n:
                     break
         return pd.DataFrame(rows) if rows else empty
+
+
+def draft_row(c: dict, gold: dict, sample: str) -> dict:
+    """One column of a drafted contract beside the answer key, with what was wrong in words. The table used to show
+    the key as "address street" and an empty Check column, which read as nothing at all."""
+    fam = lambda t: "date" if t in ("date", "loose_date") else t
+    say = lambda t, pv, i: " · ".join(x for x in (t, pv and f"contact: {pv}", i and f"identity: {i}") if x)
+    wrong = []
+    if fam(c["type"]) != fam(gold.get("type")):
+        wrong.append(f"type should be {gold.get('type')}")
+    if (c.get("privacy") or None) != gold.get("privacy"):
+        wrong.append(f"missed contact: {gold['privacy']}" if gold.get("privacy") else f"not contact (said {c.get('privacy')})")
+    if (c.get("identity") or None) != gold.get("identity"):
+        wrong.append(f"identity should be {gold.get('identity') or 'none'}")
+    return {"Column": c["name"], "Sample": sample, "Drafted": say(c["type"], c.get("privacy"), c.get("identity")),
+            "Answer key": say(gold.get("type", ""), gold.get("privacy"), gold.get("identity")),
+            "Right?": "✓" if not wrong else "; ".join(wrong), "Drafter was unsure": c.get("unsure") or ""}

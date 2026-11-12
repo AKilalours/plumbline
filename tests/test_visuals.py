@@ -112,6 +112,29 @@ def test_every_visual_draws_in_a_browser_without_an_error_or_a_nan(width):
     assert not errors, errors
 
 
+def test_a_count_up_never_shows_a_negative_number():
+    """A frame whose timestamp is before the count-up started drew "-336 rows" and "-0 personal columns"; in a
+    collapsed section the browser draws no further frames, so the live app kept showing them."""
+    pw = pytest.importorskip("playwright.sync_api")
+    with pw.sync_playwright() as p:
+        try:
+            b = p.chromium.launch()
+        except Exception as e:
+            pytest.skip(f"no browser: {e}")
+        pg = b.new_page()
+        # one frame, stamped 50 ms before the animation starts, then none: what a hidden frame gets
+        pg.add_init_script("window.requestAnimationFrame = cb => { const t = performance.now() - 50; "
+                           "if (!window.__once) { window.__once = 1; setTimeout(() => cb(t), 0); } return 1; };")
+        html = V.page("onboard", _data()["onboard"])     # served, not set_content, so the init script runs first
+        pg.route("http://visual.test/", lambda r: r.fulfill(body=html, content_type="text/html"))
+        pg.goto("http://visual.test/")
+        pg.wait_for_timeout(300)
+        assert pg.evaluate("window.__once") == 1                  # the stand-in frame clock was used
+        values = pg.eval_on_selector_all(".tile .v", "es => es.map(e => e.textContent)")
+        b.close()
+    assert values and not [v for v in values if v.startswith("-")], values
+
+
 @pytest.mark.parametrize("width", [1100, 375])
 def test_no_onboarding_step_shows_a_cut_off_name(width):
     """With load taking most of the time, "draft" and "validate" were drawn as "draf" and "vali"."""
@@ -147,6 +170,26 @@ def test_the_worth_slider_recomputes_in_the_browser():
         pg.wait_for_timeout(1100)
         assert first == "$2.045" and pg.locator(".val").first.inner_text() == "$4.089"   # 31 / 30,323 x $4,000, not double the rounded $2.045
         b.close()
+
+
+def test_a_source_the_model_does_not_use_is_said_so_not_priced_at_zero():
+    """Email engagement has no inputs in this model; it showed "AUC +0.0000 [+0.0000, +0.0000]" and "$0.000",
+    which reads as measured and worthless."""
+    pw = pytest.importorskip("playwright.sync_api")
+    with pw.sync_playwright() as p:
+        try:
+            b = p.chromium.launch()
+        except Exception as e:
+            pytest.skip(f"no browser: {e}")
+        pg = b.new_page()
+        pg.set_content(V.page("worth", _data()["worth"]))
+        pg.wait_for_timeout(1100)
+        rows = pg.eval_on_selector_all(".b", "es => es.map(e => [e.querySelector('.lab').innerText, e.querySelector('.val').innerText])")
+        b.close()
+    email = next(r for r in rows if r[0].startswith("Email"))
+    assert "not an input to this model" in email[0] and email[1] == "n/a", email
+    prop = next(r for r in rows if r[0].startswith("Property"))
+    assert "without it, AUC -0.0496" in prop[0] and prop[1] == "$2.045", prop
 
 
 def test_every_saved_waterfall_adds_up_to_its_own_score():

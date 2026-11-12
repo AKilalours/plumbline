@@ -752,3 +752,23 @@ def test_the_reconcile_tiles_add_up_the_runs(monkeypatch):
     monkeypatch.syspath_prepend(str(ROOT))
     at.run()
     assert not at.exception, at.exception
+
+
+def test_the_health_view_shows_how_often_each_feed_needed_a_person(world, monkeypatch):
+    at = _app(world, monkeypatch, "sources_page")
+    at.segmented_control(key="src_view").set_value("Health").run()
+    assert not at.exception, at.exception
+    assert any("How often a person had to step in" in m.value for m in at.markdown)
+
+
+def test_the_recovery_panel_renders_from_a_history_with_a_failure_and_a_rerun_by_hand():
+    st_testing = pytest.importorskip("streamlit.testing.v1")
+    code = ("import streamlit_app\nfrom datetime import datetime, timedelta, timezone\n"
+            "now = datetime.now(timezone.utc)\n"
+            "f = lambda h: (now - timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M:%SZ')\n"
+            "runs = [{'run_at': f(9), 'ok': True, 'retries': 2}, {'run_at': f(6), 'ok': False},"
+            " {'run_at': f(3), 'ok': True, 'trigger': 'workflow_dispatch'}]\n"
+            "streamlit_app.open_data_runs = lambda: runs\nstreamlit_app.stream_runs = lambda: []\n"
+            "streamlit_app.recovery_panel()\n")
+    at = st_testing.AppTest.from_string(code, default_timeout=60).run()
+    assert not at.exception, at.exception

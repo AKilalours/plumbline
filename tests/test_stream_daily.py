@@ -50,3 +50,12 @@ def test_a_failed_cloud_publish_is_recorded_without_failing_the_window(live, tmp
     monkeypatch.setattr(P, "publish", refuse)
     r = SD.run(url=url, seconds=2, out=tmp_path / "out", client_kw=FAST, publish_to="md:plumbline")
     assert r["ok"] and r["rows_loaded"] > 0 and r["published"] is None and "not yet supported" in r["publish_error"]
+
+
+def test_a_window_records_what_started_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "schedule")
+    with pytest.raises(Exception):
+        SD.run(url="http://127.0.0.1:9/v2/stream/recentchange", seconds=2, out=tmp_path / "out",
+               client_kw={**FAST, "max_reconnects": 1})
+    (r,) = SD.history(tmp_path / "out")
+    assert r["trigger"] == "schedule"

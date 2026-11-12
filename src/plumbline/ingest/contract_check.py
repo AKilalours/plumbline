@@ -22,7 +22,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
-DIRS = ["sources", "sources/streams", "sources/databases", "sources/open_data"]
+DIRS = ["sources", "sources/streams", "sources/databases", "sources/open_data", "sources/kit"]
 
 
 def _cols(c: dict) -> dict:

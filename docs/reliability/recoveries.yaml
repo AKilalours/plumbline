@@ -1,0 +1,24 @@
+# Every time a person had to act to bring a feed back. One entry per recovery, per feed it touched.
+# "started" is when consumers were first affected; "recovered" is when the first good run landed after the fix.
+# A failed run followed by a good one with no entry here counts as recovered on its own.
+# tests/test_recoveries.py fails if a postmortem in docs/postmortems/ is missing from this list.
+- feed: dob_now_permits
+  started: 2026-11-07T07:17:28Z
+  recovered: 2026-11-07T07:59:40Z
+  did: pinned duckdb==1.5.6 in the daily job
+  postmortem: docs/postmortems/2026-11-07-motherduck-duckdb.md
+- feed: wikimedia_recentchange
+  started: 2026-11-07T07:17:34Z
+  recovered: 2026-11-07T07:59:53Z
+  did: pinned duckdb==1.5.6 in the daily job
+  postmortem: docs/postmortems/2026-11-07-motherduck-duckdb.md
+- feed: dob_now_permits
+  started: 2026-11-10T19:43:03Z
+  recovered: 2026-11-12T04:36:36Z
+  did: a budget stop keeps its cursor; a publisher reload is counted and skipped
+  postmortem: docs/postmortems/2026-11-10-nyc-reload-stall.md
+- feed: dob_now_permits
+  started: 2026-11-07T03:45:49Z
+  recovered: 2026-11-12T13:35:00Z
+  did: the connector takes the contract's columns as approved; the reconcile reloads rows landed without it
+  postmortem: docs/postmortems/2026-11-07-apartment-number-dropped.md

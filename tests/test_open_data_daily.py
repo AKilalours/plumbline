@@ -210,3 +210,11 @@ def test_without_rows_held_nothing_is_claimed_and_off_publishes_nowhere(city, tm
     ds, kw = city
     r = OD.run(**kw, publish_to="off", reconcile_by="job__")
     assert r["reconcile"] is None and r.get("published") is None and not (tmp_path / "off").exists()
+
+
+def test_a_run_records_what_started_it_so_a_rerun_by_hand_is_counted(city, monkeypatch):
+    ds, kw = city
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    assert OD.run(**kw)["trigger"] == "workflow_dispatch"
+    monkeypatch.delenv("GITHUB_EVENT_NAME")
+    assert OD.run(**kw)["trigger"] == "local"

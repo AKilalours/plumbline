@@ -1300,6 +1300,29 @@ def slo_panel():
                "postmortem's actions are done (docs/reliability/slo.md). Small samples move fast: one failed run of 26 is 4 points.")
 
 
+def recovery_panel():
+    """How often each real feed needed a person, from the ledger and the run lines (ingest/recoveries.py)."""
+    from datetime import datetime, timezone
+    from plumbline.ingest.recoveries import ledger, measure
+    st.markdown('<div class="mono">How often a person had to step in</div>', unsafe_allow_html=True)
+    now, entries = datetime.now(timezone.utc), ledger()
+    for name, feed, runs in (("NYC Open Data permits", "dob_now_permits", open_data_runs()),
+                             ("Wikimedia live stream", "wikimedia_recentchange", stream_runs())):
+        m = measure(feed, runs, entries, now=now)
+        if not m["runs"]:
+            continue
+        st.markdown(f'<div class="note" style="margin:.6rem 0 .2rem"><b>{name}</b></div>', unsafe_allow_html=True)
+        viz("tiles", {"items": [
+            {"label": "Needed a person", "value": m["hands_on"], "fmt": "int",
+             "sub": f"in {m['runs']} runs; each one has a postmortem", "tone": "pass" if not m["hands_on"] else "warn"},
+            {"label": "Fixed itself", "value": m["retries_absorbed"] + m["on_its_own"], "fmt": "int",
+             "sub": f"{m['retries_absorbed']} retries inside runs, {m['on_its_own']} failed runs the next run fixed", "tone": "info"},
+            {"label": "Longest a consumer was hurt", "value": f"{m['hours_hurt_max']:g} h" if m["hours_hurt_max"] is not None else "0 h",
+             "fmt": "raw", "sub": "from first affected to the first good run after the fix", "tone": "info"},
+        ]}, 120)
+    st.caption("Time to onboard a new source is measured by an engineer who did not build the kit, following "
+               "docs/add_a_source.md; it is shown here once they have done it, not estimated.")
+
 def feed_health(runs: list[dict], promise_hours: float = 26):
     """On time, streak and the last 7 days, counted from the run history the scheduled job writes (failures included)."""
     from datetime import datetime as _dt, timezone as _tz
@@ -1552,6 +1575,7 @@ def sources_page():
         return
     if v == "Health":
         slo_panel()
+        recovery_panel()
         d = demo()
         with Q.connect(d) as con:
             led = con.execute("""SELECT source AS Source, count(*) FILTER (WHERE status = 'loaded') AS Loaded,

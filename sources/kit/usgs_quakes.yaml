@@ -1,0 +1,25 @@
+# USGS earthquakes, the worked example of the add-a-source kit (docs/add_a_source.md). Reviewed from the draft.
+name: usgs_quakes
+kind: api
+version: 1
+files: sources/usgs_quakes/*.csv
+key:
+- event_id
+latest_by:
+- updated_at
+columns:
+  event_id:
+    type: string
+    required: true
+  updated_at:
+    type: timestamp
+    required: true
+  magnitude:
+    type: float
+  place:
+    type: string
+  happened_at:
+    type: timestamp
+  status:
+    type: enum
+    values: [automatic, reviewed, deleted]   # the draft saw two; USGS documents three

@@ -44,7 +44,7 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
 
     started = now()
     rec = {"run_at": started.strftime("%Y-%m-%dT%H:%M:%SZ"), "dataset": dataset, "title": TITLE, "name": name,
-           "host": host or DEFAULT_HOST, "ok": False}
+           "host": host or DEFAULT_HOST, "ok": False, "trigger": _trigger()}
     state_dir = out / "state" / name
     state_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
@@ -214,5 +214,12 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if r.get("publish_error") else 0
 
 
+def _trigger() -> str:
+    """What started this run: "schedule", "push" (code changed), "workflow_dispatch" (a person), or "local"."""
+    import os
+    return os.environ.get("GITHUB_EVENT_NAME", "local")
+
+
 if __name__ == "__main__":
     sys.exit(main())
+

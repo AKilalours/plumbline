@@ -45,7 +45,7 @@ def run(*, url: str | None = None, seconds: float = 120.0, max_events: int = 50_
 
     started = now()
     rec = {"run_at": started.strftime("%Y-%m-%dT%H:%M:%SZ"), "name": NAME, "title": TITLE, "url": url or WIKIMEDIA_URL,
-           "window_seconds": seconds, "ok": False, "dropped_fields": DROPPED}
+           "window_seconds": seconds, "ok": False, "dropped_fields": DROPPED, "trigger": _trigger()}
     t0 = time.perf_counter()
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -132,5 +132,12 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if r.get("publish_error") else 0
 
 
+def _trigger() -> str:
+    """What started this run: "schedule", "push" (code changed), "workflow_dispatch" (a person), or "local"."""
+    import os
+    return os.environ.get("GITHUB_EVENT_NAME", "local")
+
+
 if __name__ == "__main__":
     sys.exit(main())
+

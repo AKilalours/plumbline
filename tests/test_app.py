@@ -730,3 +730,25 @@ def test_a_shared_link_shows_counts_and_a_forged_one_shows_nothing(world, monkey
         at.run()
         assert not at.exception, at.exception
         assert any("Shared result: 3 rows" in m.value for m in at.markdown) is shown
+
+
+def test_the_database_view_replays_the_recorded_change_log(world, monkeypatch):
+    at = _app(world, monkeypatch, "sources_page")
+    at.segmented_control(key="src_view").set_value("Database").run()
+    assert not at.exception, at.exception
+    for step in (0, 3, 11):
+        at.slider(key="cdc_step").set_value(step).run()
+        assert not at.exception, (step, at.exception)
+
+
+def test_the_reconcile_tiles_add_up_the_runs(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    runs = [{"run_at": "2026-11-12T00:00:00Z", "ok": True},
+            {"run_at": "2026-11-12T03:00:00Z", "ok": True, "reconcile": {"checked": 2000, "same": 1990, "changed": 8, "gone": 2,
+             "fields": {"apt_condo_no_s": 8}, "held": 68000}},
+            {"run_at": "2026-11-12T06:00:00Z", "ok": True, "reconcile": {"checked": 2000, "same": 2000, "changed": 0, "gone": 0,
+             "fields": {}, "held": 68000}}]
+    at = AppTest.from_string(f"import streamlit_app\nstreamlit_app.reconcile_tiles({runs!r})", default_timeout=120)
+    monkeypatch.syspath_prepend(str(ROOT))
+    at.run()
+    assert not at.exception, at.exception

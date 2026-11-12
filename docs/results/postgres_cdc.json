@@ -1,0 +1,332 @@
+{
+ "recorded_at": "2026-11-12T12:46:02Z",
+ "postgres": "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+ "slot_point": "0/16C39B8",
+ "copied": {
+  "public.customers": 4,
+  "public.orders": 3
+ },
+ "log_held_back_bytes_before_reading": 2576,
+ "changes": [
+  {
+   "op": "r",
+   "lsn": 23869879,
+   "lsn_text": "0/16C39B8",
+   "xid": null,
+   "id": 1,
+   "source": "pg_customers",
+   "email": "ann.lee@mail.test",
+   "plan": "free",
+   "status": null
+  },
+  {
+   "op": "r",
+   "lsn": 23869879,
+   "lsn_text": "0/16C39B8",
+   "xid": null,
+   "id": 2,
+   "source": "pg_customers",
+   "email": "bo.kim@mail.test",
+   "plan": "pro",
+   "status": null
+  },
+  {
+   "op": "r",
+   "lsn": 23869879,
+   "lsn_text": "0/16C39B8",
+   "xid": null,
+   "id": 3,
+   "source": "pg_customers",
+   "email": "cy.diaz@mail.test",
+   "plan": "free",
+   "status": null
+  },
+  {
+   "op": "r",
+   "lsn": 23869879,
+   "lsn_text": "0/16C39B8",
+   "xid": null,
+   "id": 4,
+   "source": "pg_customers",
+   "email": "dee@mail.test",
+   "plan": "team",
+   "status": null
+  },
+  {
+   "op": "r",
+   "lsn": 23869879,
+   "lsn_text": "0/16C39B8",
+   "xid": null,
+   "id": 100,
+   "source": "pg_orders",
+   "email": null,
+   "plan": null,
+   "status": "paid"
+  },
+  {
+   "op": "r",
+   "lsn": 23869879,
+   "lsn_text": "0/16C39B8",
+   "xid": null,
+   "id": 101,
+   "source": "pg_orders",
+   "email": null,
+   "plan": null,
+   "status": "placed"
+  },
+  {
+   "op": "r",
+   "lsn": 23869879,
+   "lsn_text": "0/16C39B8",
+   "xid": null,
+   "id": 102,
+   "source": "pg_orders",
+   "email": null,
+   "plan": null,
+   "status": "placed"
+  },
+  {
+   "op": "c",
+   "lsn": 23869880,
+   "lsn_text": "0/16C39B8",
+   "xid": "969",
+   "id": 5,
+   "source": "pg_customers",
+   "email": "eve.park@mail.test",
+   "plan": "free",
+   "status": null
+  },
+  {
+   "op": "c",
+   "lsn": 23870056,
+   "lsn_text": "0/16C3A68",
+   "xid": "969",
+   "id": 103,
+   "source": "pg_orders",
+   "email": null,
+   "plan": null,
+   "status": "placed"
+  },
+  {
+   "op": "u",
+   "lsn": 23870312,
+   "lsn_text": "0/16C3B68",
+   "xid": "970",
+   "id": 1,
+   "source": "pg_customers",
+   "email": "ann@newmail.test",
+   "plan": "free",
+   "status": null
+  },
+  {
+   "op": "u",
+   "lsn": 23870480,
+   "lsn_text": "0/16C3C10",
+   "xid": "971",
+   "id": 3,
+   "source": "pg_customers",
+   "email": "cy.diaz@mail.test",
+   "plan": "pro",
+   "status": null
+  },
+  {
+   "op": "u",
+   "lsn": 23870600,
+   "lsn_text": "0/16C3C88",
+   "xid": "971",
+   "id": 3,
+   "source": "pg_customers",
+   "email": "cy.diaz@mail.test",
+   "plan": "team",
+   "status": null
+  },
+  {
+   "op": "u",
+   "lsn": 23870776,
+   "lsn_text": "0/16C3D38",
+   "xid": "972",
+   "id": 101,
+   "source": "pg_orders",
+   "email": null,
+   "plan": null,
+   "status": "paid"
+  },
+  {
+   "op": "u",
+   "lsn": 23870928,
+   "lsn_text": "0/16C3DD0",
+   "xid": "973",
+   "id": 101,
+   "source": "pg_orders",
+   "email": null,
+   "plan": null,
+   "status": "shipped"
+  },
+  {
+   "op": "d",
+   "lsn": 23871080,
+   "lsn_text": "0/16C3E68",
+   "xid": "974",
+   "id": 102,
+   "source": "pg_orders",
+   "email": null,
+   "plan": null,
+   "status": null
+  },
+  {
+   "op": "c",
+   "lsn": 23871968,
+   "lsn_text": "0/16C41E0",
+   "xid": "975",
+   "id": 6,
+   "source": "pg_customers",
+   "email": "fay@mail.test",
+   "plan": "pro",
+   "status": null
+  },
+  {
+   "op": "d",
+   "lsn": 23872280,
+   "lsn_text": "0/16C4318",
+   "xid": "976",
+   "id": 2,
+   "source": "pg_customers",
+   "email": null,
+   "plan": null,
+   "status": null
+  },
+  {
+   "op": "d",
+   "lsn": 23872344,
+   "lsn_text": "0/16C4358",
+   "xid": "976",
+   "id": 100,
+   "source": "pg_orders",
+   "email": null,
+   "plan": null,
+   "status": null
+  }
+ ],
+ "crash": {
+  "read_again": 11,
+  "transactions": 8,
+  "by_op": {
+   "c": 3,
+   "u": 5,
+   "d": 3
+  },
+  "lag_bytes_after": 0
+ },
+ "bronze_rows": {
+  "customers": 10,
+  "orders": 8
+ },
+ "quarantined": 0,
+ "current": {
+  "customers": [
+   [
+    1,
+    "Ann",
+    "Lee",
+    "ann@newmail.test",
+    "free"
+   ],
+   [
+    3,
+    "Cy",
+    "Diaz",
+    "cy.diaz@mail.test",
+    "team"
+   ],
+   [
+    4,
+    "Dee",
+    "O'Neil",
+    "dee@mail.test",
+    "team"
+   ],
+   [
+    5,
+    "Eve",
+    "Park",
+    "eve.park@mail.test",
+    "free"
+   ],
+   [
+    6,
+    "Fay",
+    "Ng",
+    "fay@mail.test",
+    "pro"
+   ]
+  ],
+  "orders": [
+   [
+    101,
+    1,
+    120.0,
+    "shipped"
+   ],
+   [
+    103,
+    5,
+    42.5,
+    "placed"
+   ]
+  ]
+ },
+ "database": {
+  "customers": [
+   [
+    1,
+    "Ann",
+    "Lee",
+    "ann@newmail.test",
+    "free"
+   ],
+   [
+    3,
+    "Cy",
+    "Diaz",
+    "cy.diaz@mail.test",
+    "team"
+   ],
+   [
+    4,
+    "Dee",
+    "O'Neil",
+    "dee@mail.test",
+    "team"
+   ],
+   [
+    5,
+    "Eve",
+    "Park",
+    "eve.park@mail.test",
+    "free"
+   ],
+   [
+    6,
+    "Fay",
+    "Ng",
+    "fay@mail.test",
+    "pro"
+   ]
+  ],
+  "orders": [
+   [
+    101,
+    1,
+    120.0,
+    "shipped"
+   ],
+   [
+    103,
+    5,
+    42.5,
+    "placed"
+   ]
+  ]
+ },
+ "matches_database": true
+}

@@ -98,6 +98,10 @@ class Dataset:
                 datetime.fromisoformat(lit.rstrip("Z"))
             except ValueError:
                 raise BadQuery(f"Type mismatch: '{lit}' is not a fixed timestamp") from None
+        # :id is the API's row number, not text: "=" and "in" on it are refused (checked 2026-11-12), so rows
+        # are looked up by a text column instead
+        if re.search(r":id\s*(=|in\b|>=|<=)", where, re.I):
+            raise BadQuery("Type mismatch for op$=, is text")
         for lit in re.findall(r":id [<>=]+ '([^']*)'", where):
             if lit not in self.rows and not re.fullmatch(r"row-[\w.~-]+", lit):
                 raise BadQuery("Type mismatch for op$>, is text")
@@ -111,6 +115,9 @@ class Dataset:
             rows = [r for r in rows if at(r[":updated_at"]) >= at(m.group(1))]
         elif (m := re.fullmatch(r":updated_at > '([^']+)'", where)):
             rows = [r for r in rows if at(r[":updated_at"]) > at(m.group(1))]
+        elif (m := re.fullmatch(r"([a-z_]+) in \((.*)\)", where)):
+            col, wanted = m.group(1), set(re.findall(r"'((?:[^']|'')*)'", m.group(2)))
+            rows = [r for r in rows if str(r.get(col)) in {w.replace("''", "'") for w in wanted}]
         elif where:
             raise ValueError(f"unexpected $where {where!r}")
         out = []

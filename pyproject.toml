@@ -30,6 +30,7 @@ orchestration = ["dagster>=1.9", "dagster-webserver>=1.9"]
 app = ["streamlit>=1.65,<2"]
 spark = ["pyspark>=4.0,<5"]          # the loader's current rule on Spark (ingest/spark_current.py); needs Java 17+
 kafka = ["confluent-kafka>=2.4,<3"]  # the Kafka source (ingest/connectors/kafka_source.py)
+postgres = ["psycopg2-binary>=2.9,<3"]  # change data capture from Postgres (ingest/connectors/postgres_cdc.py)
 
 [project.scripts]
 plumbline = "plumbline.__main__:main"

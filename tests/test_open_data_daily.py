@@ -166,3 +166,44 @@ def test_after_a_reload_bigger_than_a_runs_budget_the_next_run_lands_the_changes
     r = OD.run(**kw, max_pages=3, reload_rows=1000)
     assert r["ok"] and r["complete"] and r["reload_skipped"]["rows"] == 1191 and r["rows"] == 9
     assert r["hours_behind_source"] == 0.0
+
+
+def _held(ds):
+    """What the warehouse holds after a run: each row as landed (flattened, without the city's own system fields)."""
+    from plumbline.ingest.connectors.socrata import _flat
+    return [_flat(dict(r)) for r in ds.rows.values()]
+
+
+def test_reconcile_finds_rows_the_source_changed_without_moving_their_time_and_rows_it_removed(city):
+    """An incremental sync trusts update times; a change under the same time (or inside a skipped reload) and a
+    removed row get past it. The reconcile asks the source for the rows held and compares them."""
+    ds, kw = city
+    OD.run(**kw, reconcile_budget=0)
+    held = _held(ds)
+    ids = sorted(ds.rows)
+    for k in ids[:3]:
+        ds.rows[k]["street_name"] = "CORRECTED STREET"           # same :updated_at
+    for k in ids[3:5]:
+        del ds.rows[k]
+    r = OD.run(**kw, held_rows=lambda: held, reconcile_budget=5000, reconcile_by="job__")
+    rc = r["reconcile"]
+    assert (rc["checked"], rc["changed"], rc["gone"], rc["same"]) == (1200, 3, 2, 1195)
+    assert rc["fields"] == {"street_name": 3} and set(rc["gone_ids"]) == set(ids[3:5])
+    assert r["rows"] == 0 and r["reconcile_rows"] == 3 and r["rows_loaded"] == 3      # the corrections were loaded
+
+
+def test_reconcile_takes_the_next_slice_each_run_and_wraps(city):
+    ds, kw = city
+    OD.run(**kw, reconcile_budget=0)
+    held = _held(ds)
+    seen = []
+    for _ in range(3):
+        r = OD.run(**kw, held_rows=lambda: held, reconcile_budget=500, reconcile_by="job__")
+        seen.append((r["reconcile"]["offset"], r["reconcile"]["checked"], r["reconcile"]["next_offset"]))
+    assert seen == [(0, 500, 500), (500, 500, 1000), (1000, 500, 300)]
+
+
+def test_without_rows_held_nothing_is_claimed(city):
+    ds, kw = city
+    r = OD.run(**kw, publish_to="off", reconcile_by="job__")
+    assert r["reconcile"] is None

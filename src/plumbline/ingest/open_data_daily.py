@@ -34,7 +34,8 @@ TITLE = "DOB NOW: Build, Approved Permits"
 
 def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, out: Path = OUT,
         contracts: Path = ROOT / "sources" / "open_data", since: str = "2026-11-01", max_pages: int = 60, page_size: int = 1000, reload_rows: int = 100_000,
-        client_kw: dict | None = None, now=lambda: datetime.now(timezone.utc), publish_to: str | None = None) -> dict:
+        client_kw: dict | None = None, now=lambda: datetime.now(timezone.utc), publish_to: str | None = None,
+        reconcile_budget: int = 2000, held_rows=None, reconcile_by: str = "work_permit") -> dict:
     from .connectors.socrata import source_newest, DEFAULT_HOST, SocrataClient, sync_dataset
     from .contracts import load_contracts
     from .engine import ingest
@@ -54,8 +55,10 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
             shutil.copy(state_dir / "_sync_state.json", landing / "_sync_state.json")
         try:
             client = SocrataClient(host or DEFAULT_HOST, os.environ.get("SOCRATA_APP_TOKEN"), **(client_kw or {}))
+            contract = contracts / f"{name}.yaml"
+            accepted = set(load_contracts(contracts)[name].columns) if contract.exists() else set()
             st = sync_dataset(client, dataset, landing, name=name, since=since, max_pages=max_pages, page_size=page_size,
-                              reload_rows=reload_rows)
+                              reload_rows=reload_rows, accepted=accepted)
             state = json.loads((landing / "_sync_state.json").read_text())
             rec.update(rows=st.orders, reread=getattr(st, "reread", 0), pages=st.pages, requests=st.requests, retries=st.retries,
                        retries_by_cause=dict(st.by_error), resumed=st.resumed, watermark=state["watermark"],
@@ -67,8 +70,10 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
             if have and rec["source_newest"]:
                 gap = datetime.fromisoformat(rec["source_newest"]) - datetime.fromisoformat(have)
                 rec["hours_behind_source"] = round(max(0.0, gap.total_seconds() / 3600), 1)
-            contract = contracts / f"{name}.yaml"
-            if contract.exists() and st.orders:
+            if contract.exists() and reconcile_budget:
+                _reconcile(rec, client, dataset, load_contracts(contracts)[name], landing, state, state_dir, st,
+                           held_rows, publish_to, reconcile_budget, name, reconcile_by)
+            if contract.exists() and (st.orders or rec.get("reconcile_rows")):
                 cdir = Path(tmp) / "contracts"
                 cdir.mkdir()
                 shutil.copy(contract, cdir / contract.name)
@@ -95,6 +100,49 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
     rec["seconds"] = round(time.perf_counter() - t0, 2)
     _append(out, rec)
     return rec
+
+
+def _reconcile(rec, client, dataset, contract, landing, state, state_dir, st, held_rows, target, budget, name, by) -> None:
+    """Check the next slice of the rows the cloud warehouse holds against the source; land what changed.
+    Without held rows (no cloud warehouse configured) nothing is claimed. A failure here is recorded, never
+    fatal: the sync already succeeded and its cursor is saved."""
+    from .reconcile import reconcile
+    try:
+        held = held_rows() if held_rows else _held_in_cloud(name, target)
+        if not held:
+            rec["reconcile"] = None
+            return
+        path = state_dir / "_reconcile.json"
+        offset = json.loads(path.read_text())["next_offset"] if path.exists() else 0
+        r = reconcile(client, dataset, contract, held, offset, budget, st, by)
+        rows = r.pop("rows")
+        if rows:
+            cols = list(dict.fromkeys(list(state["columns"] or []) + [c for c in contract.columns if any(c in x for x in rows)]))
+            from .connectors.socrata import _to_csv
+            from .connectors.store_api import _atomic_write
+            _atomic_write(landing / f"{name}_reconcile_{rec['run_at'].replace(':', '').replace('-', '')}.csv", _to_csv(rows, cols))
+        rec["reconcile"], rec["reconcile_rows"] = r, len(rows)
+        path.write_text(json.dumps({"next_offset": r["next_offset"], "held": r["held"]}))
+    except Exception as e:
+        rec["reconcile"] = {"error": f"{type(e).__name__}: {e}"[:300]}
+
+
+def _held_in_cloud(name: str, target: str | None) -> list[dict] | None:
+    import os
+    target = target or ("md:plumbline" if os.environ.get("MOTHERDUCK_TOKEN") else None)
+    if not target or target == "off":
+        return None
+    from ..products.publish import connect
+    con, cat = connect(target)
+    try:
+        if not con.execute("SELECT count(*) FROM information_schema.tables WHERE table_catalog = ? AND table_name = ?",
+                           [cat, f"current_{name}"]).fetchone()[0]:
+            return None
+        cur = con.execute(f'SELECT * FROM {cat}.main."current_{name}"')
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    finally:
+        con.close()
 
 
 def _publish(warehouse: Path, name: str, target: str | None, run_at: str) -> dict | None:

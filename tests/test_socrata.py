@@ -252,3 +252,28 @@ def test_a_daily_batch_under_one_time_below_the_reload_limit_is_still_read(api, 
     _reloaded(ds, n_newer=0)
     r = sync_dataset(_client(url), "x", tmp_path, name="p", since="2026-01-01", page_size=500, reload_rows=100_000)
     assert r.reload_skipped is None and r.orders == 1500
+
+
+def test_a_column_the_contract_approves_is_written_when_it_first_appears_after_the_first_page(api, tmp_path):
+    """The API leaves out a field empty on a whole page. apt_condo_no_s was missing from the first page NYC sent
+    on 2026-11-07, so it was called drift and every apartment number was dropped, though the contract had it."""
+    ds, url = api(rows=600)
+    for i, k in enumerate(sorted(ds.rows, key=lambda k: (ds.rows[k][":updated_at"], k))):
+        ds.rows[k]["apt_condo_no_s"] = "" if i < 300 else f"APT {i}"
+    got = sync_dataset(_client(url), "x", tmp_path / "a", name="p", since="2026-01-01", page_size=100, accepted={"apt_condo_no_s"})
+    rows = _landed(tmp_path / "a")
+    assert sum(bool(r.get("apt_condo_no_s")) for r in rows.values()) == 300
+    st = json.loads((tmp_path / "a" / "_sync_state.json").read_text())
+    assert "apt_condo_no_s" not in st["drift"]
+    sync_dataset(_client(url), "x", tmp_path / "b", name="p", since="2026-01-01", page_size=100)   # not approved
+    st = json.loads((tmp_path / "b" / "_sync_state.json").read_text())
+    assert st["drift"] == ["apt_condo_no_s"] and not any(r.get("apt_condo_no_s") for r in _landed(tmp_path / "b").values())
+
+
+def test_the_test_server_refuses_row_id_lookups_like_nyc_does(api):
+    from plumbline.store.socrata_server import BadQuery
+    ds, _ = api(rows=5)
+    k = sorted(ds.rows)[0]
+    for where in (f":id = '{k}'", f":id in ('{k}')"):
+        with pytest.raises(BadQuery):
+            ds.query({"$select": "*, :id, :updated_at", "$where": where})

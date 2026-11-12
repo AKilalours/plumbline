@@ -9,7 +9,7 @@ Ingest · resolve · predict · act</p>
 <img src="https://img.shields.io/badge/python-3.12-2941B9" alt="python 3.12">
 <img src="https://img.shields.io/badge/data-synthetic%20with%20an%20answer%20key-E5B74D" alt="synthetic data with an answer key">
 <img src="https://img.shields.io/badge/cloud%20warehouse-MotherDuck%20(live)-11196F" alt="cloud warehouse: MotherDuck, live">
-<img src="https://img.shields.io/badge/tested%20against-real%20Kafka%20%C2%B7%20Spark-2941B9" alt="tested against a real Kafka broker and Spark in CI">
+<img src="https://img.shields.io/badge/tested%20against-real%20Postgres%20CDC%20%C2%B7%20Kafka%20%C2%B7%20Spark-2941B9" alt="tested against a real Postgres (change data capture), a real Kafka broker and Spark in CI">
 </p>
 
 <p align="center"><a href="https://minerva-plumbline.streamlit.app"><b>▶ Try the live app</b></a> · every button does real work on your own copy of the city<br>

@@ -1,0 +1,23 @@
+# The customers table of an application's own Postgres database, read by change data capture
+# (ingest/connectors/postgres_cdc.py): a starting copy taken inside the replication slot's snapshot (_op r),
+# then every insert (c), update (u) and delete (d) from the database's log, each with its log position.
+# The newest change by log position wins; a delete as the newest change removes the customer from the
+# current view and stays in bronze as history.
+name: pg_customers
+kind: database
+files: "sources/pg_customers/*.csv"
+key: [id]
+latest_by: [_lsn]
+deleted_when: {column: _op, equals: d}
+columns:
+  _op:        {type: enum, values: [r, c, u, d], required: true}
+  _lsn:       {type: int, min: 0, required: true}
+  _lsn_text:  {type: string, required: true}
+  _xid:       {type: string, optional: true}
+  id:         {type: int, required: true}
+  first_name: {type: string, optional: true, identity: first_name}
+  last_name:  {type: string, optional: true, identity: last_name}
+  email:      {type: string, optional: true, privacy: email}
+  zip:        {type: string, optional: true, pattern: '^\d{5}$', identity: zip}
+  plan:       {type: enum, values: [free, pro, team], optional: true}
+  updated_at: {type: timestamp, optional: true}

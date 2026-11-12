@@ -27,6 +27,8 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | A streaming source | `ingest/connectors/sse.py`, `ingest/stream_daily.py`, `store/sse_server.py` | Wikimedia's live stream daily: Last-Event-ID resume, a planned hang-up with a repeat count, batches before checkpoints, one copy in the warehouse after a crash; profiling it found ids past 32 bits the loader would have failed on |
 | Someone is told when a feed breaks | `ingest/freshness.py`, `ingest/alerts.py` | late, failed or quarantine-heavy feeds open one GitHub issue each (emailed to the owner), followed up rather than repeated, closed on recovery; checked from a second scheduled job so a job that stopped is caught too |
 | The design moves to other engines | `ingest/spark_current.py`, `ingest/connectors/kafka_source.py` | the current-version rule on Spark gives the same 282,784 rows as DuckDB; a Kafka consumer commits offsets only after landing, tested against a real broker in CI |
+| A database by change data capture | `ingest/connectors/postgres_cdc.py`, `sources/databases/` | logical replication slot with an exported snapshot, land then confirm, deletes by log position; against a real Postgres 16 in CI, the current view equals the database row for row after a crash |
+| Check what is held against the source | `ingest/reconcile.py` | each run re-asks NYC for the next 2,000 rows held and compares field by field; repairs what the sync missed (an approved column dropped for five days), reports rows gone |
 | A cloud warehouse target | `products/publish.py` | transactional upsert into MotherDuck, safe to rerun, checked after every write; live since 2026-11-07 (2,565 permits and 3,483 stream events in its first run) |
 | Reruns, backfills and retries that never duplicate | file ledger, row hashes, `delivery_rows` | 100 random faults change nothing; rerun is a no-op |
 | Bad deliveries held, not loaded | `ingest/gate.py`, `gate:` in each file contract | each delivery profiled against its source's last five of the same kind; truncated files, emptied columns and failing-row spikes held with the reason, released only by a named person; 0 of 276 normal deliveries held |
@@ -57,7 +59,7 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 
 | The work | Where | Evidence |
 | --- | --- | --- |
-| A knowledge agent that answers with sources and that people trust | `agents/knowledge.py`, `agents/answer.py` | cites every claim; on 67 eval questions, 19 of 24 right on the held-out half and 7 of 9 unanswerable ones refused; published numbers checked by a test against the live eval |
+| A knowledge agent that answers with sources and that people trust | `agents/knowledge.py`, `agents/answer.py` | cites every claim; on 67 eval questions, 19 of 24 right on the held-out half and 8 of 9 unanswerable ones refused; published numbers checked by a test against the live eval |
 | A human approval before any agent writes to a system of record | `agents/approvals.py` | second person with the role; runs once; `test_a_write_needs_a_second_person_with_the_role` |
 | A model picks the tool; code decides if it may run | `ai/planner.py`, `evals/routing_hard.yaml` | typed tool calls; ids must appear in the message, roles must exist, writes stay proposals; 40 hard messages scored against keyword rules |
 | Model calls that can be audited and replayed | `ai/runtime.py`, `docs/results/ai/` | every call recorded by prompt hash; tests and the public app replay real outputs without a key |

@@ -47,6 +47,14 @@ def problems(feeds: list[Feed], now: datetime) -> dict[str, str]:
                 f"connector cannot get past, or a page budget too small for the day's changes.")
         if last and not last.get("ok"):
             out[f"{f.name}: the latest run failed"] = f"Run at {last['run_at']} failed:\n\n`{last.get('error', 'no reason recorded')}`"
+        rc = (last or {}).get("reconcile")
+        if isinstance(rc, dict) and rc.get("error"):
+            out[f"{f.name}: the check against the source failed"] = f"Run at {last['run_at']}: `{rc['error']}`. The sync itself succeeded."
+        elif isinstance(rc, dict) and rc.get("checked") and rc.get("gone", 0) / rc["checked"] > 0.01:
+            out[f"{f.name}: rows we hold are gone from the source"] = (
+                f"Run at {last['run_at']}: {rc['gone']:,} of {rc['checked']:,} rows checked are no longer at the source "
+                f"(for example {', '.join(rc.get('gone_ids', [])[:5])}). Nothing was deleted: decide whether the source "
+                "removed them on purpose.")
         if last and last.get("publish_error"):
             out[f"{f.name}: the cloud publish failed"] = (
                 f"Run at {last['run_at']} synced and loaded, but publishing to the cloud warehouse failed (the cursor was "

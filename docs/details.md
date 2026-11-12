@@ -25,7 +25,7 @@ against the answer key, and the tests that hold each one are named.
 | Income estimate | for people the vendor never covered: within one band of the true income 83.6% of the time, against 79.8% for ZIP income alone; the vendor's own band, where it exists, gets 94.9% |
 | Campaign experiment | a holdout test of a reactivation email, checked against the answer key's true effect: inside the attribution-corrected 95% interval in 7 of 8 runs (20,000 to 1,000,000 people); the run that missed is the one whose readout marked itself untrustworthy; from 100,000 people up, an uplift model sends the next email to the 30% it changes most, for 32 to 39 extra buyers per 1,000 emails against 24 for "the likeliest buyers" (at 20,000 it has too little to learn from and does not win) |
 | Home-seller model | **not published**: validation AUC 0.54, and even the rule that generated the data reaches only 0.55; the guardrails refused it, as they should |
-| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 43 of 49, and 7 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
+| Operations agent | answers from the team's docs with a citation on every claim (on 67 eval questions: 19 of 24 right on the held-out half, the right section in the top 3 for 43 of 49, and 8 of 9 unanswerable ones refused); reads live state read-only; changes nothing until a second person with the right role approves; found and, after approval, fixed a stale runbook passage |
 | AI features, measured | with gpt-4.1-mini, on held-out halves: the agent picks the right tool for 19 of 20 hard messages (keyword rules: 12 of 20); questions in English answered right 14 of 14 with no contact data ever returned; doc answers refuse what the docs do not say 8 of 9 (quoted: 7 of 9). Where it did not win (doc answers tie, contract types one worse) is in [AI, measured](#ai-measured). Code checks every model output before anything runs, and recorded runs replay without a key |
 | Reason codes | every home-buyer score splits exactly into its reasons, checked for all 30,323 test people (largest gap 5e-17); in the top decile the leading reason is ZIP income for 2,574 people and average order value for 333 |
 | Model release gate | on 100,000 people it held all three challengers, including one with the champion's AUC whose probabilities were off by 0.44 on average: an AUC-only gate would have shipped it |
@@ -717,7 +717,7 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | --- | --- |
 | Right section in the top 3 results | 43 of 49 answerable questions |
 | Answered right, with the right source | 19 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
-| Refused when the documents have no answer | 9 of 9 (dev), **7 of 9 (test)**: a 401(k) "match" and an "AWS account" each share enough words with a section to get through |
+| Refused when the documents have no answer | 8 of 9 (dev), **8 of 9 (test)**: an "AWS account" question and "which Slack channel for incidents" each share enough words with a section to get through (the second since the alert docs mention Slack) |
 | Routed to the right skill and tool | 32 of 32 |
 | Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **13 of 20 (test half)**; 16 of 20 before the threshold moved (below) |
 | Security questionnaire, left for a person when the controls page does not settle it | 7 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer) |
@@ -999,7 +999,27 @@ addresses stay.
   under one time, is still read); and lag is now the publisher's newest update minus the newest landed, asked
   each run, with a feed status of "behind" and an alert when it passes the 26-hour promise even though the
   runs succeed. The cost of skipping: if the city also changed some rows inside that reload, the incremental
-  does not see it. Catching that needs a reconcile that compares the reloaded rows by hash; it is not built.
+  does not see it. The daily reconcile below now covers that.
+- **Approved column, dropped anyway (2026-11-07 to 12).** The connector fixed its column list from the first
+  page it ever read, and NYC's API leaves out a field that is empty on every row of a page. `apt_condo_no_s`
+  was empty on that first page, so every later value was called drift and dropped, although the reviewed
+  contract lists the column. Every run passed; the only sign was "new columns held back: apt_condo_no_s" on
+  each run line. Fixed: the connector takes the contract's columns as approved, and an approved column that
+  first appears later is written (a test fails on the old connector). The rows already landed without their
+  apartment numbers are repaired by the reconcile, which finds them as changed.
+
+**The daily reconcile: what we hold, against what NYC says now** (`ingest/reconcile.py`). An incremental sync
+trusts update times. A skipped reload, a change made without moving the time, and a field the connector never
+wrote all get past that trust, so each run also takes the next 2,000 rows the cloud warehouse holds (ordered by
+a hash of their id, so a full pass covers every row in held / 2,000 runs), asks NYC for their current versions
+and compares field by field through the loader's own parser (a float written 1234.0 and "1234" are the same).
+A changed row's current version is landed and loaded with the run; a row NYC no longer has is reported and
+opens an alert above 1% of a slice, and is never deleted on that evidence alone. NYC's API refuses `=` and `in`
+on its row id (`:id` is a row number, not text: three forms tried against data.cityofnewyork.us on
+2026-11-12), so rows are asked for by `work_permit`, a text column, and picked out by their row id; the test
+server now refuses the same id lookups, so a test fails if that query is ever written again. A failure in the
+reconcile is recorded and alerted, never fatal to the sync. Its counts head the Open data page once a run has
+them.
 
 **Every day, on the record.** `.github/workflows/open_data.yml` runs
 `python -m plumbline.ingest.open_data_daily` each morning: read the cursor, pull what changed, load it
@@ -1009,6 +1029,26 @@ columns, bulk rewrites and skipped reloads, and whether the run finished or stop
 run is recorded with the API's reason). The cursor and history live on the
 `open-data-history` branch; the app's Sources, Open data page reads them. The records themselves stay
 with the city.
+
+**A database, by change data capture** (`ingest/connectors/postgres_cdc.py`, contracts in `sources/databases/`).
+Most companies' first-party data lives in their own Postgres. Plumbline reads it the way Debezium does, from the
+database's own change log, not by copying tables again: a logical replication slot (the database's bookmark in
+its write-ahead log) is created with an exported snapshot and the tables are copied inside that snapshot, so the
+copy ends exactly where the log begins; after that only inserts, updates and deletes are read, each with its log
+position. Changes are read without being consumed, landed, and only then confirmed, so a crash between the two
+reads the same changes again and the warehouse still keeps one copy. The newest change by log position wins and
+a delete as the newest change removes the row (`deleted_when` in the contract; the delete stays in bronze as
+history). Tested against a real Postgres 16 on every push (`postgres` job, `tests/test_postgres_cdc.py`): a day
+of changes from a small shop database (`store/shop_db.py`: sign-ups, an email change, two plan changes in one
+transaction, an order paid then shipped, a cancelled order deleted, a customer deleted with their orders by a
+cascade, a column added mid-day) ends with the warehouse's current view equal to the database row for row; a
+crash between landing and confirming loses and doubles nothing; a change committed while the starting copy is
+taken arrives once, by the log; a slot nobody reads reports how much log it holds back. Two bugs surfaced on the
+real database and are fixed with tests that fail on the old code: the loader's file rule called two versions of
+one key in one batch a conflict and quarantined the later (the current view said "paid" for a shipped order),
+and the starting copy was tagged with the slot's own log position, which the first change after it can share,
+leaving "newest" to tie-breaks. The app's Database view replays one recorded run (`python -m
+plumbline.ingest.cdc_demo`); the public app has no database to connect to.
 
 **Feed health.** `python -m plumbline.ingest.freshness` reads both daily histories and, for each feed, says
 whether its last success is within its promise (26 hours for a daily job), how many runs in a row

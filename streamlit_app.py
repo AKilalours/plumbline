@@ -1254,6 +1254,27 @@ def short(text: str, n: int) -> str:
     return text if len(text) <= n else text[:n].rsplit(" ", 1)[0].rstrip(":;,.") + "…"
 
 
+def reconcile_tiles(runs: list[dict]):
+    """The rows the cloud warehouse holds, checked against NYC's current versions: the last run's slice, and the
+    runs so far. Shown only once a run has done it (it needs the cloud warehouse to read what is held)."""
+    done = [r for r in runs if isinstance(r.get("reconcile"), dict) and "checked" in r["reconcile"]]
+    if not done:
+        return
+    last = done[-1]["reconcile"]
+    total = {k: sum(r["reconcile"][k] for r in done) for k in ("checked", "same", "changed", "gone")}
+    st.markdown('<div class="mono" style="margin-top:1rem">Checked against NYC: the rows we hold, asked for again</div>',
+                unsafe_allow_html=True)
+    top = ", ".join(f"{k} ({v:,})" for k, v in list(last["fields"].items())[:3]) or "nothing"
+    viz("tiles", {"items": [
+        {"label": "Checked so far", "value": total["checked"], "fmt": "int",
+         "sub": f"{len(done)} run{'s' if len(done) != 1 else ''}; {last['held']:,} rows held", "tone": "info"},
+        {"label": "Same as NYC", "value": total["same"], "fmt": "int", "sub": "field by field, read as the loader reads", "tone": "pass"},
+        {"label": "Changed at NYC", "value": total["changed"], "fmt": "int", "sub": f"loaded again; last run: {top}",
+         "tone": "warn" if total["changed"] else "pass"},
+        {"label": "Gone from NYC", "value": total["gone"], "fmt": "int", "sub": "reported, never deleted on that alone",
+         "tone": "warn" if total["gone"] else "pass"}]}, 120)
+
+
 def feed_health(runs: list[dict], promise_hours: float = 26):
     """On time, streak and the last 7 days, counted from the run history the scheduled job writes (failures included)."""
     from datetime import datetime as _dt, timezone as _tz
@@ -1290,6 +1311,7 @@ def open_data():
                 '<span class="chip">scheduled every 3 hours</span>', unsafe_allow_html=True)
     feed_health(runs)
     viz("history", {"runs": runs[-60:], "summary": OD.summary(runs), "title": OD.TITLE}, 120)
+    reconcile_tiles(runs)
     od = json.loads((Path(__file__).parent / "docs/results/onboarding_time.json").read_text())
     real = od.get("where") != "local"
     with st.expander(f"Time to onboard a new dataset ({'NYC Open Data' if real else 'local test API'}, {od['measured_at'][:10]})"):
@@ -1406,9 +1428,73 @@ def live_stream():
         "Tests: tests/test_stream.py, tests/test_stream_daily.py, tests/test_publish.py.")
 
 
+OP_NAME = {"r": "copied", "c": "insert", "u": "update", "d": "delete"}
+OP_COLOR = {"r": MUTED, "c": GREEN, "u": BLUE, "d": RED}
+
+
+def database_cdc():
+    """A replay of one real change-capture run against Postgres (recorded by `python -m plumbline.ingest.cdc_demo`;
+    the public app has no database to connect to, and the CI job reruns it on every push)."""
+    path = Path(__file__).parent / "docs/results/postgres_cdc.json"
+    if not path.exists():
+        st.info("No recorded run yet: `python -m plumbline.ingest.cdc_demo --dsn ...` against a Postgres with wal_level=logical.")
+        return
+    r = json.loads(path.read_text())
+    st.markdown(f'<span class="chip blue">Postgres {html.escape(r["postgres"].split()[0])} · logical replication</span>'
+                f'<span class="chip">change data capture</span><span class="chip">recorded {r["recorded_at"][:10]}, rerun in CI</span>',
+                unsafe_allow_html=True)
+    log = r["changes"]
+    ch = [c for c in log if c["op"] != "r"]
+    ops = {o: sum(c["op"] == o for c in ch) for o in "cud"}
+    viz("tiles", {"items": [
+        {"label": "Starting copy", "value": sum(r["copied"].values()), "fmt": "int", "sub": "rows, as of the slot's point in the log", "tone": "info"},
+        {"label": "Changes from the log", "value": len(ch), "fmt": "int", "sub": f"{ops['c']} inserts · {ops['u']} updates · {ops['d']} deletes", "tone": "info"},
+        {"label": "Crash, then read again", "value": r["crash"]["read_again"], "fmt": "int", "sub": "changes Postgres handed out again: none lost", "tone": "pass"},
+        {"label": "Matches the database", "value": "yes" if r["matches_database"] else "no", "fmt": "raw",
+         "sub": f"every row, {r['quarantined']} quarantined", "tone": "pass" if r["matches_database"] else "fail"}]}, 120)
+    n = st.slider("Replay the log", 0, len(ch), len(ch), key="cdc_step", help="Drag back to watch the warehouse rebuild change by change")
+    state = {}
+    for c in [c for c in log if c["op"] == "r"] + ch[:n]:
+        k = (c["source"], c["id"])
+        if c["op"] == "d":
+            state.pop(k, None)
+        else:
+            state[k] = c
+    if n:
+        last = ch[n - 1]
+        col = OP_COLOR[last["op"]]
+        st.markdown(f'<div class="mono" style="padding:8px 12px;border-left:4px solid {col};background:{TINT};border-radius:8px">'
+                    f'<b style="color:{col}">{OP_NAME[last["op"]]}</b> · {last["source"].replace("pg_", "")} {last["id"]} · log position '
+                    f'{last["lsn_text"]} · transaction {last["xid"]}</div>', unsafe_allow_html=True)
+    left, right = st.columns([1, 1], gap="large")
+    with left:
+        st.markdown('<div class="mono">The warehouse\'s current view at this point</div>', unsafe_allow_html=True)
+        cust = pd.DataFrame([{"id": c["id"], "email": c["email"], "plan": c["plan"], "last change": OP_NAME[c["op"]]}
+                             for (s_, _), c in sorted(state.items()) if s_ == "pg_customers"])
+        orders = pd.DataFrame([{"id": c["id"], "status": c["status"], "last change": OP_NAME[c["op"]]}
+                               for (s_, _), c in sorted(state.items()) if s_ == "pg_orders"])
+        paint = lambda v: f"color: {OP_COLOR.get({'copied': 'r', 'insert': 'c', 'update': 'u', 'delete': 'd'}.get(v, ''), INK)}; font-weight: 600"
+        st.dataframe(cust.style.map(paint, subset=["last change"]), hide_index=True, width="stretch")
+        st.dataframe(orders.style.map(paint, subset=["last change"]), hide_index=True, width="stretch")
+    with right:
+        st.markdown('<div class="mono">The change log</div>', unsafe_allow_html=True)
+        lg = pd.DataFrame([{"change": OP_NAME[c["op"]], "table": c["source"].replace("pg_", ""), "id": c["id"],
+                            "position": c["lsn_text"], "tx": c["xid"]} for c in ch[:n]][::-1])
+        if len(lg):
+            st.dataframe(lg.style.map(paint, subset=["change"]), hide_index=True, width="stretch", height=380)
+    how("A replication slot is the database's bookmark in its own change log. The slot is created with an exported "
+        "snapshot and the tables are copied inside it, so the copy ends exactly where the log begins. Changes are read "
+        "without consuming them, landed, and only then confirmed; the run above was killed between the two, and "
+        "Postgres handed the same changes out again. Each change carries its log position, so the newest wins and a "
+        "delete removes the row. Recorded from a real Postgres; the CI job runs the same steps on every push.")
+
+
 def sources_page():
     header("Sources")
-    v = view(["Health", "Lineage", "Failure lab", "Onboarding", "Open data", "Live stream", "Worth buying?"], "src_view")
+    v = view(["Health", "Lineage", "Failure lab", "Onboarding", "Open data", "Live stream", "Database", "Worth buying?"], "src_view")
+    if v == "Database":
+        database_cdc()
+        return
     if v == "Live stream":
         live_stream()
         return

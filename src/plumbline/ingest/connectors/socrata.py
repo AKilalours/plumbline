@@ -16,8 +16,10 @@ What makes it safe (the store connector's rules, applied to a source we do not o
   rbx6-tga4 with one time; each run read the first 60 pages of that block, stopped at its budget, started over
   at the top the next time, and never reached the 2,438 real changes after it, while every run passed.
 - A fixed column set per landing folder: the first sync records it. Fields a row leaves out are
-  written empty; a column that appears later is reported as drift and not written, so a delivery
-  never changes shape under its contract.
+  written empty; a column that appears later is reported as drift and not written, unless the reviewed
+  contract already lists it (`accepted`): the API leaves out a field that is empty on every row of a page,
+  so a real column can be missing from the first page. That happened to apt_condo_no_s on 2026-11-07, and
+  every apartment number was dropped for five days although the contract had approved the column.
 - Privacy: columns that name or contact a person (owner, applicant, phone, email...) are dropped
   before anything is written, the same rule the PLUTO download follows. Records of buildings stay.
 - Provenance: every row keeps the city's row id and update time (source_row_id, source_updated_at);
@@ -158,7 +160,8 @@ def bulk_rewrite(stamps: dict, page_size: int, share: float = 0.9) -> dict | Non
 
 def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *, name: str, page_size: int = 1000,
                  since: str | None = None, overlap: timedelta = timedelta(minutes=5), max_pages: int | None = None,
-                 after_page: Callable[[int], None] | None = None, reload_rows: int | None = 100_000) -> SyncStats:
+                 after_page: Callable[[int], None] | None = None, reload_rows: int | None = 100_000,
+                 accepted: set[str] | frozenset = frozenset()) -> SyncStats:
     """Fetch rows added or changed since the last sync into landing_dir as CSV pages."""
     landing = Path(landing_dir)
     landing.mkdir(parents=True, exist_ok=True)
@@ -211,7 +214,11 @@ def sync_dataset(client: SocrataClient, dataset: str, landing_dir: str | Path, *
             new = sorted({k for r in rows for k in r} - set(state["columns"]) - set(state["dropped_personal"])
                          - {k for k in {k for r in rows for k in r} if PERSONAL.search(k)})
             for k in new:
-                if k not in state["drift"]:
+                if k in accepted:                       # approved in the contract: a column, not drift
+                    state["columns"].append(k)
+                    if k in state["drift"]:
+                        state["drift"].remove(k)
+                elif k not in state["drift"]:
                     state["drift"].append(k)
             fresh = [r for r in rows if f"{r['source_row_id']}|{_ts(r['source_updated_at'])}" not in seen]
             stats.reread += len(rows) - len(fresh)

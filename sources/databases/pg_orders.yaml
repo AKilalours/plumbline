@@ -1,0 +1,17 @@
+# The orders table of the same database, by the same change capture. Orders are cancelled by deleting them.
+name: pg_orders
+kind: database
+files: "sources/pg_orders/*.csv"
+key: [id]
+latest_by: [_lsn]
+deleted_when: {column: _op, equals: d}
+columns:
+  _op:         {type: enum, values: [r, c, u, d], required: true}
+  _lsn:        {type: int, min: 0, required: true}
+  _lsn_text:   {type: string, required: true}
+  _xid:        {type: string, optional: true}
+  id:          {type: int, required: true}
+  customer_id: {type: int, optional: true}
+  total:       {type: float, min: 0, optional: true}
+  status:      {type: enum, values: [placed, paid, shipped, refunded], optional: true}
+  created_at:  {type: timestamp, optional: true}

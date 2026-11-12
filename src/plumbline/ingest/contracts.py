@@ -49,6 +49,9 @@ class SourceContract:
     aliases: dict[str, str] = field(default_factory=dict)
     role: str = "data"           # "data" or "suppression"
     gate: dict | None = None     # delivery-level limits (ingest/gate.py); None: no gate
+    # A change-log source (CDC) sends deletes as rows: {column: _op, equals: d} drops a key whose newest row
+    # is a delete from the current view. The delete stays in bronze, so the history is still there.
+    deleted_when: tuple[str, str] | None = None
 
     @property
     def identity_cols(self) -> dict[str, str]:
@@ -76,10 +79,12 @@ def load_contract(path: str | Path) -> SourceContract:
         c = SourceContract(name=raw["name"], kind=raw["kind"], files=raw["files"], key=tuple(raw["key"]),
                            columns=cols, latest_by=tuple(raw.get("latest_by") or ()),
                            aliases=dict(raw.get("aliases") or {}), role=raw.get("role", "data"),
-                           gate=_gate(path, raw.get("gate")))
+                           gate=_gate(path, raw.get("gate")),
+                           deleted_when=(raw["deleted_when"]["column"], str(raw["deleted_when"]["equals"]))
+                           if raw.get("deleted_when") else None)
     except KeyError as e:
         raise ContractError(f"{path}: missing field {e}") from None
-    missing = [k for k in c.key + c.latest_by if k not in c.columns]
+    missing = [k for k in c.key + c.latest_by + ((c.deleted_when[0],) if c.deleted_when else ()) if k not in c.columns]
     if missing:
         raise ContractError(f"{path}: key or latest_by names unknown columns {missing}")
     if not re.fullmatch(r"[a-z][a-z0-9_]*", c.name):

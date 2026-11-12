@@ -125,6 +125,8 @@ def _create_current_view(con, c: SourceContract) -> None:
     order = [f'"{k}" DESC NULLS LAST' for k in c.latest_by] + ["_first_seen_at DESC", "_first_version DESC",
                                                                 "_first_row_number DESC"]
     sup = f"NOT {contract_erase_sql(c, 'b')}"
+    # the newest change decides: a delete as the newest version removes the key (ranking happens first)
+    deleted = f""" AND coalesce(CAST("{c.deleted_when[0]}" AS VARCHAR), '') <> '{c.deleted_when[1]}'""" if c.deleted_when else ""
     con.execute(f"""CREATE OR REPLACE VIEW current_{c.name} AS
         WITH loaded AS (SELECT delivery_id, group_key, version FROM ingest_ledger
                         WHERE source = '{c.name}' AND status = 'loaded'),
@@ -135,7 +137,7 @@ def _create_current_view(con, c: SourceContract) -> None:
                         WHERE source = '{c.name}' AND delivery_id IN (SELECT delivery_id FROM newest)),
         live AS (SELECT b.* FROM {c.table} b WHERE b._row_hash IN (SELECT row_hash FROM live_hashes) AND {sup}),
         ranked AS (SELECT *, row_number() OVER (PARTITION BY {key} ORDER BY {", ".join(order)}) AS _rn FROM live)
-        SELECT * EXCLUDE (_rn) FROM ranked WHERE _rn = 1""")
+        SELECT * EXCLUDE (_rn) FROM ranked WHERE _rn = 1{deleted}""")
 
 
 # ------------------------------------------------------------------ discovery
@@ -268,6 +270,10 @@ def load_delivery(con, c: SourceContract, run_dir: Path, d: Delivery,
                     email_hash(vals[n]) if c.columns[n].privacy == "email" else phone_hash(vals[n]))
                 for n in _privacy_cols(c)}
         key = tuple(vals[k] for k in c.key)
+        if c.deleted_when:
+            # a change log carries several versions of one key in one batch (paid, then shipped), ordered by
+            # log position: a version is the key at its position, and only two rows at the same one conflict
+            key += tuple(vals[k] for k in c.latest_by)
         rh = _row_hash(vals)
         if key in seen:
             reason = "duplicate_in_delivery" if seen[key] == rh else "conflicting_key_in_delivery"

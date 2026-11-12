@@ -121,3 +121,12 @@ def test_a_feed_whose_data_stops_moving_while_runs_pass_is_named():
                 [run(14, source_newest="2026-11-14T10:00:00.000", hours_behind_source=38.3)])
     found = problems([feed], NOW)
     assert list(found) == ["NYC Open Data permits: the data is 38.3 hours behind the source"]
+
+
+def test_rows_gone_from_the_source_are_named_for_a_person_not_deleted():
+    feed = Feed("NYC Open Data permits", 26, lambda: [run(d) for d in range(8, 14)] +
+                [run(14, reconcile={"checked": 2000, "same": 1960, "changed": 0, "gone": 40, "gone_ids": ["row-a", "row-b"]})])
+    found = problems([feed], NOW)
+    assert list(found) == ["NYC Open Data permits: rows we hold are gone from the source"] and "row-a" in next(iter(found.values()))
+    quiet = Feed("x", 26, lambda: [run(d) for d in range(8, 14)] + [run(14, reconcile={"checked": 2000, "same": 1999, "changed": 0, "gone": 1})])
+    assert problems([quiet], NOW) == {}

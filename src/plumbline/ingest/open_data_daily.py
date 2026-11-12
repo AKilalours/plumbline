@@ -35,7 +35,7 @@ TITLE = "DOB NOW: Build, Approved Permits"
 def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, out: Path = OUT,
         contracts: Path = ROOT / "sources" / "open_data", since: str = "2026-11-01", max_pages: int = 60, page_size: int = 1000, reload_rows: int = 100_000,
         client_kw: dict | None = None, now=lambda: datetime.now(timezone.utc), publish_to: str | None = None,
-        reconcile_budget: int = 2000, held_rows=None, reconcile_by: str = "work_permit") -> dict:
+        reconcile_budget: int = 2000, held_rows=None, reconcile_by: str = "work_permit", lake_dir: str | None = None) -> dict:
     from .connectors.socrata import source_newest, DEFAULT_HOST, SocrataClient, sync_dataset
     from .contracts import load_contracts
     from .engine import ingest
@@ -88,6 +88,11 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
                     rec["published"] = _publish(wh, name, publish_to, rec["run_at"])
                 except Exception as e:
                     rec["published"], rec["publish_error"] = None, f"{type(e).__name__}: {e}"[:400]
+                # The Iceberg copy: one snapshot per run, for time travel. Same rule as the cloud publish.
+                try:
+                    rec["lake"] = _lake(wh, name, lake_dir, rec["run_at"], lambda: _held_in_cloud(name, publish_to))
+                except Exception as e:
+                    rec["lake"], rec["lake_error"] = None, f"{type(e).__name__}: {e}"[:400]
             elif not contract.exists():
                 rec["note"] = f"no reviewed contract at sources/open_data/{name}.yaml yet: synced, not loaded"
             shutil.copy(landing / "_sync_state.json", state_dir / "_sync_state.json")
@@ -143,6 +148,18 @@ def _held_in_cloud(name: str, target: str | None) -> list[dict] | None:
         return [dict(zip(cols, r)) for r in cur.fetchall()]
     finally:
         con.close()
+
+
+def _lake(warehouse: Path, name: str, lake_dir: str | None, run_at: str, seed=None) -> dict | None:
+    """Append this run's rows to the feed's Iceberg table (lake/iceberg.py) when a lake folder is configured.
+    The first time, the table is seeded from the cloud copy so it starts with every row held, not one run's."""
+    import os
+    lake_dir = lake_dir or os.environ.get("PLUMBLINE_FEED_LAKE")
+    if not lake_dir:
+        return None
+    from ..lake.iceberg import Lake, feed_snapshot
+    return feed_snapshot(warehouse, Lake(str(Path(lake_dir) / "warehouse"), Path(lake_dir) / "catalog.db"), name, run_at,
+                         seed=seed)
 
 
 def _publish(warehouse: Path, name: str, target: str | None, run_at: str) -> dict | None:

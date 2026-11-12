@@ -22,7 +22,7 @@ SOURCES = ["docs/security.md", "docs/runbooks/*.md"]
 # date-of-birth review case, 0.15 to 0.25 were the perfect ones. The documents change the scores, so a test re-runs
 # the choice and fails if this constant no longer matches it.
 GRID = (0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5)
-MIN_COVERAGE = 0.3
+MIN_COVERAGE = 0.25    # 0.3 until 2026-11-12: two runbook sections (Iceberg copy, stepping in by hand) moved the dev choice
 
 
 def index(repo) -> Index:

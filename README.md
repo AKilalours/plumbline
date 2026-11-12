@@ -17,7 +17,7 @@ Real public feeds, a live stream, Kafka and a Postgres change log, loaded under 
 
 <table>
 <tr>
-<td align="center"><h2>5</h2>kinds of source<br><sub>files · APIs · live stream · Kafka · Postgres CDC</sub></td>
+<td align="center"><h2>6</h2>kinds of source<br><sub>files · APIs · web pages · live stream · Kafka · Postgres CDC</sub></td>
 <td align="center"><h2>0</h2>lost or doubled after a crash<br><sub>real Kafka and real Postgres, in CI</sub></td>
 <td align="center"><h2>803,457</h2>rows a publisher reloaded<br><sub>skipped, recorded; the 2,438 real changes landed</sub></td>
 <td align="center"><h2>3</h2>real incidents<br><sub>found, fixed at the root, written up</sub></td>
@@ -27,7 +27,8 @@ Real public feeds, a live stream, Kafka and a Postgres change log, loaded under 
 ### Real, every day
 
 NYC Open Data permits and Wikimedia's live edit stream are synced on a schedule, checked against what the
-source says now, and upserted into a **MotherDuck** cloud warehouse; every run is recorded, failures included
+source says now, upserted into a **MotherDuck** cloud warehouse and appended to an **Iceberg** table (one
+snapshot per run, readable as any run left it); every run is recorded with what it cost, failures included
 ([how](docs/details.md#a-cloud-warehouse-target)). Three things went wrong on the real feeds, and each is a
 written postmortem with its timeline, measured impact, root cause and the test that now catches it:
 
@@ -42,6 +43,16 @@ written postmortem with its timeline, measured impact, root cause and the test t
 | A live stream (SSE) | land, then checkpoint; resume with Last-Event-ID; repeats dropped by event id | Wikimedia's real stream, every run, with a planned hang-up |
 | Kafka | land, then commit offsets; bad messages to dead letters | a real Kafka 3.8 broker in CI, crash included |
 | Postgres (change data capture) | starting copy inside the slot's snapshot; land, then advance the slot; deletes by log position | a real Postgres 16 in CI: after a crash the warehouse equals the database row for row |
+| Web pages (scraping) | robots.txt decides (unreadable means no); the crawl delay is kept and doubles when told to slow down; a named contact; unchanged pages not downloaded; a request budget | a local stand-in with robots rules, delays and 429s; the example targets quotes.toscrape.com, a site built for scraping practice |
+| **Your source** | write one method that asks for the next page; the kit adds retries, safe reruns, crash recovery, the contract and privacy | `verify` runs it the ways production will; it catches the cursor bug most new connectors have |
+
+**Add a source in about 15 lines:** [the guide](docs/add_a_source.md) and a [worked example](examples/sources/usgs_quakes.py).
+
+```bash
+python -m plumbline.kit draft  my_source.py    # read one page, draft a contract for a person to review
+python -m plumbline.kit run    my_source.py    # sync and load under the reviewed contract
+python -m plumbline.kit verify my_source.py    # PASS/FAIL: lands, no doubles on re-read, crash resumes, cursor kept
+```
 
 <table>
 <tr>
@@ -55,7 +66,8 @@ written postmortem with its timeline, measured impact, root cause and the test t
 </table>
 
 <p align="center"><b>Run like a service:</b> <a href="docs/reliability/slo.md">objectives with error budgets</a>, measured from every run ·
-<a href="docs/postmortems/">postmortems</a> · <a href="docs/adr/README.md">decision records</a>, with what was rejected and when to revisit ·
+<a href="docs/reliability/recoveries.yaml">every time a person had to step in</a> (NYC 3 in 27 runs, Wikimedia 1 in 26) ·
+cost per run (runner minutes, list price, $0 charged) · <a href="docs/postmortems/">postmortems</a> · <a href="docs/adr/README.md">decision records</a>, with what was rejected and when to revisit ·
 contract changes that would break consumers fail CI · <a href="docs/details.md#honest-limits-and-the-questions-they-raise">honest limits</a></p>
 
 ## What the data feeds

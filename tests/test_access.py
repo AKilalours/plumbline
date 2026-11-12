@@ -124,6 +124,7 @@ def test_questionnaire_on_the_held_out_half():
     # Was 16 of 20 (bar 0.8). A runbook paragraph moved the dev-chosen threshold from 0.25 to 0.3 and
     # this fell to 13 of 20. The threshold stays where the dev half puts it; the bar records the
     # measured floor, and the README says why, instead of the test half choosing the threshold.
+    # 2026-11-12: two runbook sections moved the dev choice back to 0.25; held out it is 15 of 20.
     assert d >= 20 and n / d >= 0.65, r
 
 

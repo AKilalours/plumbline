@@ -68,6 +68,10 @@ def problems(feeds: list[Feed], now: datetime) -> dict[str, str]:
             out[f"{f.name}: the cloud publish failed"] = (
                 f"Run at {last['run_at']} synced and loaded, but publishing to the cloud warehouse failed (the cursor was "
                 f"saved, so nothing is re-pulled):\n\n`{last['publish_error']}`")
+        if last and last.get("lake_error"):
+            out[f"{f.name}: the Iceberg copy was not updated"] = (
+                f"Run at {last['run_at']} synced and loaded, but appending to the Iceberg table failed, so this run's rows "
+                f"are not in it (the cursor was saved; the warehouse has them):\n\n`{last['lake_error']}`")
         if last and last.get("ok") and last.get("rows"):
             share = (last.get("rows_quarantined") or 0) / last["rows"]
             if share > QUARANTINE_ALERT:

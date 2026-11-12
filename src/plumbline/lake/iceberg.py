@@ -202,3 +202,87 @@ def stored_values(lake: Lake) -> tuple[set[str], bytes]:
                         except (UnicodeDecodeError, AttributeError):
                             pass
     return values, b"".join(raw)
+
+
+# ------------------------------------------------------------------ the real feeds: one snapshot per run
+FEEDS = "feeds"
+FEED_PROPERTIES = {**TABLE_PROPERTIES,
+                   # every commit writes a new metadata file; keep a few, not one per run forever
+                   "write.metadata.delete-after-commit.enabled": "true", "write.metadata.previous-versions-max": "5"}
+
+
+def feed_snapshot(warehouse: str | Path, lake: Lake, name: str, run_at: str, *, keep_days: int = 28, seed=None) -> dict:
+    """Append this run's rows of bronze_<name> that the lake does not hold yet (by row hash), as one snapshot
+    tagged with the run's time, so `as_of` can show the feed as any run left it. Bronze is append-only, so
+    the lake is too: a changed row is a new row, the current view is computed at read time (newest per key).
+    A rerun with nothing new commits nothing. Snapshots older than keep_days are expired (the latest is kept).
+
+    `seed()` returns the rows a fuller copy already holds (the cloud warehouse's current table): used once, when
+    the table is created, as its first snapshot, so the lake starts with the whole feed, not just this run."""
+    import time as _time
+    cat = lake.catalog()
+    if (FEEDS,) not in cat.list_namespaces():
+        cat.create_namespace(FEEDS)
+    ident = f"{FEEDS}.{name}"
+    with duckdb.connect(str(warehouse), read_only=True) as con:
+        data = _arrow(con, f"bronze_{name}")
+    seeded = 0
+    if not cat.table_exists(ident):
+        tbl = cat.create_table(ident, schema=data.schema, properties=FEED_PROPERTIES)
+        rows = seed() if seed else None
+        if rows:
+            known = [{k: r.get(k) for k in data.schema.names} for r in rows]
+            tbl.append(pa.Table.from_pylist(known, schema=data.schema),
+                       snapshot_properties={"plumbline.run_at": run_at, "plumbline.seed": "cloud copy"})
+            seeded = len(known)
+    tbl = cat.load_table(ident)
+    have_cols = {f.name for f in tbl.schema().fields}
+    if set(data.schema.names) - have_cols:                     # a column the contract added: the table grows with it
+        with tbl.update_schema() as u:
+            u.union_by_name(data.schema)
+        tbl = tbl.refresh()
+    for f in tbl.schema().as_arrow():                           # a column no longer delivered stays, empty
+        if f.name not in data.schema.names:
+            data = data.append_column(f, pa.nulls(len(data), f.type))
+    data = data.select([f.name for f in tbl.schema().fields])
+    have = (tbl.scan(selected_fields=(KEY,)).to_arrow()[KEY].combine_chunks() if tbl.current_snapshot()
+            else pa.array([], pa.large_string()))
+    new = data.filter(pc.invert(pc.is_in(data[KEY], value_set=have)))
+    if len(new):
+        tbl.append(new.cast(tbl.schema().as_arrow()), snapshot_properties={"plumbline.run_at": run_at})
+        tbl = tbl.refresh()
+    cutoff = (_time.time() - keep_days * 86400) * 1000
+    cur = tbl.current_snapshot()
+    old = [s.snapshot_id for s in tbl.snapshots() if cur and s.snapshot_id != cur.snapshot_id and s.timestamp_ms < cutoff]
+    if old:
+        tbl.maintenance.expire_snapshots().by_ids(old).commit()
+        tbl = tbl.refresh()
+    cur = tbl.current_snapshot()
+    return {"table": ident, "appended": len(new), "rows": _count(tbl), "snapshots": len(tbl.snapshots()),
+            "snapshot_id": cur.snapshot_id if cur else None, "expired": len(old), "seeded": seeded}
+
+
+def history(lake: Lake, name: str) -> list[dict]:
+    """Every snapshot kept: when, which run, rows added."""
+    tbl = lake.catalog().load_table(f"{FEEDS}.{name}")
+    return [{"snapshot_id": s.snapshot_id, "at_ms": s.timestamp_ms,
+             "run_at": s.summary.get("plumbline.run_at") if s.summary else None,
+             "added": int(s.summary.get("added-records") or 0) if s.summary else 0}
+            for s in tbl.snapshots()]
+
+
+def as_of(lake: Lake, name: str, run_at: str, key: str = "source_row_id", latest_by: str = "source_updated_at") -> pa.Table:
+    """The feed's current rows as the run at (or last before) `run_at` left them: time travel, then newest per key."""
+    snaps = [h for h in history(lake, name) if h["run_at"] and h["run_at"] <= run_at]
+    if not snaps:
+        raise LookupError(f"no snapshot of {name} at or before {run_at}")
+    t = read_feed(lake, name, max(snaps, key=lambda h: (h["run_at"], h["at_ms"]))["snapshot_id"])   # a seed and its run share a time
+    with duckdb.connect() as con:
+        con.register("t", t)
+        rel = con.sql(f"SELECT * EXCLUDE (_rn) FROM (SELECT *, row_number() OVER (PARTITION BY {key} "
+                      f"ORDER BY {latest_by} DESC, _first_seen_at DESC) AS _rn FROM t) WHERE _rn = 1")
+        return rel.to_arrow_table() if hasattr(rel, "to_arrow_table") else rel.arrow()
+
+
+def read_feed(lake: Lake, name: str, snapshot_id: int | None = None) -> pa.Table:
+    return lake.catalog().load_table(f"{FEEDS}.{name}").scan(snapshot_id=snapshot_id).to_arrow()

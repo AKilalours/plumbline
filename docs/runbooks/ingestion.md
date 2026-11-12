@@ -92,3 +92,18 @@ python -m plumbline.ingest --run-dir data/synth/seed7_n100000 --warehouse data/w
 
 The rebuild reproduces the current tables and quarantine exactly (tested in
 `test_rebuild_from_scratch_is_identical`). Keep the broken file until the cause is understood.
+
+## 8. The Iceberg copy was not updated (alert "the Iceberg copy was not updated")
+
+The sync and the cloud publish succeeded; only the append to the feed's Iceberg table failed, so that run's
+rows are missing from it. Read `lake_error` on the run line. A full disk or a corrupt catalog on the history
+branch are the likely causes. To rebuild the table: delete `lake/` on the `open-data-history` branch and let the
+next run seed it again from the cloud copy (it does this whenever the table does not exist). Snapshots before
+the rebuild are lost; the warehouse and the cloud copy are not affected.
+
+## 9. You stepped in by hand
+
+Any time you rerun a job by hand, change code or config to bring a feed back, or repair data, add an entry to
+`docs/reliability/recoveries.yaml` (feed, when consumers were first affected, when the first good run landed,
+what you did, the postmortem). A run started by hand with no entry is counted anyway, as "unexplained", on the
+Health page. `python -m plumbline.ingest.recoveries` prints the per-feed counts.

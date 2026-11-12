@@ -1323,6 +1323,32 @@ def recovery_panel():
     st.caption("Time to onboard a new source is measured by an engineer who did not build the kit, following "
                "docs/add_a_source.md; it is shown here once they have done it, not estimated.")
 
+
+def cost_panel():
+    """What a scheduled run costs, measured inside the job (ingest/cost.py)."""
+    from plumbline.ingest.cost import PRICE_SOURCE, USD_PER_MINUTE, jobs, summary
+    s = summary(jobs(), {"NYC": open_data_runs(), "Wikimedia": stream_runs()})
+    st.markdown('<div class="mono">What a run costs</div>', unsafe_allow_html=True)
+    m, lo = s.get("measured"), s.get("steps_only")
+    if m:
+        items = [{"label": "Runner minutes per run", "value": f"{m['billed_minutes_avg']:g}", "fmt": "raw",
+                  "sub": f"average of {m['jobs']} runs, billed in whole minutes; longest {m['billed_minutes_max']}", "tone": "info"},
+                 {"label": "List price per run", "value": f"${m['list_usd_per_run']:.3f}", "fmt": "raw",
+                  "sub": f"${m['list_usd_per_30_days']:.2f} for 30 days at 8 runs a day", "tone": "info"},
+                 {"label": "Charged", "value": f"${m['charged_usd_total']:.2f}", "fmt": "raw",
+                  "sub": "public repository: standard runners are free", "tone": "pass"}]
+    elif lo:
+        items = [{"label": "Feed steps per run", "value": f"{lo['seconds_per_run']:g} s", "fmt": "raw",
+                  "sub": "steps only: setup and installs not included", "tone": "info"},
+                 {"label": "List price per run, at least", "value": f"${lo['list_usd_per_run_at_least']:.3f}", "fmt": "raw",
+                  "sub": f"${USD_PER_MINUTE} a runner minute", "tone": "info"},
+                 {"label": "Charged", "value": "$0.00", "fmt": "raw", "sub": "public repository: standard runners are free", "tone": "pass"}]
+    else:
+        return
+    viz("tiles", {"items": items}, 120)
+    st.caption(f"GitHub's list rate for the job's runner: {PRICE_SOURCE}. The cloud warehouse and the source APIs are not "
+               "counted: nothing measures them yet.")
+
 def feed_health(runs: list[dict], promise_hours: float = 26):
     """On time, streak and the last 7 days, counted from the run history the scheduled job writes (failures included)."""
     from datetime import datetime as _dt, timezone as _tz
@@ -1576,6 +1602,7 @@ def sources_page():
     if v == "Health":
         slo_panel()
         recovery_panel()
+        cost_panel()
         d = demo()
         with Q.connect(d) as con:
             led = con.execute("""SELECT source AS Source, count(*) FILTER (WHERE status = 'loaded') AS Loaded,

@@ -316,7 +316,8 @@ def _load(path: str) -> type[Source]:
     spec = importlib.util.spec_from_file_location(Path(path).stem, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    found = [v for v in vars(mod).values() if isinstance(v, type) and issubclass(v, Source) and v is not Source]
+    # defined in this file: a base class it imports (PoliteSource, say) is not the source
+    found = [v for v in vars(mod).values() if isinstance(v, type) and issubclass(v, Source) and v.__module__ == mod.__name__]
     if len(found) != 1:
         raise SystemExit(f"{path}: expected one Source subclass, found {len(found)}")
     return found[0]

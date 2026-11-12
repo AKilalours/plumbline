@@ -14,6 +14,7 @@ on:
       - "sources/open_data/**"
       - "sources/streams/**"
       - "src/plumbline/products/publish.py"
+      - "src/plumbline/lake/**"
       - ".github/workflows/open_data.yml"
 permissions:
   contents: write
@@ -26,13 +27,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Note when the job started (for its cost, ingest/cost.py)
+        run: echo "JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       # MotherDuck accepts only the DuckDB versions it supports (1.5.6 at most on 2026-11-07; 2.0.0 was refused), so the
       # daily job loads and publishes with that version. Raise it when MotherDuck supports a newer one.
-      - run: python -m pip install -e . "duckdb==1.5.6"
+      - run: python -m pip install -e ".[lake]" "duckdb==1.5.6"
       - name: Bring back the cursor and the run history
         run: |
           git fetch origin open-data-history || true
@@ -45,6 +48,7 @@ jobs:
           mkdir -p docs/results/open_data
           cp -r /tmp/hist/state docs/results/open_data/ 2>/dev/null || true
           cp /tmp/hist/runs.jsonl docs/results/open_data/ 2>/dev/null || true
+          cp /tmp/hist/job_runs.jsonl docs/results/open_data/ 2>/dev/null || true
           mkdir -p docs/results/streams
           cp /tmp/hist/stream_runs.jsonl docs/results/streams/runs.jsonl 2>/dev/null || true
       - name: Sync from NYC Open Data
@@ -53,6 +57,8 @@ jobs:
         env:
           SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+          # the Iceberg copy of the feed (lake/iceberg.py): one snapshot per run, kept on the history branch
+          PLUMBLINE_FEED_LAKE: /tmp/hist/lake
         run: python -m plumbline.ingest.open_data_daily
       - name: Read a window of Wikimedia's live stream
         id: stream
@@ -60,11 +66,15 @@ jobs:
         env:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
         run: python -m plumbline.ingest.stream_daily
+      - name: Record what this run cost (runner minutes and dollars)
+        if: always()
+        run: python -m plumbline.ingest.cost record --started "$JOB_STARTED" --event "$GITHUB_EVENT_NAME" || true
       - name: Save the cursor and the run history (after a failed run too)
         if: always()
         run: |
           cp -r docs/results/open_data/state /tmp/hist/ 2>/dev/null || true
           cp docs/results/open_data/runs.jsonl /tmp/hist/ 2>/dev/null || true
+          cp docs/results/open_data/job_runs.jsonl /tmp/hist/ 2>/dev/null || true
           cp docs/results/streams/runs.jsonl /tmp/hist/stream_runs.jsonl 2>/dev/null || true
           cd /tmp/hist
           git config user.name "github-actions[bot]"

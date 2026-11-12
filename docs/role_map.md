@@ -34,12 +34,15 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | Bad deliveries held, not loaded | `ingest/gate.py`, `gate:` in each file contract | each delivery profiled against its source's last five of the same kind; truncated files, emptied columns and failing-row spikes held with the reason, released only by a named person; 0 of 276 normal deliveries held |
 | Bad records quarantined, not loaded | `quarantine` with reason codes | `test_bad_rows_go_to_quarantine_with_reasons` |
 | Onboarding by configuration | one YAML per source | `test_new_source_onboards_with_yaml_only` |
+| Reusable modules other teams use to add a source | `kit.py`, `docs/add_a_source.md`, `examples/sources/` | write `pages(cursor)` (about 15 lines); `draft`, `run`, `verify`; `verify` fails a source that saves its cursor before the window is read; the second-engineer onboarding test is pending, not claimed |
+| Approved scraping at volume, politely | `ingest/connectors/scrape.py` | robots.txt first (unreadable means nothing allowed), crawl delay kept and doubled after a 429, named contact, conditional requests, request budget; tested on a local stand-in |
+| Hands-on recoveries and cost per run | `ingest/recoveries.py`, `docs/reliability/recoveries.yaml`, `ingest/cost.py` | NYC 3 in 27 runs, Wikimedia 1 in 26, each with a postmortem; manual reruns counted from the run line; runner minutes and list price recorded by every job, $0 charged |
 | Onboard a partner file nobody described | `ai/onboard.py`, `evals/onboarding.yaml` | a drafted contract (types, email and phone flags, identity roles, key) checked by the same loader, written to `sources/drafts/` for a person; scored on held-out partner files against rules without a model |
 | Origin of every value | `_first_delivery_id`, `delivery_rows`, provenance columns in `dim_person` | each golden value names its source and date |
 | Delete whole persons without deleting their namesakes, at any size | `privacy/person_deletion.py` | records of people who never asked: 0 at 20,000 to 300,000, and at 1,000,000 85 → 1 (phone rule) → 0 (date-of-birth rule, re-planned on the same state); review queue kept human-sized |
 | Restricted data cannot return through a new load or a replay | `ingest/erasure.py`, `privacy/` | replay tests at row and person level |
 | Recovery runbooks | `docs/runbooks/ingestion.md` | |
-| Open table formats on object storage | `lake/iceberg.py` (Iceberg on any S3 API) | sync with snapshots and time travel; deletion expires history and removes files; no column values in manifest statistics; tested against an S3 API |
+| Open table formats on object storage | `lake/iceberg.py` (Iceberg on any S3 API) | sync with snapshots and time travel; deletion expires history and removes files; no column values in manifest statistics; tested against an S3 API ; the real NYC feed appended as one snapshot per run, seeded once from the cloud copy, readable as any run left it |
 
 ## Data science: features and models agents can rely on
 
@@ -69,7 +72,7 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | Webhooks and their failure modes | `agents/slack.py` | signature, replay window, retry and double-click dedupe, bot loops |
 | Measure adoption and cost; retire what nobody opens | `agents/usage.py` | per skill: requests, refusals, people, tokens, cost, hours retired (measured uses times an owner's baseline); unused skills |
 | Access provisioning with an access record that writes itself | `agents/access.py`, `skills/access_admin.yaml`, `ops.access` | grant, remove, offboard only by an admin who neither asked nor is the person; last admin cannot be removed; `tests/test_access.py` |
-| Security questionnaires answered from documented controls | `docs/security.md`, `agents/questionnaire.py` | on 53 items, 13 of 20 drafted right on the held-out half (16 before a runbook change moved the dev-chosen threshold), 6 of 6 controls we lack left for a person |
+| Security questionnaires answered from documented controls | `docs/security.md`, `agents/questionnaire.py` | on 53 items, 15 of 20 drafted right on the held-out half (16 before runbook changes moved the dev-chosen threshold), 6 of 6 controls we lack left for a person |
 | Runbooks people follow | `docs/runbooks/agent.md` | |
 | An internal tool people can use without the command line | `streamlit_app.py` (Ask the agent) | the same agent, approvals and audit behind a chat page; each viewer gets their own copy of the warehouse; no model key on a public page |
 

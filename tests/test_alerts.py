@@ -138,3 +138,9 @@ def test_a_new_column_held_back_three_runs_running_asks_a_person_to_decide():
     assert list(problems([feed], NOW)) == ["NYC Open Data permits: new column waiting for review: apt_condo_no_s"]
     two = Feed("x", 26, lambda: [run(d) for d in range(8, 12)] + [run(d, drift=["c"]) for d in range(12, 14)])
     assert problems([two], NOW) == {}
+
+
+def test_a_failed_iceberg_append_is_named_and_says_the_runs_rows_are_missing_from_it():
+    feed = Feed("NYC Open Data permits", 26, lambda: [run(d) for d in range(8, 14)] + [run(14, lake_error="OSError: disk full")])
+    found = problems([feed], NOW)
+    assert list(found) == ["NYC Open Data permits: the Iceberg copy was not updated"] and "disk full" in next(iter(found.values()))

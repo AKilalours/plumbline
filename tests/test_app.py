@@ -772,3 +772,15 @@ def test_the_recovery_panel_renders_from_a_history_with_a_failure_and_a_rerun_by
             "streamlit_app.recovery_panel()\n")
     at = st_testing.AppTest.from_string(code, default_timeout=60).run()
     assert not at.exception, at.exception
+
+
+def test_the_cost_panel_renders_from_measured_jobs_and_from_steps_only():
+    st_testing = pytest.importorskip("streamlit.testing.v1")
+    for jobs in ("[plumbline.ingest.cost.job_record(0, 170)]", "[]"):
+        code = ("import streamlit_app, plumbline.ingest.cost\n"
+                f"plumbline.ingest.cost.jobs = lambda *a, **k: {jobs}\n"
+                "streamlit_app.open_data_runs = lambda: [{'run_at': '2026-11-12T00:00:00Z', 'ok': True, 'seconds': 120}]\n"
+                "streamlit_app.stream_runs = lambda: []\nstreamlit_app.cost_panel()\n")
+        at = st_testing.AppTest.from_string(code, default_timeout=60).run()
+        assert not at.exception, at.exception
+        assert any("What a run costs" in m.value for m in at.markdown)

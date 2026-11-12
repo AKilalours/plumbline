@@ -719,8 +719,8 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | Answered right, with the right source | 19 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
 | Refused when the documents have no answer | 8 of 9 (dev), **8 of 9 (test)**: an "AWS account" question and "which Slack channel for incidents" each share enough words with a section to get through (the second since the alert docs mention Slack) |
 | Routed to the right skill and tool | 32 of 32 |
-| Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **13 of 20 (test half)**; 16 of 20 before the threshold moved (below) |
-| Security questionnaire, left for a person when the controls page does not settle it | 7 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer) |
+| Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **15 of 20 (test half)**; 16 of 20 before the threshold first moved, 12 of 20 if it had stayed at 0.3 (below) |
+| Security questionnaire, left for a person when the controls page does not settle it | 6 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer); the dev miss is "which cloud regions host the data?", answered at 0.31 coverage since the runbook gained the Iceberg section |
 
 The top-3 count was 45 until a later section began to outrank a labelled one that it also answers; the labels were left as they were, because changing an answer key after seeing a result is grading your own test.
 
@@ -737,7 +737,10 @@ The README is one of the documents the agent searches, so editing it moves the e
 app section above made 0.35 to 0.5 tie on the dev half; the rule then picked 0.5 and the held-out
 half fell to 16 of 24. A later paragraph of this README moved it back. Both swings came from prose,
 not from the agent, which is the clearest case for retrieval that scores meaning instead of shared
-words. A test re-runs the choice on every change, so a stale threshold fails the build.
+words. A test re-runs the choice on every change, so a stale threshold fails the build. It failed again on
+2026-11-12: two new runbook sections moved the questionnaire's dev-chosen threshold from 0.3 to 0.25. The
+constant followed the dev half (the test half did not choose it); the held-out score is 15 of 20 there, and
+one unanswerable dev question now gets through.
 
 These numbers are for the offline mode, which quotes the best-matching bullets and table rows with
 their source. What it misses: different words for the same thing ("runs the whole pipeline" vs "every
@@ -783,11 +786,12 @@ query, not a spreadsheet someone keeps.
 encryption at rest, no user accounts, no automated backups), because a questionnaire is signed as
 fact. A question the documents do not settle is marked "needs a person", not guessed. Questionnaire
 items are long and use words the controls page does not, so they have their own refusal threshold,
-chosen on the dev half by the same rule as the knowledge eval (now 0.3). A test re-runs that choice
+chosen on the dev half by the same rule as the knowledge eval (now 0.25). A test re-runs that choice
 on the current documents and fails if the constant no longer matches, and it did: adding the
 date-of-birth review case to the ingestion runbook made 0.25 and 0.3 tie on the dev half, the rule
 picks the one nearer 0.5, and the held-out result fell from 16 of 20 to 13 of 20 (6 answerable items
-now refused). I kept the rule rather than pick the threshold the test half likes: the lesson is
+now refused). On 2026-11-12 two more runbook sections moved it back to 0.25, and the held-out result rose
+to 15 of 20, for the same non-reason. I kept the rule rather than pick the threshold the test half likes: the lesson is
 that lexical refusal sits on a knife edge, and a few paragraphs of documentation can move it. A
 retrieval model that scores meaning instead of shared words is the real fix, and is not built.
 Suffix stemming ("encrypted", "encryption") helped a little.
@@ -1166,6 +1170,46 @@ write. The run before it failed and taught one more thing: MotherDuck refused Du
 the latest supported version is v1.5.6"), which the local file stand-in could not have caught. The daily job now
 installs DuckDB 1.5.6, and a failed publish no longer fails the sync: the source's cursor is saved, the failure
 is recorded as `publish_error`, an alert issue opens and the job still shows red (two tests fail on the old code).
+
+### The real feed on Iceberg
+
+The NYC feed is also kept as an Iceberg table (`lake/iceberg.py`, `feed_snapshot`), stored with the run
+history on the `open-data-history` branch. Each run appends the rows it loaded that the table does not hold yet
+(by row hash), as **one snapshot tagged with the run's time**; the rows every run re-reads at its cursor add
+nothing, so a quiet run commits nothing. The first run seeds the table once from the cloud copy, so it starts
+with every permit held, not one run's worth. The table is append-only like bronze: a changed permit is a new
+row, and `as_of(run_at)` answers "what did the feed say after that run?" by reading that snapshot and keeping
+the newest version per permit. A column the contract approves later (the apartment number) widens the table;
+older snapshots still read. Snapshots older than 28 days are expired; old metadata files are not kept. If the
+append fails, the run records `lake_error`, keeps its cursor and opens an alert, and that run's rows are missing
+from the Iceberg copy (the warehouse has them). To read it locally, check the branch out where the job does:
+`git worktree add /tmp/hist origin/open-data-history`, since the catalog stores absolute paths.
+
+### What a run costs
+
+The last step of every scheduled job records its own cost (`ingest/cost.py`): the job's seconds, billed
+minutes (rounded up to the whole minute, as GitHub bills), the list price at $0.006 a minute for the standard
+Linux runner, and what was charged: $0, because standard runners are free in a public repository. Runs before
+job records began are shown as a lower bound from the feed steps' own seconds: about 4 minutes, so at least
+$0.024 a run at list price. The cloud warehouse and the source APIs are not counted: nothing measures them yet.
+
+### Add a source
+
+`plumbline/kit.py` is the interface other engineers build on: write `pages(cursor)`, and the kit adds retries
+(429 waits as told, 5xx backs off, other errors fail at once with the reason), atomic page files with the cursor
+saved after each, the contract deciding the columns (anything else is held back and named), personal fields
+left out of the draft, and one report line. `verify` runs a new source the ways production will: a clean run,
+the same pages read again (nothing added), a crash after page 1 then a resume (must end where a clean run does),
+and a cursor left behind. It fails the most common new-connector bug: saving the newest update time seen
+on page 1 of a feed ordered by event time, which skips rows on page 2 after a crash
+([the test](../tests/test_kit.py)). Guide: [add_a_source.md](add_a_source.md).
+
+Scraping uses the same kit (`ingest/connectors/scrape.py`): robots.txt read first (missing allows everything;
+unreadable allows nothing, per RFC 9309), the crawl delay or at least one second between requests, the delay
+doubled for the rest of the run after a 429, a User-Agent with a contact address, conditional requests for
+pages read for their own content, and a request budget. Tested against a local stand-in; the example
+([quotes_toscrape.py](../examples/sources/quotes_toscrape.py)) targets a site built for scraping practice and
+has not been run against it from here.
 
 Details and the reasons behind each choice are in `src/plumbline/ingest/engine.py`.
 Recovery steps are in [the runbook](runbooks/ingestion.md).

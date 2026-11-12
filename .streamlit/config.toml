@@ -11,6 +11,8 @@ toolbarMode = "viewer"
 
 [server]
 headless = true
+# "Try your files" reads 25,000 rows a file at most; a 200 MB upload would only tie up the small shared server
+maxUploadSize = 25
 
 [browser]
 gatherUsageStats = false

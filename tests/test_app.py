@@ -117,7 +117,7 @@ def test_saved_results_are_the_numbers_in_the_readme():
         assert f"{100 * r['identity']['precision']:.1f}% / {100 * r['identity']['recall']:.1f}%" in readme, r["people"]
 
 
-DESTINATIONS = ["overview", "sources_page", "identity_page", "audiences_page", "models_page", "agent_page", "activity_page"]
+DESTINATIONS = ["overview", "workspace_page", "sources_page", "identity_page", "audiences_page", "models_page", "agent_page", "activity_page"]
 VIEWS = ["scale", "identity", "failure_lab", "deletion", "households_page", "audiences", "experiment", "agent",
          "activity", "scorecard", "ask_data_page", "onboarding_page", "release_page", "reasons_page",
          "worth_buying", "open_data", "matcher_game", "tune_matcher"]
@@ -697,3 +697,36 @@ def test_a_wrongly_joined_namesake_is_called_another_person_with_the_same_name()
                               {"source": "store", "record_id": "O3", "really": "Ann Lee", "person_key": "PK1"}])
     dot = Q.person_dot(recs, strangers, "Cynthia Glover")
     assert "Cynthia Glover\\nanother person, same name" in dot and "Ann Lee\\nsomeone else" in dot
+
+
+def test_a_visitor_runs_the_sample_files_end_to_end_and_gets_a_checked_result(world, monkeypatch):
+    at = _app(world, monkeypatch, "workspace_page")
+    _button(at, lambda l: "sample files" in l).click().run()
+    assert not at.exception, at.exception
+    _button(at, lambda l: l == "Clean and match").click().run()
+    assert not at.exception, at.exception
+    ws = at.session_state["ws"]
+    s, chk = ws["result"].stats(), ws["check"]
+    assert s["files"] == 3 and s["people"] < s["records"] and chk["precision"] > 0.9 and chk["recall"] > 0.9
+    assert any("answer key" in m.value for m in at.markdown)
+    for view in ("Why they were joined", "Ask", "Held back", "Customers"):
+        at.segmented_control(key="ws_view").set_value(view).run()
+        assert not at.exception, (view, at.exception)
+
+
+def test_a_shared_link_shows_counts_and_a_forged_one_shows_nothing(world, monkeypatch):
+    from plumbline import workspace as W
+    a = W.read("x.csv", b"name,email\nAnn Lee,ann@x.test\nAnn Lee,ann@x.test\nBo Kim,bo@x.test\n")
+    tok = W.share_token(W.run([a], [W.detect(a)]))
+    st_testing = pytest.importorskip("streamlit.testing.v1")
+    d, _ = world
+    monkeypatch.setenv("PLUMBLINE_DEMO_DIR", str(d.root))
+    monkeypatch.setenv("PLUMBLINE_DEMO_PEOPLE", str(N))
+    monkeypatch.syspath_prepend(str(ROOT))
+    for token, shown in ((tok, True), ("not-a-real-token", False)):
+        sys.modules.pop("streamlit_app", None)
+        at = st_testing.AppTest.from_string("import streamlit_app\nstreamlit_app.workspace_page()", default_timeout=300)
+        at.query_params["r"] = token
+        at.run()
+        assert not at.exception, at.exception
+        assert any("Shared result: 3 rows" in m.value for m in at.markdown) is shown

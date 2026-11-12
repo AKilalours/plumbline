@@ -39,6 +39,35 @@ against the answer key, and the tests that hold each one are named.
 | Tests | 468 Python tests and 27 dbt tests, each a stated promise; deliberate breaks show which ones bite |
 
 
+## Try it on your own files
+
+The app's **Try your files** page (`/try`, `src/plumbline/workspace.py`) runs a stranger's customer files through
+the same steps Plumbline's own sources go through, with nothing set up beforehand:
+
+1. **Columns found by themselves:** the partner-file profiler and rule-based drafter (no model, no key), plus header
+   words in a few languages (`Nom`, `Prénom`, `Courriel`, `fname`, `cell`, `Code postal`). The visitor can correct
+   any of it in the table before the run.
+2. **Rows checked:** a row naming nobody is held back with that reason; a value that is not what its column says
+   (an email without @, a ZIP that is not five digits) is set aside and counted, and the row stays. A date of birth
+   given as a year alone still counts as a birth year.
+3. **Matched:** Splink, trained on the visitor's files themselves without labels, with production's cluster rules.
+   A file set too small or too sparse to learn from falls back to exact rules, and the page says which ran. Only
+   that case falls back: the first version caught every error and once reported a pandas bug to the visitor as
+   "too little to learn from" (a test now fails if any other error is hidden).
+4. **Back to them:** the clean customer list, a row-to-customer map and the held-back rows as downloads; why each
+   customer was joined, field by field; six questions answered exactly from their data (a typed question is
+   matched to one by its words, and the page says which; no model is called); and a share link that carries
+   counts only, inside the link itself. No name, email, file name or value is in it, and nothing is stored.
+
+**Measured on the sample files** (the app's CRM export, vendor file and web orders, with their answer key):
+6,246 rows from three files with different columns, every column found without help; 2,978 customers for 2,967
+real people; pairwise precision 99.5%, recall 99.4%, and 99.1% of people resolved exactly, in about 10 seconds.
+Those files come from the same generator the matcher was tuned on, so a real company's files may do worse; the
+page makes no accuracy claim for uploaded files, which have no answer key.
+
+Limits: 5 files, 25,000 rows each (25 MB uploads), two runs at a time on the shared server; the visitor's files
+live in their browser session only (the sample run, the same for everyone, is computed once per server).
+
 ## See it work
 
 *Seven places, four incidents you can inject, every number one click from its evidence*

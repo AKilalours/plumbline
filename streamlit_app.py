@@ -1189,6 +1189,7 @@ def snapshot_date() -> str:
 def overview():
     d = demo()
     header("Overview")
+    st.page_link(PAGES["try"], label="Try it on your own customer files: drop CSVs, get one clean list back", icon="📤")
     viz("city", city_data(d, key(d)), 120)
     with st.expander("The same city as a flow chart"):
         viz("flow", {"views": flows(d, key(d))[::-1]}, 120)
@@ -1674,7 +1675,211 @@ def activity_page():
 
 
 
+# ----------------------------------------------------------------- Your data
+APP_URL = "https://minerva-plumbline.streamlit.app"
+FILE_COLORS = [BLUE, GOLD, GREEN, NAVY, "#7C8FE0"]
+
+
+@st.cache_data(show_spinner=False)
+def workspace_samples(_d, key):
+    from plumbline import workspace as W
+    return W.samples(_d.run)
+
+
+@st.cache_resource
+def _workspace_slots():
+    """At most two matching runs at once on the small shared server; a third visitor waits its turn."""
+    return threading.BoundedSemaphore(2)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def workspace_sample_run(sig: str, _files, _roles):
+    """The sample files are the same for everyone, so their run is computed once per server. A visitor's own
+    files are never cached here: their result lives in their session only."""
+    from plumbline import workspace as W
+    with _workspace_slots():
+        return W.run(_files, _roles)
+
+
+def workspace_page():
+    """Anyone's customer files through the real pipeline: columns found, rows checked, people matched, one clean list
+    back. The visitor's files live only in their session."""
+    from plumbline import workspace as W
+    header("Try it on your files", "Customer files in, one clean customer list out.")
+    shared = W.read_token(st.query_params.get("r", "")) if st.query_params.get("r") else None
+    if shared:
+        shared_card(shared)
+    ws = st.session_state.setdefault("ws", {})
+    a, b = st.columns([3, 2], vertical_alignment="center")
+    with a:
+        ups = st.file_uploader(f"Drop up to {W.MAX_FILES} CSV files (any column names, up to {W.MAX_ROWS:,} rows each)", type=["csv", "txt", "tsv"],
+                               accept_multiple_files=True, key="ws_up")
+    with b:
+        if st.button("✨ Use 3 messy sample files", type="primary", width="stretch"):
+            files, truth = workspace_samples(demo(), key(demo()))
+            ws.clear()
+            ws.update(raw=files, truth=truth, sample=True)
+        st.caption("A CRM export, a data vendor file and web orders: different columns, typos, duplicates.")
+    if ups:
+        raw = [(u.name, u.getvalue()) for u in ups[: W.MAX_FILES]]
+        if [n for n, _ in raw] != [n for n, _ in ws.get("raw", [])] or ws.get("sample"):
+            ws.clear()
+            ws.update(raw=raw, truth=None, sample=False)
+    if not ws.get("raw"):
+        st.markdown('<p class="note">Nothing you upload is stored: it lives in this browser session and is gone when you '
+                    'leave.</p>', unsafe_allow_html=True)
+        return
+
+    files, errors = [], []
+    for name, data in ws["raw"]:
+        try:
+            files.append(W.read(name, data))
+        except ValueError as e:
+            errors.append(str(e))
+    for e in errors:
+        st.error(e)
+    if not files:
+        return
+
+    st.markdown('<div class="mono" style="margin-top:1rem">1 · What each column is (click to change)</div>', unsafe_allow_html=True)
+    roles = []
+    cols = st.columns(len(files))
+    for i, (f, c) in enumerate(zip(files, cols)):
+        found = ws.setdefault("roles", {}).setdefault(f.name, W.detect(f))
+        with c:
+            st.markdown(f'<div style="border-top:4px solid {FILE_COLORS[i % 5]};padding-top:6px"><b>{html.escape(f.name)}</b>'
+                        f'<span class="note"> · {len(f.df):,} rows{" (first " + format(W.MAX_ROWS, ",") + ")" if f.truncated else ""}</span></div>',
+                        unsafe_allow_html=True)
+            table = pd.DataFrame({"column": list(f.df.columns), "is": [W.ROLE_LABEL[found.get(k, "ignore")] for k in f.df.columns],
+                                  "example": [next((v for v in f.df[k] if v), "")[:24] for k in f.df.columns]})
+            edited = st.data_editor(table, hide_index=True, width="stretch", key=f"ws_roles_{i}_{f.name}",
+                                    disabled=["column", "example"],
+                                    column_config={"is": st.column_config.SelectboxColumn("is", options=[W.ROLE_LABEL[r] for r in W.ROLES], required=True)})
+            back = {v: k for k, v in W.ROLE_LABEL.items()}
+            roles.append({row["column"]: back[row["is"]] for row in edited.to_dict("records")})
+    if not any(r in ("last_name", "full_name", "email", "phone") for rr in roles for r in rr.values()):
+        st.warning("No column is marked as a name, email or phone, so nobody can be matched. Mark one above.")
+        return
+
+    sig = json.dumps([[f.name, len(f.df)] for f in files] + roles, sort_keys=True)
+    if st.button("Clean and match", type="primary", key="ws_go") or (ws.get("result") is not None and ws.get("sig") == sig):
+        if ws.get("sig") != sig or ws.get("result") is None:
+            with st.status("Running the pipeline on your files", expanded=False) as box:
+                if ws.get("sample"):
+                    res = workspace_sample_run(sig, files, roles)
+                else:
+                    with _workspace_slots():
+                        res = W.run(files, roles)
+                box.update(label=f"Done in {res.stats()['seconds']} s", state="complete")
+            ws.update(result=res, sig=sig, check=W.check(res, ws["truth"]) if ws.get("truth") else None)
+            log("workspace: matched", {k: v for k, v in res.stats().items() if k in ("files", "rows", "people", "method")})
+        workspace_result(ws["result"], ws.get("check"), files)
+
+
+def workspace_result(res, check, files):
+    from plumbline import workspace as W
+    s = res.stats()
+    st.markdown('<div class="mono" style="margin-top:1.4rem">2 · What came out</div>', unsafe_allow_html=True)
+    viz("tiles", {"items": [
+        {"label": "Rows in", "value": s["rows"], "fmt": "int", "sub": f"{s['files']} file{'s' if s['files'] > 1 else ''}", "tone": "info"},
+        {"label": "Customers", "value": s["people"], "fmt": "int", "sub": f"{W.n_(s['merged'], 'row was', 'rows were')} someone already counted", "tone": "pass"},
+        {"label": "In more than one file", "value": s["in_several_files"], "fmt": "int", "sub": "now one record each", "tone": "info"},
+        {"label": "Held back", "value": s["held"], "fmt": "int", "sub": f"+ {W.n_(s['set_aside'], 'bad value')} set aside", "tone": "warn" if s["held"] else "pass"}]}, 120)
+    if check:
+        verdict(check["precision"] >= 0.95 and check["recall"] >= 0.95,
+                f"Checked against the sample's answer key: {check['precision']:.1%} of the joins are right (precision), "
+                f"{check['recall']:.1%} of the true joins were found (recall); {check['people_resolved_exactly']:.1%} of "
+                f"{check['people_really']:,} real people came out exactly right.")
+    st.caption(res.method_note)
+    r = res.records
+    once = r.groupby("person_id")["file"].transform("size") == 1
+    left = [{"key": f"f{i}", "label": n, "short": n[:10], "value": int((r["file"] == n).sum()) + int((res.held["file"] == n).sum() if len(res.held) else 0),
+             "color": FILE_COLORS[i % 5]} for i, n in enumerate(res.files)]
+    right = [{"key": "joined", "label": "Joined with another row", "value": int((~once).sum()), "color": GREEN, "sub": "same person"},
+             {"key": "once", "label": "Only once", "value": int(once.sum()), "color": BLUE, "sub": "a customer seen once"},
+             {"key": "held", "label": "Held back", "value": int(len(res.held)), "color": RED, "sub": "names nobody"}]
+    links = []
+    for i, n in enumerate(res.files):
+        m = r["file"] == n
+        links += [{"from": f"f{i}", "to": "joined", "value": int((m & ~once).sum())}, {"from": f"f{i}", "to": "once", "value": int((m & once).sum())},
+                  {"from": f"f{i}", "to": "held", "value": int((res.held["file"] == n).sum()) if len(res.held) else 0}]
+    viz("flow", {"views": [{"name": "rows", "unit": "rows", "hint": "Every row you sent, accounted for. Hover a stream.",
+                            "left": left, "right": [x for x in right if x["value"]], "links": [x for x in links if x["value"]]}]}, 120)
+
+    view = choose("See", ["Customers", "Why they were joined", "Ask", "Held back"], default="Customers", key="ws_view")
+    if view == "Customers":
+        q = st.text_input("Search", placeholder="a name, an email, a ZIP", key="ws_q", label_visibility="collapsed")
+        p = res.people
+        if q:
+            m = p.apply(lambda row: q.lower() in " ".join(map(str, row.values)).lower(), axis=1)
+            p = p[m]
+        st.dataframe(p.drop(columns=["files"]), hide_index=True, width="stretch", height=360,
+                     column_config={"records": st.column_config.ProgressColumn("records", min_value=0, max_value=int(res.people["records"].max() or 1), format="%d")})
+    elif view == "Why they were joined":
+        g = res.groups
+        if not len(g):
+            st.info("Nobody was joined: every row is a different customer.")
+        else:
+            # first the people joined despite a difference (a typo, another address), across the most files
+            differs = g.assign(d=g[[c for c in ("first_name", "last_name", "email", "street") if c in g]].eq("differ").sum(axis=1)) \
+                .groupby("person_id")["d"].sum()
+            many = res.people[res.people["records"] > 1].assign(d=lambda x: x["person_id"].map(differs).fillna(0).clip(upper=1)) \
+                .sort_values(["d", "files", "records"], ascending=[False, False, True])
+            pick = st.selectbox("Customer", many["person_id"].tolist(), key="ws_pick",
+                                format_func=lambda pid: (lambda row: f"{row.first_name} {row.last_name} · {row.records} records · {row.found_in}")(many.set_index("person_id").loc[pid]))
+            mine = r[r["person_id"] == pick][["file", "record_id", "first_name", "last_name", "email", "phone", "street_raw", "zip", "dob"]].rename(columns={"street_raw": "street"})
+            colors = {"agree": f"color: {GREEN}", "differ": f"color: {RED}; font-weight: 600", "missing": f"color: {MUTED}"}
+            st.dataframe(mine, hide_index=True, width="stretch")
+            ev = g[g["person_id"] == pick].drop(columns=["person_id"])
+            if "probability" in ev and ev["probability"].notna().any():
+                ev["probability"] = ev["probability"].map(lambda v: "" if v is None or v != v else f"{v:.1%}")
+            st.dataframe(ev.style.map(lambda v: colors.get(v, ""), subset=[c for c in ("first_name", "last_name", "email", "phone", "street", "zip", "dob") if c in ev]),
+                         hide_index=True, width="stretch")
+    elif view == "Ask":
+        qs = list(W.QUESTIONS)
+        pick = st.pills("Ask", qs, key="ws_ask_pill", label_visibility="collapsed")
+        typed = st.chat_input("Or type a question about your customers", key="ws_ask")
+        kind = W.QUESTIONS.get(pick) if pick else None
+        if typed:
+            kind = W.route(typed)
+            if kind is None:
+                st.info("I answer questions about your matched customers: how many, overlaps, duplicates, who can't be "
+                        "contacted, where they live, and what was held back. Try one of those.")
+            else:
+                st.caption(f"Answered as: {next(k for k, v in W.QUESTIONS.items() if v == kind)} (matched by its words, no AI)")
+        if kind:
+            text, table = W.answer(res, kind)
+            verdict(True, text)
+            if table is not None and len(table):
+                st.dataframe(table, hide_index=True, width="stretch", height=min(360, 38 + 35 * len(table)))
+    else:
+        text, table = W.answer(res, "held")
+        st.markdown(f'<p class="note">{html.escape(text)}</p>', unsafe_allow_html=True)
+        if len(res.held):
+            st.dataframe(res.held, hide_index=True, width="stretch")
+        if table is not None:
+            st.dataframe(table, hide_index=True, width="stretch")
+
+    st.markdown('<div class="mono" style="margin-top:1.2rem">3 · Take it with you</div>', unsafe_allow_html=True)
+    c = st.columns(4)
+    c[0].download_button("Clean customer list", res.people.to_csv(index=False), "customers.csv", "text/csv", width="stretch", type="primary")
+    c[1].download_button("Row → customer map", r[["file", "row", "record_id", "person_id"]].to_csv(index=False), "row_to_customer.csv", "text/csv", width="stretch")
+    c[2].download_button("Held back rows", res.held.to_csv(index=False), "held_back.csv", "text/csv", width="stretch", disabled=not len(res.held))
+    with c[3].popover("Share the result", width="stretch"):
+        link = f"{APP_URL}/try?r={W.share_token(res)}"
+        st.code(link, language=None)
+        st.caption("Counts only: no name, email, file name or value from your files is in the link.")
+
+
+def shared_card(d: dict):
+    verdict(True, f"Shared result: {d['rows']:,} rows from {d['files']} file{'s' if d['files'] != 1 else ''} became "
+                  f"{d['people']:,} customers; {d['in_several_files']:,} were in more than one file, {d['held']:,} rows "
+                  f"held back. Matched {'by Splink' if d['method'] == 'probabilistic' else 'by exact rules'} in {d['seconds']} s.")
+    st.caption("Counts only, carried in the link itself; nothing about anyone's files was stored. Try it with yours below.")
+
+
 PAGES = {"home": st.Page(overview, title="Overview", icon="📊", default=True),
+         "try": st.Page(workspace_page, title="Try your files", icon="📤", url_path="try"),
          "sources": st.Page(sources_page, title="Sources", icon="📥", url_path="sources"),
          "identity": st.Page(identity_page, title="Identity", icon="🧬", url_path="identity"),
          "audiences": st.Page(audiences_page, title="Audiences", icon="🎯", url_path="audiences"),

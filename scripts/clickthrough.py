@@ -13,7 +13,7 @@ import re
 import sys
 import time
 
-ACTIONS = ("Run the sync", "Forget them", "Inject incident", "Investigate", "Let the agent approve",
+ACTIONS = ("Use 3 messy sample files", "Clean and match", "Run the sync", "Forget them", "Inject incident", "Investigate", "Let the agent approve",
            "Approve as", "Save this audience", "Approve into", "Split out", "Undo last change")
 PILLS = ("attack", "agent_pill", "flags_")      # rows where clicking the chosen option again unselects it, by design
 TYPED = {   # where a visitor types, and what a curious or hostile one might type

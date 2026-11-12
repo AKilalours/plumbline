@@ -12,7 +12,8 @@ Ingest · resolve · predict · act</p>
 <img src="https://img.shields.io/badge/tested%20against-real%20Kafka%20%C2%B7%20Spark-2941B9" alt="tested against a real Kafka broker and Spark in CI">
 </p>
 
-<p align="center"><a href="https://minerva-plumbline.streamlit.app"><b>▶ Try the live app</b></a> · every button does real work on your own copy of the city</p>
+<p align="center"><a href="https://minerva-plumbline.streamlit.app"><b>▶ Try the live app</b></a> · every button does real work on your own copy of the city<br>
+<a href="https://minerva-plumbline.streamlit.app/try"><b>📤 Try it on your own files</b></a> · drop customer CSVs with any column names, get one clean customer list back (nothing is stored)</p>
 
 <p align="center"><b>Real, every day:</b> NYC Open Data permits and Wikimedia's live edit stream → loaded under reviewed contracts → upserted into a <b>MotherDuck</b> cloud warehouse, every run on the record (<a href="docs/details.md#a-cloud-warehouse-target">how</a>).<br>
 <sub>The people are invented on purpose, each with a hidden answer key, so every number below is measured against the truth. <a href="docs/details.md#honest-limits-and-the-questions-they-raise">Honest limits</a>.</sub></p>

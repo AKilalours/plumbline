@@ -1202,7 +1202,7 @@ left out of the draft, and one report line. `verify` runs a new source the ways 
 the same pages read again (nothing added), a crash after page 1 then a resume (must end where a clean run does),
 and a cursor left behind. It fails the most common new-connector bug: saving the newest update time seen
 on page 1 of a feed ordered by event time, which skips rows on page 2 after a crash
-([the test](../tests/test_kit.py)). Guide: [add_a_source.md](add_a_source.md).
+([the test](../tests/test_kit.py)). Guide: [add_a_source.md](add_a_source.md). A second engineer tried it on 2026-11-13 (Open-Meteo, about 14 minutes with an AI assistant) and found the `python -m plumbline.kit` command broken: run that way the file is a second copy of the module, so no source matched. A test now runs the command as typed ([result](results/onboarding_second_engineer.md)).
 
 Scraping uses the same kit (`ingest/connectors/scrape.py`): robots.txt read first (missing allows everything;
 unreadable allows nothing, per RFC 9309), the crawl delay or at least one second between requests, the delay

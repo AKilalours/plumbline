@@ -80,6 +80,7 @@ class Report:
     cursor: Any = None
     seconds: float = 0.0
     quarantine_reasons: dict = field(default_factory=dict)
+    finished: bool = False          # the source had no more pages (not stopped by max_pages)
 
     def line(self) -> str:
         held = f", held back {', '.join(self.held_back)}" if self.held_back else ""
@@ -169,6 +170,8 @@ def sync(src: Source, landing: Path, columns: list[str] | None, *, max_pages: in
     rep = Report(src.name, resumed_from=state["cursor"])
     t = time.perf_counter()
     for page in src.pages(state["cursor"]):
+        if max_pages and rep.pages >= max_pages:
+            break            # checked here, not after landing: a source whose window ends at the limit counts as finished
         rows = [dict(r) for r in page.rows]
         if rows:
             seen = list(dict.fromkeys(k for r in rows for k in r))
@@ -190,8 +193,8 @@ def sync(src: Source, landing: Path, columns: list[str] | None, *, max_pages: in
         rep.rows_landed += len(rows)
         if after_page:
             after_page(rep.pages)
-        if max_pages and rep.pages >= max_pages:
-            break
+    else:
+        rep.finished = True
     rep.cursor, rep.requests, rep.retries = state["cursor"], src._requests, src._retries
     rep.seconds = time.perf_counter() - t
     return rep
@@ -271,7 +274,8 @@ def draft(src: Source, *, out: Path | None = None, workdir: Path | None = None) 
 # ------------------------------------------------------------------ verify: the promises, on your source
 def verify(make, *, contract: Path, workdir: Path | None = None, max_pages: int = 3) -> list[tuple[str, bool, str]]:
     """Run a new source the ways production will, and check the promises hold. `make()` returns a fresh
-    Source (a class works). Returns (check, passed, detail) for each; all must pass before a source ships."""
+    Source (a class works). Returns (check, passed, detail) for each: passed is None when a check could not be
+    judged (the cursor check, when max_pages stopped the run mid-window). None may fail before a source ships."""
     import tempfile
 
     import duckdb
@@ -286,7 +290,7 @@ def verify(make, *, contract: Path, workdir: Path | None = None, max_pages: int 
     (base / "a" / "run" / "sources" / a.name / "_kit_state.json").unlink()      # the cursor is lost: read it all again
     b = run(make(), workdir=base / "a", contract=contract, max_pages=max_pages)
     out.append(("reading the same pages again adds nothing", b.rows_landed > 0 and b.rows_loaded == 0,
-                f"read {b.rows_landed} again, {b.rows_loaded} added, {b.rows_already_present} already held"))
+                f"read {b.rows_landed} rows again, {b.rows_loaded} added"))
 
     class Crash(Exception):
         pass
@@ -304,9 +308,14 @@ def verify(make, *, contract: Path, workdir: Path | None = None, max_pages: int 
          duckdb.connect(str(base / "d" / "kit.duckdb"), read_only=True) as c2:
         q = f"SELECT count(*) FROM current_{a.name}"
         n1, n2 = c1.execute(q).fetchone()[0], c2.execute(q).fetchone()[0]
-    out.append(("a crash after page 1 resumes and ends where a clean run does", n1 >= n2 > 0, f"{n1} rows after crash+resume, {n2} clean"))
+    out.append(("a crash after page 1 resumes and loses nothing", n1 >= n2 > 0,
+                f"{n1} rows after crash and resume, {n2} in a clean run; a resume may read further, never less"))
 
-    out.append(("a finished run leaves a cursor", a.cursor is not None, f"next run starts from {a.cursor}"))
+    if a.finished:
+        out.append(("a finished run leaves a cursor", a.cursor is not None, f"next run starts from {a.cursor}"))
+    else:          # stopped by max_pages mid-window: no cursor is the right answer there, so this is not judged
+        out.append(("a finished run leaves a cursor", None, f"not checked: the window is longer than {max_pages} pages; "
+                                                           f"rerun verify with a larger --max-pages"))
     return out
 
 
@@ -345,9 +354,12 @@ def main(argv=None) -> int:
         return 0
     checks = verify(cls, contract=contract, workdir=wd, max_pages=a.max_pages or 3)
     for name, ok, detail in checks:
-        print(f"{'PASS' if ok else 'FAIL'}  {name}  ({detail})")
-    return 0 if all(ok for _, ok, _ in checks) else 1
+        print(f"{'SKIP' if ok is None else 'PASS' if ok else 'FAIL'}  {name}  ({detail})")
+    return 0 if all(ok is not False for _, ok, _ in checks) else 1
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # Under `python -m plumbline.kit` this file runs as __main__, a second copy of the module whose Source is
+    # not the one a source file imports. Run the real module's main, so there is one Source class.
+    from plumbline.kit import main as _main
+    raise SystemExit(_main())

@@ -98,7 +98,7 @@ def test_verify_catches_a_source_that_saves_its_cursor_before_the_window_is_read
         s._sleep = lambda _s: None
         return s
     checks = dict((n, ok) for n, ok, _ in kit.verify(make, contract=contract, workdir=tmp_path / "v"))
-    assert checks["a crash after page 1 resumes and ends where a clean run does"] is False
+    assert checks["a crash after page 1 resumes and loses nothing"] is False
 
 
 def kit_iso(ms):
@@ -182,3 +182,38 @@ def test_the_committed_example_contract_passes_verify(tmp_path, feed):
     contract = Path(__file__).resolve().parents[1] / "sources" / "kit" / "usgs_quakes.yaml"
     checks = kit.verify(quakes(feed), contract=contract, workdir=tmp_path / "v")
     assert all(ok for _, ok, _ in checks), checks
+
+
+def test_the_guides_commands_work_as_typed_through_python_dash_m(tmp_path, feed):
+    """Found by the second engineer: under `python -m plumbline.kit`, kit.py runs as __main__, a second copy
+    of the module, so the source file's Source (from plumbline.kit) never matched and every command said
+    "found 0". The unit tests called the functions directly and never ran the CLI the guide tells people to."""
+    import os
+    import subprocess
+    import sys
+    src = tmp_path / "quakes.py"
+    src.write_text(EXAMPLE.read_text().replace('URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"', f'URL = "{feed.url}"'))
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"), "NO_PROXY": "127.0.0.1,localhost"}
+    contract = Path(__file__).resolve().parents[1] / "sources" / "kit" / "usgs_quakes.yaml"
+    run = lambda *a: subprocess.run([sys.executable, "-m", "plumbline.kit", *a], capture_output=True, text=True,
+                                    env=env, cwd=tmp_path, timeout=300)
+    r = run("run", str(src), "--contract", str(contract), "--workdir", str(tmp_path / "w"))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "1200 rows landed" in r.stdout
+    v = run("verify", str(src), "--contract", str(contract), "--workdir", str(tmp_path / "v"))
+    assert v.returncode == 0 and v.stdout.count("PASS") == 4, v.stdout + v.stderr
+
+
+def test_a_window_longer_than_the_page_limit_skips_the_cursor_check_instead_of_failing(tmp_path, feed, contract):
+    """Found by the second engineer: a source that rightly holds its cursor until a long window ends failed
+    "a finished run leaves a cursor" only because verify stopped it at 3 pages."""
+    checks = kit.verify(quakes(feed), contract=contract, workdir=tmp_path / "v", max_pages=2)
+    status = {n: ok for n, ok, _ in checks}
+    assert status["a finished run leaves a cursor"] is None
+    assert all(ok is not False for ok in status.values())
+
+
+def test_a_run_whose_window_ends_exactly_at_the_page_limit_is_finished(tmp_path, feed, contract):
+    r = kit.run(quakes(feed)(), workdir=tmp_path / "w", contract=contract, max_pages=3)      # 1200 rows = 3 pages of 500
+    assert r.finished and r.cursor is not None
+    assert not kit.run(quakes(feed)(), workdir=tmp_path / "x", contract=contract, max_pages=2).finished

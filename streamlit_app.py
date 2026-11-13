@@ -1320,8 +1320,9 @@ def recovery_panel():
             {"label": "Longest a consumer was hurt", "value": f"{m['hours_hurt_max']:g} h" if m["hours_hurt_max"] is not None else "0 h",
              "fmt": "raw", "sub": "from first affected to the first good run after the fix", "tone": "info"},
         ]}, 120)
-    st.caption("Time to onboard a new source is measured by an engineer who did not build the kit, following "
-               "docs/add_a_source.md; it is shown here once they have done it, not estimated.")
+    st.caption("Time to onboard a new source, measured on an engineer who did not build the kit: about 14 minutes "
+               "for Open-Meteo weather, with an AI assistant, following docs/add_a_source.md (docs/results/"
+               "onboarding_second_engineer.md).")
 
 
 def cost_panel():

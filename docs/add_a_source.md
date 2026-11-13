@@ -12,9 +12,9 @@ say where.
 
 ```bash
 git clone https://github.com/AKilalours/plumbline && cd plumbline
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-python -m pytest tests/test_kit.py -q          # 13 passed: the kit works on your machine
+python -m pytest tests/test_kit.py -q          # all passed, none failed: the kit works on your machine
 ```
 
 ## 1. Pick a source
@@ -24,11 +24,15 @@ government open data does), no personal data, and a field that says when a recor
 
 Find three things in its docs before writing code:
 
-| You need | USGS example |
-|---|---|
-| The id of a record | `id` |
-| When a record last changed, and how to ask for "changed after X" | `properties.updated`, `updatedafter=` |
-| How to get the next page | `offset=` and `limit=` |
+| You need | USGS example | If the API has none |
+|---|---|---|
+| The id of a record | `id` | Build a stable one from the fields that identify a record (weather: place + hour) |
+| When a record last changed, and how to ask for "changed after X" | `properties.updated`, `updatedafter=` | Leave `updated = None`; the draft leaves `latest_by` empty, and each row is read once. A later correction by the source is not picked up: say so in your contract |
+| How to get the next page | `offset=` and `limit=` | Page by a time window instead: one request per day, the cursor is the last day read |
+
+Two worked examples: [`usgs_quakes.py`](../examples/sources/usgs_quakes.py) (paging by offset, a real
+"last changed" field) and [`open_meteo_weather.py`](../examples/sources/open_meteo_weather.py) (no paging,
+no "last changed", no id; written by the second engineer to try this guide).
 
 ## 2. Write the source
 
@@ -56,6 +60,7 @@ class Quakes(Source):
 
 - `cursor` is whatever you gave the kit at the end of the last run (`None` the first time).
 - Yield one `Page` per request. Rows are plain dicts; nested values are stored as JSON text.
+- Nothing new yet? Yield `Page([], cursor=cursor)` and return: no request, the cursor stays.
 - Use `self.get_json(url, **params)`, not `requests` or `urllib`: it is where the retries live.
 - A token goes in `headers` from an environment variable, never in the file:
   `headers = {"Authorization": f"Bearer {os.environ['MY_API_TOKEN']}"}`. The kit never prints headers.
@@ -70,7 +75,8 @@ So the example yields `cursor=None` on every page but the last ("keep the old cu
 re-reads the window from the start, and reading a row twice costs nothing: the loader stores each row
 once. `verify` (step 5) fails a source that gets this wrong; `tests/test_kit.py` has the careless version.
 
-If the API sorts by the update time itself, you can safely give a cursor on every page.
+When pages arrive **in cursor order** (sorted by the update time, or one whole day per page, oldest first),
+every page's cursor is safe: give one on every page. That is what the Open-Meteo example does.
 
 ## 3. Draft the contract
 
@@ -83,8 +89,11 @@ This reads one page and writes `sources/drafts/<name>.yaml`: a type for every co
 as personal. **Read it.** It saw one page, so check:
 
 - `enum` lists: the draft only knows the values it saw. Add the ones the docs list (the USGS status has
-  three; the first page had two).
+  three; the first page had two). A label you set yourself (a place name) is a `string`, not an enum.
+- Types the draft guessed wrong: a number column whose first page had a gap can come out as `string`.
+  Check every column against the API's docs.
 - Numbers that are really ids (zip codes, codes with leading zeros) should be `string`.
+- The columns your id is built from are `required: true`, like the id itself.
 - Anything personal stays out unless there is a reason and a privacy rule for it.
 
 Then move it to `sources/kit/<name>.yaml` and add `version: 1`. From now on, a change that would break
@@ -113,11 +122,13 @@ python -m plumbline.kit verify examples/sources/<your_source>.py
 ```
 PASS  it lands and loads rows
 PASS  reading the same pages again adds nothing
-PASS  a crash after page 1 resumes and ends where a clean run does
+PASS  a crash after page 1 resumes and loses nothing
 PASS  a finished run leaves a cursor
 ```
 
-All four must pass before the source ships. Then add a test like `tests/test_kit.py` against a small
+All four must pass before the source ships. `verify` reads at most 3 pages a run (`--max-pages` to change
+it). If your window is longer and you rightly hold the cursor until it ends, the cursor check says SKIP,
+not FAIL: rerun with a larger `--max-pages` to judge it. Then add a test like `tests/test_kit.py` against a small
 stand-in for your API (`src/plumbline/store/usgs_server.py` is the pattern), so CI checks it without the
 network.
 

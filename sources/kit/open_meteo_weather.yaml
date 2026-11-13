@@ -1,0 +1,36 @@
+# Open-Meteo historical weather, hourly, one location (examples/sources/open_meteo_weather.py). Reviewed from the draft.
+name: open_meteo_weather
+kind: api
+version: 1
+files: sources/open_meteo_weather/*.csv
+key:
+- weather_id
+latest_by: []          # the API has no "last changed" field; an hour's row is read once per run window
+columns:
+  weather_id:
+    type: string
+    required: true
+  location:
+    type: string       # the draft made this an enum of the one place it saw; it is a label we set
+    required: true
+  latitude:
+    type: float
+    required: true
+  longitude:
+    type: float
+    required: true
+  observed_at:
+    type: timestamp
+    required: true
+  temperature_c:
+    type: float
+  humidity_pct:
+    type: float
+  precipitation_mm:
+    type: float
+  wind_speed_kmh:
+    type: float
+  weather_code:
+    type: enum         # WMO weather interpretation codes; the full list from the Open-Meteo docs
+    values: ["0", "1", "2", "3", "45", "48", "51", "53", "55", "56", "57", "61", "63", "65", "66", "67",
+             "71", "73", "75", "77", "80", "81", "82", "85", "86", "95", "96", "99"]

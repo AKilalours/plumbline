@@ -8,13 +8,13 @@ caller, which reads it from the warehouse or a saved result, so a test can check
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
 Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace, people, agent,
-lineage, stream, kit, polite, incidents, cost, snapshots.
+lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -107,6 +107,21 @@ pre.code .hl{background:rgba(229,183,77,.25);display:inline-block;width:100%;bor
 .snap b{display:block;border-radius:50%;background:var(--blue);transition:transform .15s}.snap.on b{outline:3px solid var(--gold);outline-offset:3px}
 .snap:hover b{transform:scale(1.08)}.snap span{font:500 10px 'Geist Mono';color:var(--muted)}
 @media (max-width:560px){.stage{grid-template-columns:1fr}.lights{grid-template-columns:1fr}.lanes .ln{grid-template-columns:1fr}}
+.rail{display:flex;align-items:flex-start;gap:0;margin:18px 0 6px;overflow-x:auto;padding-bottom:6px}
+.ph{flex:1 0 92px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;position:relative;opacity:.35;transition:opacity .25s}
+.ph.lit{opacity:1}.ph::before{content:'';position:absolute;top:15px;left:-50%;right:50%;height:3px;background:var(--line)}
+.ph:first-child::before{display:none}.ph.lit::before{background:var(--blue)}
+.ph b{width:32px;height:32px;border-radius:50%;background:#fff;border:3px solid var(--line);display:flex;align-items:center;justify-content:center;font:600 13px Geist;z-index:1;transition:all .25s}
+.ph.lit b{border-color:var(--blue);background:var(--blue);color:#fff}.ph.on b{box-shadow:0 0 0 6px rgba(41,65,185,.18)}
+.ph.fix.lit b{background:var(--green);border-color:var(--green)}.ph.inject.lit b{background:var(--red);border-color:var(--red)}
+.ph span{font:500 11px 'Geist Mono';text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:center}
+.ba{margin:12px 0}.ba .bar2{height:16px;border-radius:8px;background:var(--red);transition:width 1.2s cubic-bezier(.4,.1,.2,1)}
+.kvs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:10px}
+.kvs div{background:var(--tint);border-radius:12px;padding:10px 12px}.kvs b{display:block;font-size:17px;margin-top:3px;word-break:break-word}
+.sc-row{display:grid;grid-template-columns:minmax(150px,1.1fr) 2fr 90px;gap:14px;align-items:center;padding:12px 0;border-bottom:1px dashed #EEE;cursor:default}
+.sc-row .bars{display:flex;flex-direction:column;gap:5px}.sc-row .bb{height:12px;border-radius:6px;transition:width .9s cubic-bezier(.4,.1,.2,1);width:0}
+.sc-row .lbl{font:500 11px 'Geist Mono';color:var(--muted)}
+@media (max-width:560px){.sc-row{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -989,6 +1004,7 @@ R.stream = () => {
 // the warehouse, the cursor updates as the kit saves it, a crash interrupts, and the result says what is held.
 R.kit = () => {
   const SC = {'Run it': 'clean', 'Read it again': 'again', 'Crash after page 1': 'crash', 'The careless cursor': 'careless'};
+  if (D.stale) SC['A copy that is behind'] = 'stale';
   const top = document.createElement('div'); top.className = 'row';
   const go = document.createElement('button'); go.className = 'btn blue'; go.textContent = '▶ Play';
   let pick = 'Run it';
@@ -1016,7 +1032,8 @@ R.kit = () => {
   async function play() {
     const my = ++token, key = SC[pick], s = key === 'again' ? D.clean : D[key];
     res.innerHTML = ''; lane.querySelectorAll('.boom').forEach(b => b.remove()); total = 0; held.textContent = '0';
-    curs.innerHTML = 'cursor <b>none yet</b>'; go.disabled = true;
+    curs.innerHTML = 'cursor <b>none yet</b>'; go.disabled = true; sub.textContent = 'rows held';
+    if (key === 'stale') { await stale(my); go.disabled = false; return; }
     const steps = key === 'again' ? s.steps : s.steps.filter(x => x.label !== 'again');
     for (const st of steps) {
       if (key === 'again' && st.label === 'run') { setHeld(st.loaded); curs.innerHTML = `cursor <b>${esc(st.cursor)}</b>`; await wait(300);
@@ -1042,6 +1059,24 @@ R.kit = () => {
       : key === 'crash' ? `<b>${F.int(h)} of ${F.int(D.events)} held after the crash.</b> Page 1 was on disk before the cursor moved.`
       : `<b>${F.int(h)} of ${F.int(D.events)} held</b> in ${D.clean.ms} ms of real runs.`;
     go.disabled = false;
+  }
+  async function boom(text, ms, tone) {
+    const b = document.createElement('div'); b.className = 'boom'; b.textContent = text;
+    if (tone === 'blue') { b.style.color = 'var(--blue)'; b.style.background = 'rgba(243,245,252,.94)'; }
+    lane.appendChild(b); await wait(ms); b.remove();
+  }
+  async function stale(my) {
+    const S = D.stale;
+    await fly(0, 'dup', 'stale copy');
+    await boom('empty page: the run thinks it is done', 1500);
+    if (my !== token) return;
+    res.className = 'result bad'; res.innerHTML = `<b>Without <code>stale_when</code>: ${F.int(S.naive.held)} of ${F.int(D.events)} landed.</b> The API answered from a copy a day behind, said so in a header, and the run took the empty page as the end.`;
+    await wait(1600); if (my !== token) return;
+    await boom(`stale_when set: ${S.careful.stale_answers} stale answer asked again`, 1500, 'blue');
+    for (const [i, p] of S.careful.pages.entries()) { if (my !== token) return;
+      if (p.rows) { await fly(p.rows, '', `page ${i + 1}`); setHeld(total + p.rows); }
+      if (p.cursor) curs.innerHTML = `cursor saved <b>${esc(p.cursor)}</b>`; }
+    res.className = 'result ok'; res.innerHTML = `<b>With <code>stale_when</code>: ${F.int(S.careful.held)} of ${F.int(D.events)} held.</b> Found by the third engineer on NYC 311; the kit now asks again, like a 503.`;
   }
   const vcol = (title, rows) => `<div class="card"><div class="mono">${title}</div>` + rows.map(r =>
     `<div class="light"><i class="${r.ok === null ? 's' : r.ok ? 'p' : 'f'}"></i><div><b>${r.ok === null ? 'SKIP' : r.ok ? 'PASS' : 'FAIL'}</b> ${esc(r.check)}
@@ -1157,6 +1192,75 @@ R.snapshots = () => {
       {label: s.seeded ? 'Seeded' : 'Added this run', value: s.seeded || s.added, fmt: 'int', tone: 'pass'},
       {label: 'Snapshots kept', value: s.snapshots, fmt: 'int', tone: 'info', sub: 'older than 28 days expire'}])); });
   row.lastElementChild.click();
+};
+
+// One agent-lab incident as phases you step through: what was injected, how it was caught, what a person approved,
+// and the verification. Play walks the phases at their real order; click any phase to open it.
+R.incident = () => {
+  const P = D.phases, icon = {inject: '!', detect: '◉', inspect: '⌕', propose: '✎', approve: '✓', fix: '⚒', verify: '✔'};
+  const head = document.createElement('div'); head.className = 'row'; head.style.justifyContent = 'space-between';
+  const go = document.createElement('button'); go.className = 'btn blue'; go.textContent = '▶ Play the incident';
+  head.innerHTML = `<div><span class="pill ${D.status === 'verified' ? 'p-pass' : 'p-fail'}">${esc(D.status)}</span>
+    <div style="font-size:22px;font-weight:600;margin-top:8px">${esc(D.title)}</div><div class="mono">${esc(D.id)} · ${esc(D.check || '')}</div></div>`;
+  head.appendChild(go);
+  const rail = document.createElement('div'); rail.className = 'rail';
+  rail.innerHTML = P.map((e, i) => `<div class="ph ${e.phase}" data-i="${i}"><b>${icon[e.phase] || i + 1}</b><span>${esc(e.phase)}</span></div>`).join('');
+  const card = document.createElement('div'); card.className = 'card'; card.style.minHeight = '150px';
+  const risk = document.createElement('div'); risk.className = 'band'; risk.style.marginTop = '12px';
+  risk.innerHTML = `<div class="mono">Still possible after the fix</div><div style="margin-top:6px">${esc(D.risk)}</div>`;
+  app.append(head, rail, card, risk);
+  const kvs = xs => `<div class="kvs">${xs.map(x => `<div><span class="mono">${esc(x.k)}</span><b>${esc(x.v)}</b></div>`).join('')}</div>`;
+  function open(i) {
+    rail.querySelectorAll('.ph').forEach((n, j) => { n.classList.toggle('lit', j <= i); n.classList.toggle('on', j === i); });
+    const e = P[i];
+    let body = `<div class="row" style="justify-content:space-between"><span class="mono">${esc(e.at)} · ${esc(e.phase)}</span><span class="mono">${e.seconds} s</span></div>
+      <div style="font-size:18px;font-weight:600;margin:8px 0 2px">${esc(e.label)}</div><div class="cap">${esc(e.detail)}</div>`;
+    if (e.phase === 'detect' && D.found.length) body += kvs(D.found);
+    if (e.phase === 'inspect' && D.evidence.length) body += kvs(D.evidence);
+    if (e.phase === 'propose' && D.proposal) body += kvs([{k: 'correction', v: D.proposal.summary}, {k: 'proposed by', v: D.proposal.by}, {k: 'needs the role', v: D.proposal.role}]);
+    if (e.phase === 'approve' && D.approval) body += kvs([{k: 'approved by', v: D.approval.by}, {k: 'idempotency key', v: D.approval.key}]) +
+      '<div class="cap" style="margin-top:8px">The person who asked cannot approve; the same approval never runs twice.</div>';
+    if (e.phase === 'verify') {
+      body += D.before_after.map(b => { const mx = Math.max(+b.before || 0, +b.after || 0, 1), pc = v => 100 * (+v || 0) / mx;
+        const row = (lab, v, col, w0) => `<div class="row" style="gap:10px;flex-wrap:nowrap;margin-top:6px"><span class="mono" style="width:52px">${lab}</span>
+          <div style="flex:1;background:var(--tint);border-radius:8px"><div class="bar2" data-to="${Math.max(pc(v), 0.6)}" style="width:${w0}%;background:${col}"></div></div>
+          <b class="num" style="width:64px;text-align:right">${esc(String(v))}</b></div>`;
+        return `<div class="ba"><span class="mono">${esc(b.k)}</span>${row('before', b.before, 'var(--red)', pc(b.before))}${row('after', b.after, 'var(--green)', 0)}</div>`; }).join('');
+      if (D.checks.length) body += kvs(D.checks);
+    }
+    card.innerHTML = body;
+    card.querySelectorAll('.bar2').forEach(b => setTimeout(() => { b.style.width = b.dataset.to + '%'; }, 250));
+  }
+  rail.querySelectorAll('.ph').forEach(n => n.onclick = () => { tok++; open(+n.dataset.i); });
+  let tok = 0;
+  async function play() { const my = ++tok; for (let i = 0; i < P.length; i++) { if (my !== tok) return; open(i);
+    await new Promise(r => setTimeout(r, reduce ? 0 : (P[i].phase === 'verify' ? 0 : 1500))); } }
+  go.onclick = play; open(P.length - 1);
+};
+
+// Every model feature against the rule-based way on the same held-out questions, as bars: grey without a model,
+// blue with it. Sort by what the model added; losses stay visible.
+R.scorecard = () => {
+  const rows = D.rows.map((r, i) => ({...r, i, gain: r.b && r.w ? r.w[0] / r.w[1] - r.b[0] / r.b[1] : null}));
+  const top = document.createElement('div'); top.className = 'row'; top.style.justifyContent = 'space-between';
+  top.innerHTML = `<div><span class="mono">Model</span><div style="font-size:24px;font-weight:600">${esc(D.model)}</div></div>`;
+  let order = 'As measured';
+  top.appendChild(seg(['As measured', 'Biggest gain first'], order, o => { order = o; draw(); }));
+  const list = document.createElement('div'); list.style.marginTop = '10px';
+  const leg = document.createElement('div'); leg.className = 'row'; leg.style.marginTop = '10px';
+  leg.innerHTML = '<span class="mono"><i style="display:inline-block;width:14px;height:8px;border-radius:4px;background:#C9CCD6"></i> without a model</span><span class="mono"><i style="display:inline-block;width:14px;height:8px;border-radius:4px;background:var(--blue)"></i> with the model</span>';
+  app.append(top, list, leg);
+  function draw() {
+    const rs = order === 'As measured' ? rows : [...rows].sort((a, b) => (b.gain ?? -9) - (a.gain ?? -9));
+    list.innerHTML = rs.map(r => {
+      const bar = (f, txt, col) => f ? `<div class="row" style="gap:8px;flex-wrap:nowrap"><div style="flex:1;background:var(--tint);border-radius:6px"><div class="bb" data-w="${100 * f[0] / f[1]}" style="background:${col}"></div></div><span class="lbl" style="width:44px">${f[0]}/${f[1]}</span></div>`
+        : `<div class="lbl">${esc(txt)}</div>`;
+      const g = r.gain === null ? '' : r.gain > 0 ? `<span class="pill p-pass">+${Math.round(r.gain * 100)} pts</span>` : r.gain < 0 ? `<span class="pill p-fail">${Math.round(r.gain * 100)} pts</span>` : '<span class="pill p-info">same</span>';
+      return `<div class="sc-row"><div><b style="font-size:14px">${esc(r.feature)}</b><div class="cap">${esc(r.measure)}</div></div>
+        <div class="bars">${bar(r.b, r.without, '#C9CCD6')}${bar(r.w, r.with, 'var(--blue)')}</div><div>${g}</div></div>`; }).join('');
+    requestAnimationFrame(() => list.querySelectorAll('.bb').forEach(b => b.style.width = b.dataset.w + '%'));
+  }
+  draw();
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

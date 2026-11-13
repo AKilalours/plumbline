@@ -121,6 +121,7 @@ def playground(n_events: int = 600) -> dict:
         for s in (clean, crash, careless):
             s.pop("ids")
         out.update(clean=clean, crash=crash, careless=careless, lost=len(lost), lost_sample=lost[:6])
+        out["stale"] = _stale_copy(feed, Good, base)
         out["verify"] = {name: [{"check": c, "ok": ok, "detail": d} for c, ok, d in
                                 kit.verify(lambda cls=cls: _quiet(cls()), contract=CONTRACT, workdir=base / f"v-{name}",
                                            max_pages=n_events // SIZE + 2)]
@@ -128,6 +129,23 @@ def playground(n_events: int = 600) -> dict:
         return out
     finally:
         srv.shutdown()
+
+
+def _stale_copy(feed, Good, base: Path) -> dict:
+    """The third engineer's finding, replayed: the API answers the first request from a copy that is behind, with
+    an empty page flagged in a header. Without `stale_when` the run takes that as the end; with it, it asks again."""
+    class Careful(Good):
+        stale_when = {"X-Data-Out-Of-Date": "true"}
+
+    out = {}
+    for name, cls in (("naive", Good), ("careful", Careful)):
+        feed.stale = 1
+        rec = _Rec(cls())
+        r = kit.run(rec(), workdir=base / f"stale-{name}", contract=CONTRACT)
+        out[name] = {"pages": list(rec.pages), "loaded": r.rows_loaded, "stale_answers": r.stale_answers,
+                     "held": len(_held(base / f"stale-{name}"))}
+    feed.stale = 0
+    return out
 
 
 def _quiet(s):

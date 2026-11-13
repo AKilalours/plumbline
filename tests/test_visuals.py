@@ -32,8 +32,34 @@ def _ops() -> dict:
         _OPS.update({"kit": kd, "polite": kit_demo.scrape(),
                      "incidents": OV.incidents({"NYC": ("dob_now_permits", runs)}, entries),
                      "cost": OV.cost([job_record(0, 331.7), job_record(0, 170)], {}),
-                     "snapshots": OV.snapshots(runs)})
+                     "snapshots": OV.snapshots(runs),
+                     "incident": OV.incident(_run(), "Future-dated feature", "The audit covers attributes with a first-seen date.", _fmt()),
+                     "scorecard": OV.scorecard([("Agent picks the tool", "messages routed right", "12/20", "19/20"),
+                                                ("Agent answers from the docs", "answered right", "19/24", "19/24"),
+                                                ("Contract for a new partner file", "column types right", "31/34", "30/34"),
+                                                ("Questions in plain English", "answered right", "no rule-based way", "14/14")], "gpt-4.1-mini")})
     return _OPS
+
+
+def _fmt():
+    from plumbline.app.scenarios import _fmt
+    return _fmt
+
+
+def _run():
+    """An incident record shaped as app/scenarios.py writes it."""
+    from types import SimpleNamespace
+    ev = lambda ph, label, detail, sec: {"phase": ph, "label": label, "detail": detail, "seconds": sec, "at": "11:19:05"}
+    return SimpleNamespace(id="run_5b5ef1", scenario="future_feature", created_at="2026-11-07T11:18:58+00:00", status="verified",
+                           findings={"check": "point-in-time audit", "values_from_the_future": 1347, "people": 693},
+                           evidence={"as_of": "2025-09-30", "first_seen_range": ["2025-11-13", "2025-12-25"]},
+                           proposal={"summary": "Rebuild the snapshot point in time", "proposed_by": "plumbline-agent", "role": "data-platform"},
+                           approval={"by": "U0OPS0001", "at": "2026-11-07T11:19:09+00:00", "idempotency_key": "run_5b5ef1:rebuild"},
+                           verification={"passed": True, "checks": {"values seen after the cutoff": 0}, "before_after": {"future values": [1347, 0]}},
+                           events=[ev("inject", "Built a training snapshot", "1,337 people", 6.49), ev("detect", "Audited every feature value", "1,347 seen after", 0.1),
+                                   ev("inspect", "Looked up what this leak did", "AUC 0.836 vs ceiling 0.797", 0.0),
+                                   ev("propose", "Prepared a correction", "No changes applied", 0.0), ev("approve", "Approved by U0OPS0001", "role data-platform", 0.0),
+                                   ev("fix", "Rebuilt the snapshot with dbt as of the cutoff", "", 6.13), ev("verify", "Audited the rebuilt snapshot", "0 values from the future", 0.06)])
 
 
 def _data() -> dict:
@@ -306,6 +332,53 @@ def test_the_cost_slider_and_private_toggle_reprice_from_the_measured_average():
         pg.dispatch_event(".rpd", "input")
         pg.click("text=Private repo")
         assert pg.inner_text(".ch") == f"${avg * 0.006 * 24 * 30:.2f}"
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_kit_playground_replays_the_stale_copy_landing_nothing_then_everything():
+    p, b = _browser()
+    try:
+        pg = b.new_page(viewport={"width": 1100, "height": 900})
+        pg.set_content(V.page("kit", _ops()["kit"]))
+        pg.wait_for_timeout(4500)
+        pg.click("text=A copy that is behind")
+        pg.wait_for_timeout(3600)
+        assert "0 of 600 landed" in pg.inner_text("#app")
+        pg.wait_for_timeout(6000)
+        assert "600 of 600 held" in pg.inner_text("#app") and "1 stale answer" not in pg.inner_text(".result")
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_incident_opens_on_its_verification_and_each_phase_opens_its_evidence():
+    p, b = _browser()
+    try:
+        pg = b.new_page()
+        pg.set_content(V.page("incident", _ops()["incident"]))
+        pg.wait_for_timeout(400)
+        t = pg.inner_text("#app")
+        assert "1347" in t and "AFTER" in t.upper()
+        pg.click(".ph.approve")
+        assert "run_5b5ef1:rebuild" in pg.inner_text("#app")
+        pg.click(".ph.detect")
+        assert "values from the future" in pg.inner_text("#app").lower()
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_scorecard_sorts_by_what_the_model_added_and_keeps_its_loss():
+    p, b = _browser()
+    try:
+        pg = b.new_page()
+        pg.set_content(V.page("scorecard", _ops()["scorecard"]))
+        pg.click("text=Biggest gain first")
+        first = pg.inner_text(".sc-row >> nth=0")
+        assert "Agent picks the tool" in first and "+35 PTS" in first.upper()
+        assert "-3 PTS" in pg.inner_text("#app").upper()
     finally:
         b.close()
         p.stop()

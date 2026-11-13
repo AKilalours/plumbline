@@ -876,7 +876,6 @@ def scorecard():
     header("AI scorecard", "Every model feature against the rule-based way on the same held-out questions. Losses included.")
     sm = ai_summary()
     model = next((v.get("model_name") for v in sm.values() if isinstance(v, dict) and v.get("model_name")), None)
-    st.markdown(f'<div class="mono">Model</div><div class="big">{html.escape(model or "not recorded yet")}</div>', unsafe_allow_html=True)
     bp = RECORDINGS / "baselines.json"
     b = json.loads(bp.read_text()) if bp.exists() else {}
     p, a, o, k = sm.get("planner"), sm.get("answers"), sm.get("onboarding"), sm.get("ask_data")
@@ -894,8 +893,8 @@ def scorecard():
         ("Questions in plain English", "answered right (result values)", "no rule-based way", g(k, "test", "answered_right")),
         ("Questions in plain English", "contact data, deletes, exports refused", "code guardrails", g(k, "test", "refused_when_it_should")),
     ]
-    st.dataframe(pd.DataFrame([{"Feature": f, "Measured on the held-out half": m, "Without a model": bb or "not run",
-                                "With the model": mm or "not recorded"} for f, m, bb, mm in rows]), hide_index=True, width="stretch")
+    from plumbline.app import ops_visuals as OV
+    viz("scorecard", OV.scorecard(rows, model), 640)
     st.caption("Held-out half · recorded runs · no live model on this page")
     st.subheader("Machine learning that did not ship")
     rg = json.loads((Path(__file__).parent / "docs/results/release_gate.json").read_text())
@@ -1853,8 +1852,11 @@ def activity_page():
     rid = st.selectbox("Incident", [r.id for r in rs], format_func=lambda i: f"{i} · {INCIDENTS[next(r for r in rs if r.id == i).scenario][1]}",
                        label_visibility="collapsed")
     r = next(x for x in rs if x.id == rid)
-    st.markdown(status_pill(r), unsafe_allow_html=True)
-    st.markdown(SC.report(r))
+    from plumbline.app import ops_visuals as OV
+    viz("incident", OV.incident(r, INCIDENTS[r.scenario][1], SC.RISKS[r.scenario], SC._fmt), 640)
+    with st.expander("The full report, as text"):
+        st.markdown(status_pill(r), unsafe_allow_html=True)
+        st.markdown(SC.report(r))
 
 
 

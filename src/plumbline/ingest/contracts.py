@@ -122,6 +122,20 @@ def phone_hash(digits: str) -> str:
     return hashlib.sha256(digits.encode()).hexdigest()
 
 
+_FRACTION = re.compile(r"(T\d\d:\d\d:\d\d)\.(\d{1,6})(?=$|[+-])")
+
+
+def parse_timestamp(s: str) -> datetime:
+    """ISO 8601 as Python 3.11+ reads it, on 3.10 too. 3.10 refuses a trailing Z ("...35.285Z", what Socrata and
+    most APIs send) and a fraction that is not 3 or 6 digits, so on 3.10 every such row was quarantined as a bad
+    timestamp while 3.12 loaded it. Found adding NYC 311 through the kit; CI's 3.10 job runs the test."""
+    s = s.strip()
+    if s[-1:] in "Zz":
+        s = s[:-1] + "+00:00"
+    s = _FRACTION.sub(lambda m: f"{m.group(1)}.{m.group(2).ljust(6, '0')}", s)
+    return datetime.fromisoformat(s)
+
+
 def normalize(col: Column, raw: str):
     """Return a typed value, None for empty, or raise BadValue with a reason code."""
     s = _WS.sub(" ", raw).strip() if raw is not None else ""
@@ -171,7 +185,7 @@ def normalize(col: Column, raw: str):
                 raise BadValue(f"bad_date:{col.name}") from None
     elif t == "timestamp":
         try:
-            v = datetime.fromisoformat(s)
+            v = parse_timestamp(s)
         except ValueError:
             raise BadValue(f"bad_timestamp:{col.name}") from None
     elif t in ("int", "float"):

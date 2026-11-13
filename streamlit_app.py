@@ -1301,54 +1301,60 @@ def slo_panel():
 
 
 def recovery_panel():
-    """How often each real feed needed a person, from the ledger and the run lines (ingest/recoveries.py)."""
-    from datetime import datetime, timezone
-    from plumbline.ingest.recoveries import ledger, measure
-    st.markdown('<div class="mono">How often a person had to step in</div>', unsafe_allow_html=True)
-    now, entries = datetime.now(timezone.utc), ledger()
-    for name, feed, runs in (("NYC Open Data permits", "dob_now_permits", open_data_runs()),
-                             ("Wikimedia live stream", "wikimedia_recentchange", stream_runs())):
-        m = measure(feed, runs, entries, now=now)
-        if not m["runs"]:
-            continue
-        st.markdown(f'<div class="note" style="margin:.6rem 0 .2rem"><b>{name}</b></div>', unsafe_allow_html=True)
-        viz("tiles", {"items": [
-            {"label": "Needed a person", "value": m["hands_on"], "fmt": "int",
-             "sub": f"in {m['runs']} runs; each one has a postmortem", "tone": "pass" if not m["hands_on"] else "warn"},
-            {"label": "Fixed itself", "value": m["retries_absorbed"] + m["on_its_own"], "fmt": "int",
-             "sub": f"{m['retries_absorbed']} retries inside runs, {m['on_its_own']} failed runs the next run fixed", "tone": "info"},
-            {"label": "Longest a consumer was hurt", "value": f"{m['hours_hurt_max']:g} h" if m["hours_hurt_max"] is not None else "0 h",
-             "fmt": "raw", "sub": "from first affected to the first good run after the fix", "tone": "info"},
-        ]}, 120)
-    st.caption("Time to onboard a new source, measured on an engineer who did not build the kit: about 14 minutes "
-               "for Open-Meteo weather, with an AI assistant, following docs/add_a_source.md (docs/results/"
-               "onboarding_second_engineer.md).")
+    """Every real run on one time line, with the times a person had to step in (ingest/recoveries.py)."""
+    from plumbline.app import ops_visuals as OV
+    from plumbline.ingest.recoveries import ledger
+    st.markdown('<div class="mono">When a person had to step in</div>', unsafe_allow_html=True)
+    viz("incidents", OV.incidents({"NYC Open Data permits": ("dob_now_permits", open_data_runs()),
+                                   "Wikimedia live stream": ("wikimedia_recentchange", stream_runs())}, ledger()), 300)
 
 
 def cost_panel():
-    """What a scheduled run costs, measured inside the job (ingest/cost.py)."""
-    from plumbline.ingest.cost import PRICE_SOURCE, USD_PER_MINUTE, jobs, summary
-    s = summary(jobs(), {"NYC": open_data_runs(), "Wikimedia": stream_runs()})
+    """What a scheduled run costs, measured inside the job (ingest/cost.py), with what-if controls."""
+    from plumbline.app import ops_visuals as OV
+    from plumbline.ingest.cost import PRICE_SOURCE, jobs
     st.markdown('<div class="mono">What a run costs</div>', unsafe_allow_html=True)
-    m, lo = s.get("measured"), s.get("steps_only")
-    if m:
-        items = [{"label": "Runner minutes per run", "value": f"{m['billed_minutes_avg']:g}", "fmt": "raw",
-                  "sub": f"average of {m['jobs']} runs, billed in whole minutes; longest {m['billed_minutes_max']}", "tone": "info"},
-                 {"label": "List price per run", "value": f"${m['list_usd_per_run']:.3f}", "fmt": "raw",
-                  "sub": f"${m['list_usd_per_30_days']:.2f} for 30 days at 8 runs a day", "tone": "info"},
-                 {"label": "Charged", "value": f"${m['charged_usd_total']:.2f}", "fmt": "raw",
-                  "sub": "public repository: standard runners are free", "tone": "pass"}]
-    elif lo:
-        items = [{"label": "Feed steps per run", "value": f"{lo['seconds_per_run']:g} s", "fmt": "raw",
-                  "sub": "steps only: setup and installs not included", "tone": "info"},
-                 {"label": "List price per run, at least", "value": f"${lo['list_usd_per_run_at_least']:.3f}", "fmt": "raw",
-                  "sub": f"${USD_PER_MINUTE} a runner minute", "tone": "info"},
-                 {"label": "Charged", "value": "$0.00", "fmt": "raw", "sub": "public repository: standard runners are free", "tone": "pass"}]
-    else:
-        return
-    viz("tiles", {"items": items}, 120)
-    st.caption(f"GitHub's list rate for the job's runner: {PRICE_SOURCE}. The cloud warehouse and the source APIs are not "
-               "counted: nothing measures them yet.")
+    viz("cost", OV.cost(jobs(), {"NYC": open_data_runs(), "Wikimedia": stream_runs()}), 320)
+    st.caption(f"Billed minutes and list price recorded by every job; rate from {PRICE_SOURCE}. The cloud warehouse and "
+               "the source APIs are not counted.")
+
+
+def snapshot_panel():
+    """The NYC feed's Iceberg copy: one snapshot per run (lake/iceberg.py)."""
+    from plumbline.app import ops_visuals as OV
+    st.markdown('<div class="mono">The Iceberg copy, run by run</div>', unsafe_allow_html=True)
+    viz("snapshots", OV.snapshots(open_data_runs()), 230)
+
+
+@st.cache_data(show_spinner="Running the kit for real…", ttl=24 * 3600)
+def kit_playground() -> dict:
+    from plumbline.app import kit_demo, ops_visuals as OV
+    d = kit_demo.playground()
+    d["code"], d["code_lines"] = OV.kit_code()
+    return d
+
+
+@st.cache_data(show_spinner=False, ttl=24 * 3600)
+def scrape_run(delay: float, robots: str, slow_down: bool) -> dict:
+    from plumbline.app import kit_demo
+    return kit_demo.scrape(delay=delay, robots=robots, slow_down=slow_down)
+
+
+def add_source():
+    """Add a source: the kit, played for real; then the polite scraper with its knobs."""
+    from plumbline.app import kit_demo
+    st.markdown("#### Add a source in 15 lines")
+    viz("kit", kit_playground(), 560)
+    how("Each scenario is a real run of `plumbline.kit` against a local stand-in for the USGS API, recorded page by page "
+        "and replayed here. Two engineers who did not build it added Open-Meteo (about 14 min) and NYC 311 (36 min) this "
+        "way, each with an AI assistant: docs/results/onboarding_second_engineer.md.")
+    st.markdown("#### Scrape, politely")
+    a, b, c = st.columns(3)
+    delay = a.select_slider("Crawl-delay in robots.txt", [0.5, 1.0, 2.0, 2.5, 5.0], value=2.0, key="sc_delay")
+    robots = b.selectbox("robots.txt", list(kit_demo.ROBOTS), key="sc_robots")
+    slow = c.toggle("Site says “slow down” once (429)", value=True, key="sc_429")
+    viz("polite", scrape_run(delay, robots, slow), 300)
+
 
 def feed_health(runs: list[dict], promise_hours: float = 26):
     """On time, streak and the last 7 days, counted from the run history the scheduled job writes (failures included)."""
@@ -1575,9 +1581,12 @@ def database_cdc():
 
 def sources_page():
     header("Sources")
-    v = view(["Health", "Lineage", "Failure lab", "Onboarding", "Open data", "Live stream", "Database", "Worth buying?"], "src_view")
+    v = view(["Health", "Add a source", "Lineage", "Failure lab", "Onboarding", "Open data", "Live stream", "Database", "Worth buying?"], "src_view")
     if v == "Database":
         database_cdc()
+        return
+    if v == "Add a source":
+        add_source()
         return
     if v == "Live stream":
         live_stream()
@@ -1604,6 +1613,7 @@ def sources_page():
         slo_panel()
         recovery_panel()
         cost_panel()
+        snapshot_panel()
         d = demo()
         with Q.connect(d) as con:
             led = con.execute("""SELECT source AS Source, count(*) FILTER (WHERE status = 'loaded') AS Loaded,

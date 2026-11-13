@@ -7,13 +7,14 @@ caller, which reads it from the warehouse or a saved result, so a test can check
 
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
-Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace, people, agent, lineage.
+Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace, people, agent,
+lineage, stream, kit, polite, incidents, cost, snapshots.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -74,6 +75,38 @@ input[type=range]{width:100%;margin:0;accent-color:var(--blue);height:28px}
 .chip.gone{text-decoration:line-through;color:var(--red);border-color:#F2C9C0;background:#FDF5F3}
 .chip.new{color:var(--blue);border-color:#C9D1F2;background:var(--tint)}
 @media (max-width:560px){.recs{grid-template-columns:1fr}.bars .b{grid-template-columns:1fr 70px}.bars .track{grid-column:1/3;grid-row:2}.tile .v{font-size:28px}}
+.stage{display:grid;grid-template-columns:130px 1fr 150px;gap:10px;align-items:center;margin-top:14px}
+.box{border:2px solid var(--line);border-radius:16px;padding:12px;text-align:center;min-height:96px;display:flex;flex-direction:column;justify-content:center}
+.box.api{border-color:#C9D1F2;background:var(--tint)}.box.wh{border-color:var(--blue)}
+.box .v{font-size:30px;font-weight:600}.lane{position:relative;height:96px;border-radius:14px;background:repeating-linear-gradient(90deg,#F6F7FA 0 18px,#fff 18px 36px);overflow:hidden}
+.pg{position:absolute;top:24px;left:-70px;width:64px;height:48px;border-radius:10px;background:var(--blue);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 13px Geist;box-shadow:0 6px 16px rgba(41,65,185,.25)}
+.pg small{font:500 10px 'Geist Mono';opacity:.8}.pg.dup{background:#9AA3C7}.pg.lost{background:var(--red)}
+.boom{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 22px Geist;color:var(--red);background:rgba(251,237,234,.92);animation:rise .3s both}
+.curs{display:inline-flex;gap:8px;align-items:center;border:1px dashed var(--blue);border-radius:10px;padding:6px 10px;font:500 12px 'Geist Mono';color:var(--blue);margin-top:10px;transition:background .3s}
+.curs.flash{background:#FFF4DA}
+.result{margin-top:14px;border-radius:14px;padding:14px 16px;font-size:15px;animation:rise .4s both}
+.result.ok{background:#E8F5EE;color:#11583A}.result.bad{background:#FBEDEA;color:#7E2414}
+.lights{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.lights .card{padding:14px}
+.light{display:flex;gap:10px;align-items:flex-start;padding:6px 0;font-size:13px}.light i{flex:none;width:12px;height:12px;border-radius:50%;margin-top:3px}
+.light i.p{background:var(--green);box-shadow:0 0 0 4px #E8F5EE}.light i.f{background:var(--red);box-shadow:0 0 0 4px #FBEDEA}.light i.s{background:#C9CCD6}
+pre.code{background:#0B1030;color:#DCE2FF;border-radius:14px;padding:14px 16px;font:12.5px/1.55 'Geist Mono',monospace;overflow:auto;margin:10px 0 0}
+pre.code .hl{background:rgba(229,183,77,.25);display:inline-block;width:100%;border-left:3px solid var(--gold);margin-left:-8px;padding-left:5px}
+.tl{position:relative;height:150px;margin-top:16px;border-bottom:2px solid var(--line);overflow-x:clip}
+.tl .q{position:absolute;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;cursor:default}
+.tl .q b{width:16px;height:16px;border-radius:50%;display:block;border:3px solid #fff;box-shadow:0 0 0 1px var(--line)}
+.tl .q span{font:500 10px 'Geist Mono';color:var(--muted);white-space:nowrap}
+.tl .w{position:absolute;bottom:-14px;height:8px;border-radius:4px;background:repeating-linear-gradient(45deg,var(--gold) 0 4px,#F6E3B0 4px 8px)}
+.tl .now{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);transition:left .25s linear}
+.lanes .ln{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;padding:10px 0;border-bottom:1px dashed #EEE}
+.track2{position:relative;height:34px}.track2 .rd{position:absolute;top:11px;width:12px;height:12px;border-radius:50%;transform:translateX(-50%);cursor:pointer}
+.track2 .rd.ok{background:var(--green)}.track2 .rd.no{background:var(--red)}.track2 .rd.hand{background:#fff;border:3px solid var(--amber)}
+.track2 .hurt{position:absolute;top:4px;height:26px;border-radius:8px;z-index:2;min-width:16px;background:rgba(194,65,45,.13);border:1px solid rgba(194,65,45,.45);cursor:pointer;transition:background .15s}
+.track2 .hurt:hover,.track2 .hurt.on{background:rgba(194,65,45,.28)}
+.snaps{display:flex;align-items:flex-end;gap:10px;overflow-x:auto;padding:10px 2px}
+.snap{flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.snap b{display:block;border-radius:50%;background:var(--blue);transition:transform .15s}.snap.on b{outline:3px solid var(--gold);outline-offset:3px}
+.snap:hover b{transform:scale(1.08)}.snap span{font:500 10px 'Geist Mono';color:var(--muted)}
+@media (max-width:560px){.stage{grid-template-columns:1fr}.lights{grid-template-columns:1fr}.lanes .ln{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -950,6 +983,180 @@ R.stream = () => {
     picks.querySelectorAll('.pk').forEach(e => e.onclick = () => { cur = +e.dataset.i; draw(); });
   }
   draw();
+};
+
+// The add-a-source kit, replayed from real runs (app/kit_demo.py). Pick a scenario: pages fly from the API to
+// the warehouse, the cursor updates as the kit saves it, a crash interrupts, and the result says what is held.
+R.kit = () => {
+  const SC = {'Run it': 'clean', 'Read it again': 'again', 'Crash after page 1': 'crash', 'The careless cursor': 'careless'};
+  const top = document.createElement('div'); top.className = 'row';
+  const go = document.createElement('button'); go.className = 'btn blue'; go.textContent = '▶ Play';
+  let pick = 'Run it';
+  top.append(seg(Object.keys(SC), pick, o => { pick = o; play(); }), go);
+  const stage = document.createElement('div'); stage.className = 'stage';
+  stage.innerHTML = `<div class="box api"><div class="mono">The API</div><div class="v num">${F.int(D.events)}</div><div class="cap">events, ${D.page_size} a page</div></div>
+    <div class="lane"></div><div class="box wh"><div class="mono">Warehouse</div><div class="v num held">0</div><div class="cap sub">rows held</div></div>`;
+  const lane = stage.querySelector('.lane'), held = stage.querySelector('.held'), sub = stage.querySelector('.sub');
+  const curs = document.createElement('div'); curs.className = 'curs'; curs.innerHTML = 'cursor <b>none yet</b>';
+  const res = document.createElement('div');
+  const lights = document.createElement('div'); lights.className = 'lights';
+  const code = document.createElement('details'); code.style.marginTop = '14px';
+  code.innerHTML = `<summary class="mono" style="cursor:pointer">The ${D.code_lines} lines an engineer writes</summary><pre class="code">${D.code.split('\n').map(l =>
+    /cursor=newest if last else None/.test(l) ? `<span class="hl">${esc(l)}</span>` : esc(l)).join('\n')}</pre>`;
+  app.append(top, stage, curs, res, lights, code);
+  let token = 0, total = 0;
+  const wait = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
+  function setHeld(v) { count(held, v, 'int', total); total = v; }
+  async function fly(rows, cls, tag) {
+    const c = document.createElement('div'); c.className = 'pg ' + (cls || ''); c.innerHTML = `${F.int(rows)}<small>${tag}</small>`;
+    lane.appendChild(c); await wait(30);
+    c.style.transition = reduce ? 'none' : 'left .55s cubic-bezier(.4,.1,.2,1)'; c.style.left = 'calc(100% + 10px)';
+    await wait(560); c.remove();
+  }
+  async function play() {
+    const my = ++token, key = SC[pick], s = key === 'again' ? D.clean : D[key];
+    res.innerHTML = ''; lane.querySelectorAll('.boom').forEach(b => b.remove()); total = 0; held.textContent = '0';
+    curs.innerHTML = 'cursor <b>none yet</b>'; go.disabled = true;
+    const steps = key === 'again' ? s.steps : s.steps.filter(x => x.label !== 'again');
+    for (const st of steps) {
+      if (key === 'again' && st.label === 'run') { setHeld(st.loaded); curs.innerHTML = `cursor <b>${esc(st.cursor)}</b>`; await wait(300);
+        const b = document.createElement('div'); b.className = 'boom'; b.style.color = 'var(--blue)'; b.style.background = 'rgba(243,245,252,.92)';
+        b.textContent = 'cursor lost: read everything again'; lane.appendChild(b); await wait(1100); b.remove(); continue; }
+      for (const [i, p] of st.pages.entries()) {
+        if (my !== token) return;
+        if (p.rows) await fly(p.rows, st.label === 'again' ? 'dup' : '', st.label === 'again' ? 'already held' : `page ${i + 1}`);
+        if (p.cursor !== null && p.cursor !== undefined) { curs.innerHTML = `cursor saved <b>${esc(p.cursor)}</b>`; curs.classList.add('flash'); setTimeout(() => curs.classList.remove('flash'), 400); }
+        else curs.innerHTML = `cursor <b>kept</b> <span style="color:var(--muted)">(window not finished)</span>`;
+      }
+      if (st.label === 'crash') { const b = document.createElement('div'); b.className = 'boom'; b.textContent = '💥 crash after page 1';
+        lane.appendChild(b); await wait(1200); b.textContent = '↻ resume from the saved cursor'; await wait(900); b.remove(); }
+      else setHeld(total + (st.loaded || 0));
+    }
+    if (my !== token) return;
+    const lost = key === 'careless' ? D.lost : 0, h = key === 'careless' ? D.careless.held : D.clean.held;
+    sub.textContent = key === 'again' ? 'rows held: 0 added' : 'rows held';
+    res.className = 'result ' + (lost ? 'bad' : 'ok');
+    res.innerHTML = lost ? `<b>${F.int(h)} of ${F.int(D.events)} held. ${F.int(lost)} lost for good</b>: they were on page 2 or later but
+        updated before the cursor saved after page 1. ${D.lost_sample.map(x => `<span class="chip gone">${esc(x)}</span>`).join('')}`
+      : key === 'again' ? `<b>${F.int(D.events)} rows read again, 0 added.</b> The loader keeps each row once.`
+      : key === 'crash' ? `<b>${F.int(h)} of ${F.int(D.events)} held after the crash.</b> Page 1 was on disk before the cursor moved.`
+      : `<b>${F.int(h)} of ${F.int(D.events)} held</b> in ${D.clean.ms} ms of real runs.`;
+    go.disabled = false;
+  }
+  const vcol = (title, rows) => `<div class="card"><div class="mono">${title}</div>` + rows.map(r =>
+    `<div class="light"><i class="${r.ok === null ? 's' : r.ok ? 'p' : 'f'}"></i><div><b>${r.ok === null ? 'SKIP' : r.ok ? 'PASS' : 'FAIL'}</b> ${esc(r.check)}
+     <div style="color:var(--muted);font-size:12px">${esc(r.detail)}</div></div></div>`).join('') + '</div>';
+  lights.innerHTML = vcol('verify · the example source', D.verify.good) + vcol('verify · the careless cursor', D.verify.careless);
+  go.onclick = play; play();
+};
+
+// The polite scraper, one real run on a simulated clock (app/kit_demo.py scrape): every request the site saw,
+// every wait, and the request robots.txt stopped before it was sent. Play moves time along.
+R.polite = () => {
+  const T = Math.max(1, D.seconds), pos = t => `${5 + 80 * t / T}%`;   // room on the right for the last label
+  const head = document.createElement('div'); head.className = 'row';
+  const go = document.createElement('button'); go.className = 'btn blue'; go.textContent = '▶ Replay';
+  head.innerHTML = `<span class="pill p-info">${esc(D.agent)}</span>`; head.prepend(go);
+  const tl = document.createElement('div'); tl.className = 'tl';
+  const col = q => q.path === '/robots.txt' ? 'var(--blue)' : q.status === 200 ? 'var(--green)' : q.status === 429 ? 'var(--gold)' : 'var(--red)';
+  const stack = {};
+  tl.innerHTML = D.waits.map(w => `<div class="w" title="waited ${w.secs} s" style="left:${pos(w.at)};width:calc(${80 * w.secs / T}% )"></div>`).join('') +
+    D.requests.map(q => { const k = q.t.toFixed(1), n = stack[k] = (stack[k] || 0) + 1;
+      return `<div class="q" data-t="${q.t}" style="left:${pos(q.t)};bottom:${(n - 1) * 46}px;opacity:.15" title="${esc(q.path)} → ${q.status}">
+        <b style="background:${col(q)}"></b><span>${esc(q.path.replace(/^\/page\//, 'p').replace(/\/$/, ''))} · ${q.status}</span></div>`; }).join('') +
+    D.blocked.map(b => `<div class="q" data-t="${b.t}" style="left:${pos(b.t)};bottom:92px;opacity:.15" title="robots.txt: not allowed, never requested">
+        <b style="background:#fff;box-shadow:0 0 0 2px var(--red)"></b><span style="color:var(--red)">✕ ${esc(b.path)} not asked</span></div>`).join('') +
+    `<div class="now" style="left:5%"></div>`;
+  const now = tl.querySelector('.now');
+  const axis = document.createElement('div'); axis.className = 'row'; axis.style.justifyContent = 'space-between'; axis.style.marginTop = '20px';
+  axis.innerHTML = `<span class="mono">0 s</span><span class="mono">${D.seconds} s simulated</span>`;
+  const t429 = D.requests.find(q => q.status === 429);
+  const out = tiles([{label: 'Requests the site saw', value: D.requests.length, fmt: 'int', tone: 'info'},
+    {label: 'Time spent waiting', value: D.waits.reduce((a, w) => a + w.secs, 0), fmt: 's', tone: 'warn', sub: t429 ? 'told to slow down once: slower after' : 'the crawl delay between requests'},
+    {label: 'Not asked (robots.txt)', value: D.blocked.length, fmt: 'int', tone: D.blocked.length ? 'pass' : 'info', sub: D.outcome}]);
+  out.style.marginTop = '14px';
+  app.append(head, tl, axis, out);
+  let tok = 0;
+  async function replay() { const my = ++tok; tl.querySelectorAll('.q').forEach(e => e.style.opacity = .15);
+    for (let t = 0; t <= T + .01; t += T / 60) { if (my !== tok) return; now.style.left = pos(t);
+      tl.querySelectorAll('.q').forEach(e => { if (+e.dataset.t <= t + 1e-6) e.style.opacity = 1; });
+      await new Promise(r => setTimeout(r, reduce ? 0 : 35)); } }
+  go.onclick = replay; replay();
+};
+
+// Every run of each real feed on one time line: green ran fine, red failed, ringed started by hand. Shaded spans
+// are the times a consumer was hurt until a person fixed it; click one for what was done and its postmortem.
+R.incidents = () => {
+  const ts = D.feeds.flatMap(f => f.runs.map(r => Date.parse(r.t)).concat(f.recoveries.flatMap(x => [Date.parse(x.start), Date.parse(x.end)])));
+  const t0 = Math.min(...ts), t1 = Math.max(Date.now(), ...ts), x = t => `${100 * (Date.parse(t) - t0) / (t1 - t0)}%`;
+  const card = document.createElement('div'); card.className = 'card'; card.style.marginTop = '12px';
+  card.innerHTML = '<div class="cap">Click a shaded span: what broke, how long, what a person did.</div>';
+  const sum = tiles(D.feeds.map(f => ({label: f.name, value: f.recoveries.length, fmt: 'int', tone: f.recoveries.length ? 'warn' : 'pass',
+    sub: `times a person stepped in · ${f.runs.length} runs · ${f.retries} retries absorbed`})));
+  const lanes = document.createElement('div'); lanes.className = 'lanes'; lanes.style.marginTop = '12px';
+  D.feeds.forEach((f, fi) => { const ln = document.createElement('div'); ln.className = 'ln';
+    ln.innerHTML = `<div><b style="font-size:14px">${esc(f.name)}</b><div class="mono">${f.runs.length} runs</div></div><div class="track2">` +
+      f.recoveries.map((r, i) => `<div class="hurt" data-f="${fi}" data-i="${i}" style="left:${x(r.start)};width:max(16px,calc(${x(r.end)} - ${x(r.start)}))"></div>`).join('') +
+      f.runs.map(r => `<div class="rd ${r.hand ? 'hand' : r.ok ? 'ok' : 'no'}" style="left:${x(r.t)}" title="${esc(r.t.slice(5, 16).replace('T', ' '))} UTC · ${r.ok ? 'ok' : 'failed'} · ${esc(r.trigger || 'schedule')}"></div>`).join('') + '</div>';
+    lanes.appendChild(ln); });
+  const legend = document.createElement('div'); legend.className = 'row'; legend.style.marginTop = '8px';
+  legend.innerHTML = '<span class="mono"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--green)"></i> ran fine</span><span class="mono"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--red)"></i> failed</span><span class="mono"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;border:2px solid var(--amber)"></i> started by hand</span><span class="mono"><i style="display:inline-block;width:16px;height:9px;border-radius:3px;background:rgba(194,65,45,.25)"></i> consumers hurt</span>';
+  app.append(sum, lanes, legend, card);
+  lanes.querySelectorAll('.hurt').forEach(e => e.onclick = () => { lanes.querySelectorAll('.hurt').forEach(h => h.classList.remove('on')); e.classList.add('on');
+    const r = D.feeds[+e.dataset.f].recoveries[+e.dataset.i], hrs = (Date.parse(r.end) - Date.parse(r.start)) / 36e5;
+    card.innerHTML = `<div class="row" style="justify-content:space-between"><span class="pill p-fail">hurt ${hrs < 2 ? Math.round(hrs * 60) + ' min' : hrs.toFixed(1) + ' h'}</span>
+      <span class="mono">${esc(r.start.slice(0, 16).replace('T', ' '))} → ${esc(r.end.slice(0, 16).replace('T', ' '))} UTC</span></div>
+      <div style="font-size:18px;font-weight:600;margin:10px 0 4px">${esc(r.title)}</div><div class="cap">A person: ${esc(r.did)}</div>
+      ${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" class="btn" style="display:inline-block;margin-top:10px;text-decoration:none">Read the postmortem ↗</a>` : ''}`; });
+  const first = lanes.querySelector('.hurt'); if (first) first.click();
+};
+
+// What a run costs, from the jobs that measured themselves. The sliders ask "what if": more runs a day, a private
+// repository; the arithmetic is done here, from the measured average.
+R.cost = () => {
+  const J = D.jobs, avg = D.avg_minutes, rate = D.usd_per_minute;
+  const ctl = document.createElement('div'); ctl.className = 'card';
+  ctl.innerHTML = `<div class="row" style="justify-content:space-between"><span class="mono">Runs a day</span><b class="num rd">${D.runs_per_day}</b></div>
+    <input type="range" min="1" max="48" value="${D.runs_per_day}" class="rpd">
+    <div class="row" style="margin-top:8px"></div>`;
+  let priv = 'Public repo (this one)';
+  ctl.lastElementChild.appendChild(seg(['Public repo (this one)', 'Private repo'], priv, o => { priv = o; calc(); }));
+  const out = document.createElement('div'); out.className = 'band'; out.style.marginTop = '12px';
+  out.innerHTML = `<div class="mono">For 30 days</div><div class="grid"><div class="k"><div class="mono">List price</div><div class="v num lp"></div><div class="s lps"></div></div>
+    <div class="k"><div class="mono">Charged</div><div class="v num ch"></div><div class="s chs"></div></div></div>`;
+  const bars = document.createElement('div'); bars.style.marginTop = '14px';
+  const mx = Math.max(1, ...J.map(j => j.billed_minutes));
+  bars.innerHTML = J.length ? `<div class="mono">Each measured run · billed minutes</div><div class="row" style="align-items:flex-end;gap:6px;height:90px;margin-top:8px">` +
+    J.map(j => `<div title="${esc(j.run_at)} · ${j.job_seconds} s · ${j.billed_minutes} min · $${j.list_usd.toFixed(3)} list" style="width:22px;border-radius:5px 5px 2px 2px;background:var(--blue);height:${8 + 76 * j.billed_minutes / mx}px"></div>`).join('') + '</div>'
+    : `<div class="cap">No job has measured itself yet; the numbers are a lower bound from the feed steps (${D.steps_seconds} s a run).</div>`;
+  app.append(ctl, out, bars);
+  const rpd = ctl.querySelector('.rpd'), lab = ctl.querySelector('.rd');
+  function calc() { const n = +rpd.value; lab.textContent = n; const list = avg * rate * n * 30;
+    out.querySelector('.lp').textContent = '$' + list.toFixed(2); out.querySelector('.lps').textContent = `${avg.toFixed(1)} min a run × $${rate} a minute × ${n} a day`;
+    out.querySelector('.ch').textContent = priv.startsWith('Public') ? '$0.00' : '$' + list.toFixed(2);
+    out.querySelector('.chs').textContent = priv.startsWith('Public') ? 'standard runners are free for public repositories' : 'before any free minutes on the plan'; }
+  rpd.oninput = calc; calc();
+};
+
+// The Iceberg copy: one dot per snapshot, sized by the rows it added. Click one to see the table as that run left it.
+R.snapshots = () => {
+  const S = D.snaps;
+  if (!S.length) { app.innerHTML = '<div class="cap">No snapshot yet: the next daily run writes the first.</div>'; return; }
+  const mx = Math.max(...S.map(s => s.added || 1));
+  const row = document.createElement('div'); row.className = 'snaps';
+  row.innerHTML = S.map((s, i) => { const r = 14 + 34 * Math.sqrt((s.added || 1) / mx);
+    return `<div class="snap" data-i="${i}"><b style="width:${r}px;height:${r}px;background:${s.seeded ? 'var(--navy)' : 'var(--blue)'}"></b><span>${esc(s.run_at.slice(5, 16).replace('T', ' '))}</span></div>`; }).join('');
+  const card = document.createElement('div'); card.className = 'card';
+  app.append(row, card);
+  row.querySelectorAll('.snap').forEach(e => e.onclick = () => { row.querySelectorAll('.snap').forEach(x => x.classList.remove('on')); e.classList.add('on');
+    const s = S[+e.dataset.i];
+    card.innerHTML = `<div class="mono">As the run at ${esc(s.run_at.replace('T', ' ').replace('Z', ' UTC'))} left it</div>
+      <div class="grid" style="margin-top:10px"></div><div class="cap">${s.seeded ? `The first snapshot: seeded once from the cloud copy, so the table starts with every permit held.` :
+      s.added ? `${F.int(s.added)} rows this run did not hold yet, appended; the rows every run re-reads at its cursor added nothing.` : 'Nothing new: no snapshot committed.'}</div>`;
+    card.querySelector('.grid').appendChild(tiles([{label: 'Rows in the table', value: s.rows, fmt: 'int', tone: 'info'},
+      {label: s.seeded ? 'Seeded' : 'Added this run', value: s.seeded || s.added, fmt: 'int', tone: 'pass'},
+      {label: 'Snapshots kept', value: s.snapshots, fmt: 'int', tone: 'info', sub: 'older than 28 days expire'}])); });
+  row.lastElementChild.click();
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

@@ -1,0 +1,48 @@
+# NYC 311 service requests (examples/sources/nyc_311.py). Reviewed from the draft.
+# Left out as personal or identifying: addresses, streets, intersections, landmark, bbl, coordinates, resolution notes.
+name: nyc_311
+kind: api
+version: 1
+files: sources/nyc_311/*.csv
+key:
+- unique_key
+latest_by:
+- updated_at           # Socrata's :updated_at; NYC reloads in bulk, so many rows share one value
+columns:
+  unique_key:
+    type: string
+    required: true
+  created_date:
+    type: timestamp
+    required: true
+  closed_date:
+    type: timestamp
+  agency:
+    type: string       # the draft made enums of what one page held; these lists run to hundreds
+  complaint_type:
+    type: string
+  descriptor:
+    type: string
+  status:
+    type: string       # the docs do not list every status value; an enum here would quarantine new ones
+  location_type:
+    type: string
+  incident_zip:
+    type: string       # where the incident was, not a person's zip: the draft's "identity: zip" removed
+  borough:
+    type: enum
+    values: [BRONX, BROOKLYN, MANHATTAN, QUEENS, STATEN ISLAND, Unspecified]
+  community_board:
+    type: string
+  council_district:
+    type: string       # a district number is a code, not a quantity
+  police_precinct:
+    type: string
+  open_data_channel_type:
+    type: enum
+    values: [PHONE, ONLINE, MOBILE, OTHER, UNKNOWN]
+  resolution_action_updated_date:
+    type: timestamp
+  updated_at:
+    type: timestamp
+    required: true

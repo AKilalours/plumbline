@@ -20,7 +20,9 @@ What the kit does for you (each one is tested in tests/test_kit.py, on the worke
 - **Safe reruns.** A page is written to disk atomically, then the cursor is saved. A crash between pages
   resumes at the last saved cursor; a page read twice adds nothing, because the loader stores each row once.
 - **Retries.** `get_json` retries 429 and 5xx with backoff, honours Retry-After, and gives up loudly after
-  `max_retries`. Other 4xx are your bug or the source's, so they fail at once with the reason.
+  `max_retries`. Other 4xx are your bug or the source's, so they fail at once with the reason. An API that
+  says in a header that an answer is stale (`stale_when`) is asked again, since a stale page can look like
+  the end. `self.last_headers` holds the last answer's headers.
 - **The contract decides the columns.** Only columns the reviewed contract lists are written. Anything
   else is counted as drift on the run line and held back, never silently loaded. A source without a
   contract yet gets a draft written for a person to read (`draft`).
@@ -81,9 +83,11 @@ class Report:
     seconds: float = 0.0
     quarantine_reasons: dict = field(default_factory=dict)
     finished: bool = False          # the source had no more pages (not stopped by max_pages)
+    stale_answers: int = 0          # answers marked stale by the source's stale_when, asked again
 
     def line(self) -> str:
         held = f", held back {', '.join(self.held_back)}" if self.held_back else ""
+        held += f", {self.stale_answers} stale answers asked again" if self.stale_answers else ""
         return (f"{self.name}: {self.rows_landed} rows landed in {self.pages} pages, {self.rows_loaded} new, "
                 f"{self.rows_already_present} already held, {self.rows_quarantined} quarantined, "
                 f"{self.retries} retries{held}, {self.seconds:.1f}s")
@@ -100,11 +104,13 @@ class Source:
     base_delay: float = 0.5
     timeout: float = 30.0
     headers: dict = {}
+    stale_when: dict = {}           # response header -> value that means "this answer is from a copy that is behind"
 
     def __init__(self) -> None:
         if not re.fullmatch(r"[a-z][a-z0-9_]*", self.name or ""):
             raise ValueError(f"{type(self).__name__}.name must be lowercase snake_case, got {self.name!r}")
-        self._requests = self._retries = 0
+        self._requests = self._retries = self._stale = 0
+        self.last_headers: dict = {}        # the headers of the last answer, for a source that needs them
         self._sleep = time.sleep
 
     def pages(self, cursor) -> Iterator[Page]:
@@ -121,19 +127,33 @@ class Source:
             try:
                 req = urllib.request.Request(full, headers={"Accept": "application/json", **self.headers})
                 with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                    return json.loads(r.read().decode())
+                    self.last_headers = dict(r.headers.items())
+                    body = json.loads(r.read().decode())
+                if not self._is_stale():
+                    return body
+                self._stale += 1                     # a stale answer can look like the end of the data: ask again
+                wait = None
             except urllib.error.HTTPError as e:
+                self.last_headers = dict(e.headers.items()) if e.headers else {}
                 if e.code not in RETRY:
                     raise SourceError(f"{self.name}: HTTP {e.code} from {urllib.parse.urlsplit(url).netloc}: "
                                       f"{e.read()[:200].decode(errors='replace')}") from None
                 wait = _retry_after(e.headers.get("Retry-After")) if e.code == 429 else None
             except (urllib.error.URLError, TimeoutError, ConnectionError):
-                wait = None
+                self.last_headers, wait = {}, None
             if attempt == self.max_retries:
+                if self._is_stale():
+                    raise SourceError(f"{self.name}: answers from {urllib.parse.urlsplit(url).netloc} still marked stale after "
+                                      f"{attempt + 1} tries; run again later")
                 raise SourceError(f"{self.name}: gave up after {attempt + 1} tries on {urllib.parse.urlsplit(url).netloc}")
             self._retries += 1
             self._sleep(wait if wait is not None else self.base_delay * 2 ** attempt * (0.5 + random.random()))
         raise AssertionError("unreachable")
+
+
+    def _is_stale(self) -> bool:
+        have = {k.lower(): str(v).lower() for k, v in self.last_headers.items()}
+        return any(have.get(k.lower()) == str(v).lower() for k, v in self.stale_when.items())
 
 
 def _retry_after(v: str | None) -> float | None:
@@ -195,7 +215,7 @@ def sync(src: Source, landing: Path, columns: list[str] | None, *, max_pages: in
             after_page(rep.pages)
     else:
         rep.finished = True
-    rep.cursor, rep.requests, rep.retries = state["cursor"], src._requests, src._retries
+    rep.cursor, rep.requests, rep.retries, rep.stale_answers = state["cursor"], src._requests, src._retries, src._stale
     rep.seconds = time.perf_counter() - t
     return rep
 
@@ -267,6 +287,10 @@ def draft(src: Source, *, out: Path | None = None, workdir: Path | None = None) 
     note = f"# Drafted from the first page of {src.name}. Read it, then move it to sources/kit/{src.name}.yaml.\n"
     if personal:
         note += f"# Left out as personal (add back only with a privacy rule): {', '.join(personal)}\n"
+    ident = [c.name for c in cols if c.identity]
+    if ident:
+        note += (f"# Marked identity (keys to find a person's rows when they ask to be deleted): {', '.join(ident)}. "
+                 "Keep a line only if the column describes a person; where something happened is not a person.\n")
     out.write_text(note + yaml.safe_dump(spec, sort_keys=False))
     return out
 

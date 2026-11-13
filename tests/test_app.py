@@ -758,7 +758,7 @@ def test_the_health_view_shows_how_often_each_feed_needed_a_person(world, monkey
     at = _app(world, monkeypatch, "sources_page")
     at.segmented_control(key="src_view").set_value("Health").run()
     assert not at.exception, at.exception
-    assert any("How often a person had to step in" in m.value for m in at.markdown)
+    assert any("When a person had to step in" in m.value for m in at.markdown)
 
 
 def test_the_recovery_panel_renders_from_a_history_with_a_failure_and_a_rerun_by_hand():
@@ -784,3 +784,11 @@ def test_the_cost_panel_renders_from_measured_jobs_and_from_steps_only():
         at = st_testing.AppTest.from_string(code, default_timeout=60).run()
         assert not at.exception, at.exception
         assert any("What a run costs" in m.value for m in at.markdown)
+
+
+def test_the_add_a_source_view_runs_the_kit_and_the_scraper_for_real(world, monkeypatch):
+    at = _app(world, monkeypatch, "sources_page")
+    at.segmented_control(key="src_view").set_value("Add a source").run()
+    assert not at.exception, at.exception
+    at.selectbox(key="sc_robots").set_value("cannot be read (503)").run()
+    assert not at.exception, at.exception

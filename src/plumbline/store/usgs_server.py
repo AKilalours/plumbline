@@ -5,7 +5,8 @@ offset counts from 1) and the same response shape. The events are generated, not
 times are deliberately not in time order, as on the real feed (a quake is revised hours or days later),
 which is what makes a careless cursor lose rows.
 
-`fail` injects trouble: a list of HTTP codes to return, one per request, before answering normally.
+`fail` injects trouble: a list of HTTP codes to return, one per request, before answering normally. `stale`
+answers that many requests from a copy that is behind: an empty page, marked by an X-Data-Out-Of-Date header.
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ class Feed:
     retry_after: str | None = None
     requests: int = 0
     extra: dict = field(default_factory=dict)     # property -> value added to every event (drift)
+    stale: int = 0                                # answer this many requests from a copy that is behind: empty, flagged
 
     @classmethod
     def generated(cls, n: int = 1200, seed: int = 7) -> "Feed":
@@ -82,8 +84,14 @@ def serve(feed: Feed) -> tuple[ThreadingHTTPServer, str]:
                 self.end_headers()
                 self.wfile.write(b"Error 400: format must be geojson")
                 return
-            body = json.dumps(feed.query(q)).encode()
+            stale = feed.stale > 0
+            if stale:
+                feed.stale -= 1
+            body = json.dumps({"type": "FeatureCollection", "metadata": {"count": 0}, "features": []} if stale
+                              else feed.query(q)).encode()
             self.send_response(200)
+            if stale:
+                self.send_header("X-Data-Out-Of-Date", "true")
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(body)

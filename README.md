@@ -46,7 +46,7 @@ written postmortem with its timeline, measured impact, root cause and the test t
 | Web pages (scraping) | robots.txt decides (unreadable means no); the crawl delay is kept and doubles when told to slow down; a named contact; unchanged pages not downloaded; a request budget | a local stand-in with robots rules, delays and 429s; the example targets quotes.toscrape.com, a site built for scraping practice |
 | **Your source** | write one method that asks for the next page; the kit adds retries, safe reruns, crash recovery, the contract and privacy | `verify` runs it the ways production will; it catches the cursor bug most new connectors have |
 
-**Add a source in about 15 lines:** [the guide](docs/add_a_source.md) and two worked examples. **Tested on someone who did not build it:** a second engineer added [Open-Meteo weather](examples/sources/open_meteo_weather.py) against the real API in about 14 minutes, with an AI assistant, and found that the guide's commands did not run at all; that and seven smaller gaps are fixed ([the result](docs/results/onboarding_second_engineer.md)).
+**Add a source in about 15 lines:** [the guide](docs/add_a_source.md) and two worked examples. **Tested on two engineers who did not build it**, each with an AI assistant, on real APIs: [Open-Meteo weather](examples/sources/open_meteo_weather.py) in about 14 minutes (it found the guide's commands broken), then [NYC 311](examples/sources/nyc_311.py) in 36 minutes on the fixed guide (it found an API whose stale answers look like the end, and a timestamp bug in shared code). Every finding is fixed, with a test ([results](docs/results/onboarding_second_engineer.md)).
 
 ```bash
 python -m plumbline.kit draft  my_source.py    # read one page, draft a contract for a person to review

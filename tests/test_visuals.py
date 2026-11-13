@@ -13,7 +13,34 @@ ROOT = Path(__file__).resolve().parents[1]
 RES = ROOT / "docs" / "results"
 
 
+_OPS = {}
+
+
+def _ops() -> dict:
+    """The operations visuals, from real kit runs and run lines shaped like the history branch's."""
+    if not _OPS:
+        from plumbline.app import kit_demo, ops_visuals as OV
+        kd = kit_demo.playground()
+        kd["code"], kd["code_lines"] = OV.kit_code()
+        runs = [{"run_at": "2026-11-07T07:17:28Z", "ok": False}, {"run_at": "2026-11-07T07:59:40Z", "ok": True, "retries": 3},
+                {"run_at": "2026-11-12T18:45:28Z", "ok": True, "trigger": "workflow_dispatch",
+                 "lake": {"snapshot_id": 1, "rows": 68811, "appended": 0, "seeded": 68811, "snapshots": 1}},
+                {"run_at": "2026-11-13T02:10:00Z", "ok": True, "lake": {"snapshot_id": 2, "rows": 68830, "appended": 19, "seeded": 0, "snapshots": 2}}]
+        entries = [{"feed": "dob_now_permits", "started": "2026-11-07T07:17:28Z", "recovered": "2026-11-07T07:59:40Z", "did": "pinned duckdb",
+                    "postmortem": "docs/postmortems/2026-11-07-motherduck-duckdb.md"}]
+        from plumbline.ingest.cost import job_record
+        _OPS.update({"kit": kd, "polite": kit_demo.scrape(),
+                     "incidents": OV.incidents({"NYC": ("dob_now_permits", runs)}, entries),
+                     "cost": OV.cost([job_record(0, 331.7), job_record(0, 170)], {}),
+                     "snapshots": OV.snapshots(runs)})
+    return _OPS
+
+
 def _data() -> dict:
+    return {**_base(), **_ops()}
+
+
+def _base() -> dict:
     sv = json.loads((RES / "source_value.json").read_text())
     plan = json.loads((RES / "scale_plan.json").read_text())
     rg = json.loads((RES / "release_gate.json").read_text())
@@ -208,3 +235,77 @@ def test_the_funnel_steps_subtract_exactly_the_people_each_rule_names():
          "excluded": pd.DataFrame({"reason": ["no email on file"] * 10 + ["unsubscribed or asked to be deleted"] * 5})}
     st = VD.funnel(a, "email")["steps"]
     assert [x["value"] for x in st] == [100, 60, 50, 45, 45] and st[-1]["label"] == "Reachable by email"
+
+
+def _browser():
+    pw = pytest.importorskip("playwright.sync_api")
+    p = pw.sync_playwright().start()
+    try:
+        b = p.chromium.launch()
+    except Exception as e:
+        p.stop()
+        pytest.skip(f"no browser: {e}")
+    return p, b
+
+
+def test_the_kit_playground_replays_the_careless_cursor_losing_real_rows():
+    p, b = _browser()
+    try:
+        pg = b.new_page(viewport={"width": 1100, "height": 900})
+        errors = []
+        pg.on("pageerror", lambda e: errors.append(str(e)))
+        pg.set_content(V.page("kit", _ops()["kit"]))
+        pg.wait_for_timeout(5000)
+        assert "600 of 600 held" in pg.inner_text("#app")
+        pg.click("text=The careless cursor")
+        pg.wait_for_timeout(6000)
+        text = pg.inner_text("#app")
+        lost = _ops()["kit"]["lost"]
+        assert lost > 0 and f"{lost:,} lost for good" in text and "FAIL" in text
+        assert not errors, errors
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_scraper_timeline_shows_the_request_robots_txt_stopped():
+    p, b = _browser()
+    try:
+        pg = b.new_page()
+        pg.set_content(V.page("polite", _ops()["polite"]))
+        pg.wait_for_timeout(3500)
+        assert "/login not asked" in pg.inner_text("#app")
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_clicking_an_incident_shows_what_was_done_and_links_its_postmortem():
+    p, b = _browser()
+    try:
+        pg = b.new_page()
+        pg.set_content(V.page("incidents", _ops()["incidents"]))
+        pg.wait_for_timeout(500)
+        text = pg.inner_text("#app")
+        assert "pinned duckdb" in text and "hurt 42 min" in text.lower()
+        assert pg.get_attribute("a.btn", "href").endswith("docs/postmortems/2026-11-07-motherduck-duckdb.md")
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_cost_slider_and_private_toggle_reprice_from_the_measured_average():
+    p, b = _browser()
+    try:
+        pg = b.new_page()
+        pg.set_content(V.page("cost", _ops()["cost"]))
+        pg.wait_for_timeout(300)
+        avg = _ops()["cost"]["avg_minutes"]                    # (6 + 3) / 2
+        assert pg.inner_text(".lp") == f"${avg * 0.006 * 8 * 30:.2f}" and pg.inner_text(".ch") == "$0.00"
+        pg.fill(".rpd", "24")
+        pg.dispatch_event(".rpd", "input")
+        pg.click("text=Private repo")
+        assert pg.inner_text(".ch") == f"${avg * 0.006 * 24 * 30:.2f}"
+    finally:
+        b.close()
+        p.stop()

@@ -21,6 +21,7 @@ class Site:
     fail: list[int] = field(default_factory=list)
     retry_after: str | None = None
     log: list[dict] = field(default_factory=list)
+    clock: object = None            # a callable for the time to log (a demo's simulated clock); default monotonic
 
     def listing(self, n: int) -> str:
         qs = "".join(
@@ -38,6 +39,7 @@ def serve(site: Site) -> tuple[ThreadingHTTPServer, str]:
             pass
 
         def _send(self, code: int, body: str = "", ctype="text/html; charset=utf-8", headers=None):
+            site.log[-1]["status"] = code
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             for k, v in (headers or {}).items():
@@ -46,7 +48,7 @@ def serve(site: Site) -> tuple[ThreadingHTTPServer, str]:
             self.wfile.write(body.encode())
 
         def do_GET(self):
-            site.log.append({"path": self.path, "at": time.monotonic(), "agent": self.headers.get("User-Agent", ""),
+            site.log.append({"path": self.path, "at": (site.clock or time.monotonic)(), "agent": self.headers.get("User-Agent", ""),
                              "if_none_match": self.headers.get("If-None-Match")})
             if self.path == "/robots.txt":
                 if site.robots is None:

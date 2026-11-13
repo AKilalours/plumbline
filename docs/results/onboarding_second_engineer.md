@@ -1,7 +1,12 @@
-# Onboarding test: a second engineer adds a source with the kit
+# Onboarding tests: other engineers add sources with the kit
 
 **Question:** can an engineer who did not build the kit add a new source from [the guide](../add_a_source.md)
 alone, and how long does it take? This is the measure for "time to onboard a source".
+
+| Engineer | Source | Time to 4 PASS | Guide as given | Found |
+|---|---|---|---|---|
+| Second | Open-Meteo weather | about 14 min | commands broken (workaround) | 8 things, 2 bugs |
+| Third | NYC 311 | 36 min | fixed guide, no workaround | 7 things, 2 bugs (one in shared code) |
 
 **Result (2026-11-13):** a second engineer added Open-Meteo hourly weather, a public API with no key, against
 the real API on their own Mac (Python 3.12), in **about 14 minutes** from opening the guide to four PASS lines.
@@ -41,4 +46,33 @@ the guide uses it.
 Known limit of this source, recorded by its author: with no "last changed" field, a day the archive revises
 after it was read is not picked up.
 
-A second engineer test with a different API is pending.
+## Third engineer: NYC 311, on the fixed guide (2026-11-13)
+
+The point: do the fixes above hold for someone else, on a harder API? **They held.** `python -m plumbline.kit`
+worked as typed with no workaround, SKIP behaved as the guide says, and the draft checklist caught every draft
+problem but one. Four PASS lines on the real API in **36 minutes**, again with Claude, across four versions of
+the source. The machine the final run was on was not stated in the report.
+
+| | |
+|---|---|
+| Source file | [`examples/sources/nyc_311.py`](../../examples/sources/nyc_311.py), 61 lines: keyset paging, a check for the stale copy |
+| Contract | [`sources/kit/nyc_311.yaml`](../../sources/kit/nyc_311.yaml), version 1; addresses, coordinates and free-text notes left out |
+| First run | 390 rows, 0 quarantined, 9.2 s; the second asked only for changes and found none |
+| verify | 4 of 4 PASS (versions 1 and 3 failed: the stale copy; version 2 SKIPped: a 540,000-row window) |
+| In CI since | [`tests/test_kit_nyc_311.py`](../../tests/test_kit_nyc_311.py), a stand-in that also answers from a copy that is behind |
+
+What it found, and what changed:
+
+| # | Found | Kind | Fix | Proof |
+|---|---|---|---|---|
+| b | **Socrata answers from two copies, one a day behind**, and says so only in a header (`X-SODA2-Data-Out-Of-Date`). Its empty page looked like the end, and `get_json` gave a source no way to see the header | kit gap | `stale_when` on a source: a marked answer is asked again, like a 503, and gives up loudly; `self.last_headers` for the rest | three tests in `tests/test_kit.py`; on the old kit the run landed **0 of 1,200** rows |
+| new | Socrata's times end in `Z`; **Python 3.10 cannot read a trailing Z**, so on 3.10 every 311 row was quarantined while 3.12 loaded them. Surfaced when her source went into CI, which runs 3.10 | bug | timestamps parse as 3.11+ reads them, on every version, in the contract loader every source shares | `tests/test_timestamps.py`; the 311 test loaded 0 of 7,000 on 3.10 before |
+| c | A "last changed" value thousands of rows share; offset paging skips or repeats them | guide | keyset paging in step 1's table; this source is the third worked example | |
+| d | One reload stamps ~540,000 rows; "raise --max-pages" would mean ~2.7 million rows across verify's runs | guide | scope by another field, such as created date | |
+| e | The draft marked `incident_zip` as a person's zip (the key for deleting someone's rows); nothing pointed it out | kit + guide | the draft names its identity columns at the top; the checklist says keep one only if it describes a person | `test_the_draft_names_its_identity_columns_...` |
+| f | "Nothing new? No request" cannot apply when only a request can tell | guide | both cases spelled out | |
+| g | The stand-in advice made for stand-ins that only answer correctly | guide | make the stand-in misbehave like the real API: stale, empty, nulls, 429s | the 311 stand-in serves a stale copy |
+
+**Plainly:** both tests were done with an AI assistant, so the times measure an engineer working with one.
+The third test found a gap the first two could not have: an API whose wrong answers look right. Two of the
+eight findings were bugs in shared code (the 3.10 timestamp parse affects any source sending `Z` times).

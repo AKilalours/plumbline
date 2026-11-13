@@ -29,10 +29,14 @@ Find three things in its docs before writing code:
 | The id of a record | `id` | Build a stable one from the fields that identify a record (weather: place + hour) |
 | When a record last changed, and how to ask for "changed after X" | `properties.updated`, `updatedafter=` | Leave `updated = None`; the draft leaves `latest_by` empty, and each row is read once. A later correction by the source is not picked up: say so in your contract |
 | How to get the next page | `offset=` and `limit=` | Page by a time window instead: one request per day, the cursor is the last day read |
+| A "last changed" value many rows share (a bulk reload stamps thousands to the millisecond) | (USGS: rare) | Page by **keyset**: order by (last changed, unique id) and ask for the rows after the last one seen. Offset paging skips or repeats rows that move while it reads. Check the id can be compared with `>` first: Socrata's `:id` cannot |
+| A first window that is huge (one reload can stamp half a million rows) | | Scope the source by another field too, such as created date, rather than raising `--max-pages`: `verify` runs the source five times |
 
-Two worked examples: [`usgs_quakes.py`](../examples/sources/usgs_quakes.py) (paging by offset, a real
-"last changed" field) and [`open_meteo_weather.py`](../examples/sources/open_meteo_weather.py) (no paging,
-no "last changed", no id; written by the second engineer to try this guide).
+Three worked examples: [`usgs_quakes.py`](../examples/sources/usgs_quakes.py) (paging by offset, a real
+"last changed" field), [`open_meteo_weather.py`](../examples/sources/open_meteo_weather.py) (no paging,
+no "last changed", no id; written by the second engineer to try this guide) and
+[`nyc_311.py`](../examples/sources/nyc_311.py) (keyset paging through a bulk reload, an API that answers
+from a copy that is behind; written by the third).
 
 ## 2. Write the source
 
@@ -60,7 +64,12 @@ class Quakes(Source):
 
 - `cursor` is whatever you gave the kit at the end of the last run (`None` the first time).
 - Yield one `Page` per request. Rows are plain dicts; nested values are stored as JSON text.
-- Nothing new yet? Yield `Page([], cursor=cursor)` and return: no request, the cursor stays.
+- Nothing new yet? If you can tell without asking (a date window not reached yet), yield
+  `Page([], cursor=cursor)` and return. If only a request can tell you, an empty page from it is fine too.
+- **An empty or short page may not be the end.** APIs behind a load balancer can answer from a copy that is
+  behind (Socrata does, and says so with `X-SODA2-Data-Out-Of-Date: true`). Set
+  `stale_when = {"X-SODA2-Data-Out-Of-Date": "true"}` on the class and the kit asks again, like a 503;
+  `self.last_headers` holds the last answer's headers if you need to judge it yourself.
 - Use `self.get_json(url, **params)`, not `requests` or `urllib`: it is where the retries live.
 - A token goes in `headers` from an environment variable, never in the file:
   `headers = {"Authorization": f"Bearer {os.environ['MY_API_TOKEN']}"}`. The kit never prints headers.
@@ -95,6 +104,9 @@ as personal. **Read it.** It saw one page, so check:
 - Numbers that are really ids (zip codes, codes with leading zeros) should be `string`.
 - The columns your id is built from are `required: true`, like the id itself.
 - Anything personal stays out unless there is a reason and a privacy rule for it.
+- `identity:` lines: the draft marks columns like a zip, email or phone as identity, the keys used to find a
+  person's rows when they ask to be deleted. Keep one only if it describes a **person**. Where an incident
+  happened, or a business's phone, is not a person: remove the line.
 
 Then move it to `sources/kit/<name>.yaml` and add `version: 1`. From now on, a change that would break
 readers (a column removed, a type changed) fails CI unless you raise `version`.
@@ -130,7 +142,9 @@ All four must pass before the source ships. `verify` reads at most 3 pages a run
 it). If your window is longer and you rightly hold the cursor until it ends, the cursor check says SKIP,
 not FAIL: rerun with a larger `--max-pages` to judge it. Then add a test like `tests/test_kit.py` against a small
 stand-in for your API (`src/plumbline/store/usgs_server.py` is the pattern), so CI checks it without the
-network.
+network. Make the stand-in misbehave the way the real API does, not only answer correctly: stale or empty
+answers, nulls where a value should be, 429s. The NYC 311 source passed against a polite stand-in and broke
+on the real API's stale copy ([its test](../tests/test_kit_nyc_311.py) now serves one).
 
 ## When something goes wrong
 

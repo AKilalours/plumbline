@@ -217,3 +217,53 @@ def test_a_run_whose_window_ends_exactly_at_the_page_limit_is_finished(tmp_path,
     r = kit.run(quakes(feed)(), workdir=tmp_path / "w", contract=contract, max_pages=3)      # 1200 rows = 3 pages of 500
     assert r.finished and r.cursor is not None
     assert not kit.run(quakes(feed)(), workdir=tmp_path / "x", contract=contract, max_pages=2).finished
+
+
+def test_an_answer_the_api_marks_stale_is_retried_not_taken_as_the_end(tmp_path, feed, contract):
+    """Found by the third engineer on NYC 311: Socrata answers from more than one copy, and one can be a day
+    behind; it says so in a header (X-SODA2-Data-Out-Of-Date: true) and returns a short or empty page that
+    looks like the end. get_json returned only the body, so a source could not tell."""
+    feed.stale = 2
+    cls = quakes(feed)().__class__
+
+    class Careful(cls):
+        stale_when = {"X-Data-Out-Of-Date": "true"}
+
+    s = Careful()
+    s._sleep = lambda _s: None
+    r = kit.run(s, workdir=tmp_path / "w", contract=contract)
+    assert r.rows_loaded == 1200 and r.stale_answers == 2
+
+
+def test_a_source_can_read_the_headers_of_the_last_answer(feed):
+    feed.stale = 1
+    s = quakes(feed)()
+    assert s.get_json(feed.url, format="geojson")["features"] == []          # the empty, stale answer
+    assert s.last_headers.get("X-Data-Out-Of-Date") == "true"
+
+
+def test_answers_that_stay_stale_fail_loudly_instead_of_ending_the_run(feed):
+    feed.stale = 99
+    cls = quakes(feed)().__class__
+
+    class Careful(cls):
+        stale_when, max_retries = {"x-data-out-of-date": "TRUE"}, 2           # names and values: any case
+    s = Careful()
+    s._sleep = lambda _s: None
+    with pytest.raises(kit.SourceError, match="still marked stale after 3 tries"):
+        list(s.pages(None))
+
+
+def test_the_draft_names_its_identity_columns_so_a_reviewer_checks_they_describe_a_person(tmp_path, feed):
+    """Found by the third engineer: the draft marked NYC 311's incident_zip as a person's zip, the key used to
+    delete someone's rows, though it is where an incident happened; the draft gave no sign of it."""
+    cls = quakes(feed)().__class__
+
+    class WithZip(cls):
+        def pages(self, cursor, size=500):
+            for p in super().pages(cursor, size):
+                yield kit.Page([r | {"incident_zip": "11211"} for r in p.rows], p.cursor)
+
+    out = kit.draft(WithZip(), out=tmp_path / "d.yaml", workdir=tmp_path / "dw")
+    head = [l for l in out.read_text().splitlines() if l.startswith("#")]
+    assert any("Marked identity" in l and "incident_zip" in l for l in head), head

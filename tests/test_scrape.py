@@ -127,3 +127,19 @@ def test_the_scraper_passes_the_kits_verify_like_any_source(site, tmp_path):
     contract = kit.draft(make(), out=tmp_path / "q.yaml", workdir=tmp_path / "d")
     checks = kit.verify(make, contract=contract, workdir=tmp_path / "v")
     assert all(ok for _, ok, _ in checks), checks
+
+
+def test_a_crawl_delay_written_with_a_decimal_is_kept(site):
+    """Python's robots.txt parser reads Crawl-delay only when it is a whole number, so "2.5" was ignored and the
+    scraper fell back to its 1 s minimum: faster than the site asked. Found by the app's scraper replay."""
+    site.robots = "User-agent: *\nCrawl-delay: 2.5\nDisallow: /login\n"
+    c = Clock()
+    list(quotes(site, c)().pages(None))
+    assert c.slept == [2.5, 2.5]
+
+
+def test_a_crawl_delay_for_our_agent_wins_over_the_one_for_everyone(site):
+    site.robots = "User-agent: *\nCrawl-delay: 1\n\nUser-agent: plumbline\nCrawl-delay: 3\n"
+    c = Clock()
+    list(quotes(site, c)().pages(None))
+    assert c.slept == [3.0, 3.0]

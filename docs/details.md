@@ -1202,7 +1202,7 @@ left out of the draft, and one report line. `verify` runs a new source the ways 
 the same pages read again (nothing added), a crash after page 1 then a resume (must end where a clean run does),
 and a cursor left behind. It fails the most common new-connector bug: saving the newest update time seen
 on page 1 of a feed ordered by event time, which skips rows on page 2 after a crash
-([the test](../tests/test_kit.py)). Guide: [add_a_source.md](add_a_source.md). A second engineer tried it on 2026-11-13 (Open-Meteo, about 14 minutes with an AI assistant) and found the `python -m plumbline.kit` command broken: run that way the file is a second copy of the module, so no source matched. A test now runs the command as typed ([result](results/onboarding_second_engineer.md)).
+([the test](../tests/test_kit.py)). Guide: [add_a_source.md](add_a_source.md). A second engineer tried it on 2026-11-13 (Open-Meteo, about 14 minutes with an AI assistant) and found the `python -m plumbline.kit` command broken: run that way the file is a second copy of the module, so no source matched. A test now runs the command as typed ([result](results/onboarding_second_engineer.md)). A third added NYC 311 on the fixed guide in 36 minutes and found two more: Socrata answers from a copy that is a day behind, flagged only in a header, whose empty page looked like the end (sources can now set `stale_when` and the kit asks again), and Python 3.10 could not read the `Z` on Socrata's times, so on 3.10 every row was quarantined (the contract loader now parses as 3.11+ does).
 
 Scraping uses the same kit (`ingest/connectors/scrape.py`): robots.txt read first (missing allows everything;
 unreadable allows nothing, per RFC 9309), the crawl delay or at least one second between requests, the delay
@@ -1242,10 +1242,15 @@ Recovery steps are in [the runbook](runbooks/ingestion.md).
   real rate is lower than the schedule. That is why freshness is promised as "a success within 26 hours", not
   "every 3 hours", and why the Open data and Live stream pages count the runs that happened (failures included),
   the current streak, and how many of the last 7 days were good. A streak of runs is claimed as runs, not weeks.
-  Measured on 2026-11-12 (00:57 UTC): NYC permits 21 of 23 runs succeeded, the stream 20 of 22, across 6 days
-  (2026-11-07 to 12, a good run on each). Both failures per feed were on 2026-11-07, when the cloud warehouse
-  refused a newer DuckDB; every run since the fix, 17 in a row for each feed, succeeded, and both alert issues
-  that day opened and closed on their own. One honest qualifier: from 2026-11-10 the NYC runs passed while the
+  Measured for the first full week, 2026-11-07 to 13 (read 2026-11-13 15:41 UTC): NYC permits 30 of 32 runs
+  succeeded, the stream 29 of 31, and **both feeds had a successful run on each of the 7 days**. The only
+  failures, two per feed, were on 2026-11-07 when the cloud warehouse refused a newer DuckDB; every run since
+  the fix succeeded (26 in a row for each feed, to 2026-11-13 11:18 UTC). No run recorded a publish error. Successful NYC
+  runs without a cloud publish are the ones that landed nothing, plus the four on 2026-11-07 before publishing
+  was switched on. The overlap re-read is working: the latest NYC runs re-read 1,376 to 2,438 rows at the
+  cursor and added only what was new. All three alert issues ever opened (#1, #2 the DuckDB failures, #3 the
+  held-back apartment column) are closed; none is open. Which runs were scheduled rather than pushed is only
+  recorded since 2026-11-12. One honest qualifier: from 2026-11-10 the NYC runs passed while the
   data stopped moving (see "Green runs, stale data" above), so a green streak alone is not proof of fresh data;
   that is why lag against the publisher is now measured and alerted on.
 - **"Who uses it?"** Nobody in production: it is a portfolio project. What stands in for users is a public

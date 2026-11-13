@@ -80,7 +80,9 @@ class PoliteSource(Source):
                 self._requests += 1
                 req = urllib.request.Request(host + "/robots.txt", headers={"User-Agent": self.user_agent})
                 with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                    rp.parse(r.read().decode("utf-8", "replace").splitlines())
+                    text = r.read().decode("utf-8", "replace")
+                rp.parse(text.splitlines())
+                rp._plumbline_delay = _crawl_delay(text, self.agent)
             except urllib.error.HTTPError as e:
                 if 400 <= e.code < 500:
                     rp.parse([])                                  # no robots.txt: everything allowed
@@ -89,7 +91,7 @@ class PoliteSource(Source):
             except (urllib.error.URLError, TimeoutError, ConnectionError):
                 rp = None
             self._robots[host] = rp
-            d = rp.crawl_delay(self.agent) if rp else None
+            d = getattr(rp, "_plumbline_delay", None) if rp else None
             self._delay[host] = max(float(d) if d else 0.0, self.min_delay)
         return host, self._robots[host]
 
@@ -163,3 +165,31 @@ class PoliteSource(Source):
         if p:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(self._seen, indent=1))
+
+
+def _crawl_delay(text: str, agent: str) -> float | None:
+    """Crawl-delay for `agent` (else for "*"), decimals included. The standard library's parser keeps only whole
+    numbers, so "Crawl-delay: 2.5" came back as None and the scraper went faster than the site asked."""
+    found: dict[str, float] = {}
+    group: list[str] = []
+    in_rules = False
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if ":" not in line:
+            continue
+        k, v = (x.strip() for x in line.split(":", 1))
+        k = k.lower()
+        if k == "user-agent":
+            if in_rules:
+                group, in_rules = [], False
+            group.append(v.lower())
+        else:
+            in_rules = True
+            if k == "crawl-delay":
+                try:
+                    d = float(v)
+                except ValueError:
+                    continue
+                for a in group:
+                    found.setdefault(a, d)
+    return found.get(agent.lower(), found.get("*"))

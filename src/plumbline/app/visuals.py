@@ -8,13 +8,13 @@ caller, which reads it from the warehouse or a saved result, so a test can check
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
 Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace, people, agent,
-lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard, rowflow, proofwall, reload, incidentdeck.
+lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard, rowflow, proofwall, reload, incidentdeck, merge.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard", "rowflow", "proofwall", "reload", "incidentdeck")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard", "rowflow", "proofwall", "reload", "incidentdeck", "merge")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -150,6 +150,21 @@ pre.code .hl{background:rgba(229,183,77,.25);display:inline-block;width:100%;bor
 .dk .nm{font-weight:600;font-size:14px;margin:6px 0 2px}.dk .dots{display:flex;gap:3px;margin-top:8px}.dk .dots i{width:16px;height:5px;border-radius:3px;background:var(--blue)}
 .dk .dots i.inject{background:var(--red)}.dk .dots i.fix,.dk .dots i.verify{background:var(--green)}
 .deckview{margin-top:14px;border-top:1px dashed var(--line);padding-top:6px}
+.mg-top{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:10px;align-items:stretch}
+.mg-top .k{border:1px solid var(--line);border-radius:14px;padding:10px 14px;background:#fff}.mg-top .v{font-size:30px;font-weight:300;font-variant-numeric:tabular-nums}
+.mg-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 8px}
+.mg-bar input{border:1px solid var(--line);border-radius:999px;padding:7px 14px;font:inherit;min-width:220px;flex:1;max-width:320px}
+.mg-stage{position:relative;border:1px solid var(--line);border-radius:18px;background:#FCFCFE;overflow:hidden}
+.mg-stage canvas{display:block;width:100%;cursor:crosshair}
+.mg-tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;font-size:12px;padding:6px 9px;border-radius:8px;white-space:nowrap;transform:translate(-50%,-130%);opacity:0;transition:opacity .1s}
+.mg-lab{position:absolute;top:10px;font:500 10.5px 'Geist Mono';text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.mg-det{margin-top:12px;animation:rise .3s both}.mg-det table{width:100%;border-collapse:collapse;font-size:13px}
+.mg-det td,.mg-det th{padding:7px 8px;border-bottom:1px solid #EEF0F5;text-align:left;vertical-align:top}.mg-det th{font:500 10.5px 'Geist Mono';color:var(--muted);text-transform:uppercase}
+.mg-det td.df{background:#FBEDEA;color:#7E2414;font-weight:600}.mg-det .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.mg-pairs{display:flex;flex-direction:column;gap:6px;margin-top:10px}.mg-pairs .pr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px}
+.chipf{font:500 10.5px 'Geist Mono';padding:3px 7px;border-radius:999px}.chipf.agree{background:#E8F5EE;color:#11583A}.chipf.differ{background:#FBEDEA;color:#7E2414}.chipf.missing{background:#F1F2F6;color:var(--muted)}
+.rings{display:flex;gap:14px;align-items:center}
+@media (max-width:640px){.mg-top{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -1422,6 +1437,120 @@ R.incidentdeck = () => {
     deck.querySelectorAll('.dk').forEach(x => x.classList.remove('on')); b.classList.add('on');
     view.innerHTML = ''; R.incident(D.items[+b.dataset.i], view); });
   if (D.items.length) deck.querySelector('.dk').click();
+};
+
+// Every row the visitor sent, as a dot in its file's colour, flying to the customer it became (workspace.run's real
+// result). Rows of one person land on one square; the darker the square, the more rows it joined. Hover a square,
+// search a name, click a square with a gold ring to see its rows side by side and why they were joined.
+R.merge = () => {
+  const FL = D.files, P = D.people, RC = D.recs, S = D.stats, DET = D.detail;
+  const cnt = new Uint16Array(P.length), nf = P.map(() => new Set());
+  RC.forEach(([f, p]) => { cnt[p]++; nf[p].add(f); });
+  const top = document.createElement('div'); top.className = 'mg-top';
+  const k = (lab, id, sub) => `<div class="k"><div class="mono">${lab}</div><div class="v ${id}">0</div><div class="cap">${sub}</div></div>`;
+  top.innerHTML = k('Rows you sent', 'a', `${FL.length} files`) + k('Customers', 'b', `${F.int(S.merged)} rows joined someone`) +
+    k('In more than one file', 'c', 'now one record each') +
+    (D.check ? `<div class="k rings">${['precision', 'recall'].map(m => { const v = D.check[m], r = 22, c = 2 * Math.PI * r;
+      return `<div style="text-align:center"><svg width="58" height="58" viewBox="0 0 58 58"><circle cx="29" cy="29" r="${r}" fill="none" stroke="var(--line)" stroke-width="6"/>
+        <circle class="rg" cx="29" cy="29" r="${r}" fill="none" stroke="var(--green)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c}" data-to="${c * (1 - v)}" transform="rotate(-90 29 29)" style="transition:stroke-dashoffset 1.2s"/>
+        <text x="29" y="33" text-anchor="middle" font-size="12" font-weight="600">${(v * 100).toFixed(1)}</text></svg><div class="mono">${m === 'precision' ? 'joins right' : 'joins found'}</div></div>`; }).join('')}</div>` : '');
+  const bar = document.createElement('div'); bar.className = 'mg-bar';
+  const go = document.createElement('button'); go.className = 'btn blue'; go.textContent = '▶ Merge';
+  const q = document.createElement('input'); q.placeholder = 'Find a customer: type a name';
+  bar.append(go, q);
+  const lg = document.createElement('span'); lg.className = 'cap';
+  lg.innerHTML = FL.map(f => `<i class="sw" style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${f.color};margin:0 4px 0 10px"></i>${esc(f.name)}`).join('') +
+    ` &nbsp;·&nbsp; <i style="display:inline-block;width:10px;height:10px;border:2px solid var(--gold);border-radius:3px;vertical-align:-1px"></i> click to see why they were joined`;
+  bar.appendChild(lg);
+  const stage = document.createElement('div'); stage.className = 'mg-stage';
+  const cv = document.createElement('canvas'); const tip = document.createElement('div'); tip.className = 'mg-tip';
+  stage.append(cv, tip);
+  const det = document.createElement('div');
+  app.append(top, bar, stage, det);
+
+  // layout: file columns on the left, the customer grid on the right
+  let W, H, dpr, pos0, pos1, cellAt, cellXY, CS;
+  function layout() {
+    dpr = window.devicePixelRatio || 1; W = stage.clientWidth;
+    const narrow = W < 640, leftW = narrow ? W : Math.round(W * 0.34), gx = narrow ? 0 : leftW + 26, rightW = narrow ? W - 20 : W - gx - 14;
+    const d = 4, colW = (leftW - 20) / FL.length, per = Math.max(4, Math.floor((colW - 8) / d));
+    const fileH = Math.max(...FL.map(f => Math.ceil(f.rows / per))) * d;
+    CS = Math.max(4, Math.min(9, Math.floor(Math.sqrt(rightW * Math.max(260, fileH) / P.length))));
+    const cols = Math.floor(rightW / CS), gridH = Math.ceil(P.length / cols) * CS;
+    const top0 = 30, gy = narrow ? top0 + fileH + 40 : top0;
+    H = Math.max(top0 + fileH, gy + gridH) + 18;
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + 'px';
+    const seen = FL.map(() => 0);
+    pos0 = RC.map(([f]) => { const i = seen[f]++; return [10 + f * colW + 4 + (i % per) * d, top0 + Math.floor(i / per) * d]; });
+    cellXY = p => [gx + (p % cols) * CS, gy + Math.floor(p / cols) * CS];
+    pos1 = RC.map(([, p]) => { const [x, y] = cellXY(p); return [x + CS / 2 - 1.5, y + CS / 2 - 1.5]; });
+    cellAt = (x, y) => { if (x < gx || y < gy) return -1; const c = Math.floor((x - gx) / CS), r = Math.floor((y - gy) / CS);
+      if (c >= cols) return -1; const p = r * cols + c; return p < P.length ? p : -1; };
+    stage.querySelectorAll('.mg-lab').forEach(e => e.remove());
+    FL.forEach((f, i) => { const l = document.createElement('div'); l.className = 'mg-lab'; l.style.left = (10 + i * colW + 4) + 'px';
+      l.style.maxWidth = (colW - 6) + 'px'; l.style.overflow = 'hidden'; l.textContent = f.name.replace(/\.csv$/, ''); stage.appendChild(l); });
+    const r = document.createElement('div'); r.className = 'mg-lab'; r.style.left = gx + 'px'; r.style.top = narrow ? (gy - 18) + 'px' : '10px';
+    r.textContent = `${F.int(P.length)} customers`; stage.appendChild(r);
+  }
+  const ctx = cv.getContext('2d');
+  let t = 0, hover = -1, pick = -1, match = null;
+  const shade = n => n >= 3 ? '#0B1C6E' : n === 2 ? '#2941B9' : '#9DAAE6';
+  const ease = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    if (t >= 1) {
+      for (let p = 0; p < P.length; p++) { const [x, y] = cellXY(p);
+        ctx.globalAlpha = match && !match.has(p) ? .12 : 1;
+        ctx.fillStyle = shade(cnt[p]); ctx.fillRect(x, y, CS - 1, CS - 1);
+        if (DET[p] && !match) { ctx.strokeStyle = '#E5B74D'; ctx.lineWidth = 1.5; ctx.strokeRect(x + .75, y + .75, CS - 2.5, CS - 2.5); } }
+      ctx.globalAlpha = 1;
+      [hover, pick].forEach((p, i) => { if (p < 0) return; const [x, y] = cellXY(p);
+        ctx.strokeStyle = i ? '#C2412D' : '#0B1030'; ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 2, CS + 3, CS + 3); });
+      return;
+    }
+    for (let i = 0; i < RC.length; i++) {
+      const s = Math.min(1, Math.max(0, (t - (i % 97) / 97 * .35) / .65)), e = ease(s);
+      const a = pos0[i], b = pos1[i];
+      ctx.fillStyle = FL[RC[i][0]].color; ctx.fillRect(a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e, 3, 3);
+    }
+  }
+  const nums = (f) => { top.querySelector('.a').textContent = F.int(Math.round(S.rows * Math.min(1, f * 3)));
+    top.querySelector('.b').textContent = F.int(Math.round(S.rows - (S.rows - S.people) * ease(Math.max(0, Math.min(1, f)))));
+    top.querySelector('.c').textContent = F.int(Math.round(S.in_several_files * ease(Math.max(0, Math.min(1, f))))); };
+  let raf = null;
+  function play() { cancelAnimationFrame(raf); pick = -1; det.innerHTML = ''; const t0 = performance.now(), dur = reduce ? 1 : 3200;
+    const step = now => { t = Math.min(1, (now - t0) / dur); nums(t); draw(); if (t < 1) raf = requestAnimationFrame(step);
+      else { top.querySelectorAll('.rg').forEach(r => r.style.strokeDashoffset = r.dataset.to); open(D.spotlight[0]); } };
+    raf = requestAnimationFrame(step); }
+  function open(p) {
+    if (p === undefined || p < 0) return; pick = p; draw();
+    const d = DET[p], fn = FL.map(f => f.name);
+    if (!d) { det.innerHTML = `<div class="card mg-det"><b>${esc(P[p])}</b> · ${cnt[p]} row${cnt[p] > 1 ? 's' : ''} · ${[...nf[p]].map(i => esc(fn[i])).join(', ')}
+      <div class="cap">Full evidence is kept for the ${Object.keys(DET).length} customers most worth a look (gold rings).</div></div>`; return; }
+    const cols = ['first', 'last', 'email', 'phone', 'street', 'zip'];
+    const mode = {}; cols.forEach(c => { const n = {}; d.rows.forEach(r => { const v = (r[c] || '').toLowerCase(); if (v) n[v] = (n[v] || 0) + 1; });
+      mode[c] = Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0]; });
+    const odd = (r, c) => r[c] && (r[c] || '').toLowerCase() !== mode[c];        // the value most rows disagree with
+    det.innerHTML = `<div class="card mg-det"><div class="row" style="justify-content:space-between"><div style="font-size:20px;font-weight:600">${esc(P[p])}</div>
+      <span class="pill p-pass">${d.rows.length} rows → 1 customer</span></div>
+      <div style="overflow-x:auto"><table><tr><th>file</th>${cols.map(c => `<th>${c}</th>`).join('')}</tr>
+      ${d.rows.map(r => `<tr><td><span class="sw" style="background:${FL[r.file].color}"></span>${esc(fn[r.file])}<div class="mono">${esc(r.id)}</div></td>${cols.map(c => `<td class="${odd(r, c) ? 'df' : ''}">${esc(r[c] || '')}</td>`).join('')}</tr>`).join('')}</table></div>
+      <div class="mg-pairs">${d.pairs.slice(0, 6).map(x => `<div class="pr"><b>${esc(x.a.split(' · ')[1] || x.a)}</b>↔<b>${esc(x.b.split(' · ')[1] || x.b)}</b>
+        ${x.p !== null ? `<span class="pill p-info">${(x.p * 100).toFixed(x.p > .9999 ? 2 : 1)}% same person</span>` : ''}
+        ${Object.entries(x.f).map(([f, v]) => `<span class="chipf ${v}">${esc(f.replace('_', ' '))}</span>`).join('')}</div>`).join('')}</div></div>`;
+  }
+  cv.addEventListener('mousemove', e => { if (t < 1) return; const b = cv.getBoundingClientRect(), p = cellAt(e.clientX - b.left, e.clientY - b.top);
+    if (p !== hover) { hover = p; draw(); }
+    if (p >= 0) { tip.style.opacity = 1; tip.style.left = (e.clientX - b.left) + 'px'; tip.style.top = (e.clientY - b.top) + 'px';
+      tip.textContent = `${P[p]} · ${cnt[p]} row${cnt[p] > 1 ? 's' : ''} · ${nf[p].size} file${nf[p].size > 1 ? 's' : ''}${DET[p] ? ' · click' : ''}`; }
+    else tip.style.opacity = 0; });
+  cv.addEventListener('mouseleave', () => { hover = -1; tip.style.opacity = 0; draw(); });
+  cv.addEventListener('click', e => { if (t < 1) return; const b = cv.getBoundingClientRect(); open(cellAt(e.clientX - b.left, e.clientY - b.top)); });
+  q.addEventListener('input', () => { const v = q.value.trim().toLowerCase(); match = v.length < 2 ? null : new Set(P.map((n, i) => n.toLowerCase().includes(v) ? i : -1).filter(i => i >= 0));
+    if (t < 1) { t = 1; nums(1); } draw(); if (match && match.size === 1) open([...match][0]); });
+  go.onclick = play;
+  layout(); draw(); play();
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { layout(); draw(); }, 120); });
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

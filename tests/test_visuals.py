@@ -35,6 +35,7 @@ def _ops() -> dict:
                      "snapshots": OV.snapshots(runs),
                      "rowflow": OV.row_flow(_nyc_runs()),
                      "reload": kit_demo.reload_replay(block=600, budget=2, changes=10),
+                     "merge": _merge(),
                      "incidentdeck": {"items": [
                          {**OV.incident(_run(), "Future-dated feature", "Covers attributes with a first-seen date.", _fmt()), "area": "Models"},
                          {**OV.incident(_run(), "Vendor file truncated", "A file missing whole rows is held.", _fmt()), "area": "Sources", "id": "run_aaaa11"}]},
@@ -47,6 +48,12 @@ def _ops() -> dict:
                                                 ("Contract for a new partner file", "column types right", "31/34", "30/34"),
                                                 ("Questions in plain English", "answered right", "no rule-based way", "14/14")], "gpt-4.1-mini")})
     return _OPS
+
+
+def _merge():
+    from test_ws_visual import _run
+    from plumbline.app.ws_visual import merge_data
+    return merge_data(_run(), {"precision": 0.995, "recall": 0.994, "people_resolved_exactly": 0.99, "people_really": 4})
 
 
 def _nyc_runs():
@@ -463,6 +470,26 @@ def test_each_incident_tile_opens_its_own_phase_rail_and_evidence():
         pg.click(".deckview .ph.approve")
         t = pg.inner_text(".deckview")
         assert "Vendor file truncated" in t and "run_aaaa11" in t.lower() and "Future-dated feature" not in t
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_merge_stage_settles_finds_a_customer_and_marks_only_the_odd_value():
+    p, b = _browser()
+    try:
+        pg = b.new_page(viewport={"width": 1000, "height": 900})
+        errors = []
+        pg.on("pageerror", lambda e: errors.append(str(e)))
+        pg.set_content(V.page("merge", _ops()["merge"]))
+        pg.wait_for_timeout(4200)
+        assert pg.inner_text(".mg-top .b") == "4" and "Jason Gallegos" in pg.inner_text(".mg-det")
+        odd = pg.locator(".mg-det td.df").all_inner_texts()
+        assert odd == ["jaon"], odd                                   # the typo, not the agreeing "Jason"
+        pg.fill(".mg-bar input", "wheeler")
+        pg.wait_for_timeout(300)
+        assert "Sherri Wheeler" in pg.inner_text(".mg-det")
+        assert not errors, errors
     finally:
         b.close()
         p.stop()

@@ -1202,8 +1202,6 @@ def proof_wall():
 def overview():
     d = demo()
     header("Overview")
-    st.page_link(PAGES["try"], label="Try it on your own customer files: drop CSVs, get one clean list back", icon="📤")
-    proof_wall()
     viz("city", city_data(d, key(d)), 120)
     with st.expander("The same city as a flow chart"):
         viz("flow", {"views": flows(d, key(d))[::-1]}, 120)
@@ -1213,13 +1211,16 @@ def overview():
         with col.container(key=f"card_{c['id']}"):
             value = num(c["value"]) if isinstance(c["value"], float) else f"{c['value']:,}"
             stat(SHORT[c["id"]], value, CARD_UNIT[c["id"]].format(of=f"{c['of']:,}" if c["of"] else ""), c["status"])
-            with st.popover("Evidence", width="stretch"):
+            with st.popover("Rows", icon=":material/table_rows:", width="stretch"):
                 st.markdown(f"**{c['title']}**  \n{c['unit']}. {c['note']}.")
                 ev = c["evidence"].head(500)      # mixed-type columns (a number here, a JSON object there) shown as text
                 st.dataframe(ev.astype({k: str for k in ev.columns[ev.dtypes == object]}), hide_index=True, width="stretch")
     st.markdown(f'<p class="note" title="The cards count people in the data products, a snapshot as of {snapshot_date()} so '
                 'that nothing later can leak into a model. The animation counts everyone the identity graph knows today, so its '
                 f'number is larger.">Cards: snapshot as of {snapshot_date()} · animation: everyone known today ⓘ</p>', unsafe_allow_html=True)
+    st.write("")
+    st.page_link(PAGES["try"], label="Try it on your own customer files: drop CSVs, watch the rows become customers", icon="📤")
+    proof_wall()
     st.write("")
     left, right = st.columns([3, 2], gap="large")
     with left:
@@ -1957,9 +1958,14 @@ def workspace_page():
     if not files:
         return
 
-    st.markdown('<div class="mono" style="margin-top:1rem">1 · What each column is (click to change)</div>', unsafe_allow_html=True)
+    found_all = [ws.setdefault("roles", {}).setdefault(f.name, W.detect(f)) for f in files]
+    chips = " ".join(f'<span class="pill p-info" style="border-left:4px solid {FILE_COLORS[i % 5]}">{html.escape(f.name)} · '
+                     f'{", ".join(sorted({W.ROLE_LABEL[v] for v in fa.values() if v != "ignore"})) or "nothing found"}</span>'
+                     for i, (f, fa) in enumerate(zip(files, found_all)))
+    st.markdown(f'<div class="mono" style="margin-top:1rem">1 · Columns found</div><div style="margin:6px 0">{chips}</div>', unsafe_allow_html=True)
     roles = []
-    cols = st.columns(len(files))
+    box = st.expander("Change what a column is", expanded=not ws.get("sample"))
+    cols = box.columns(len(files))
     for i, (f, c) in enumerate(zip(files, cols)):
         found = ws.setdefault("roles", {}).setdefault(f.name, W.detect(f))
         with c:
@@ -1995,7 +2001,17 @@ def workspace_page():
 def workspace_result(res, check, files):
     from plumbline import workspace as W
     s = res.stats()
-    st.markdown('<div class="mono" style="margin-top:1.4rem">2 · What came out</div>', unsafe_allow_html=True)
+    from plumbline.app.ws_visual import merge_data
+    st.markdown('<div class="mono" style="margin-top:1.4rem">2 · Watch your rows become customers</div>', unsafe_allow_html=True)
+    viz("merge", merge_data(res, check, colors=FILE_COLORS), 980)
+    st.caption(res.method_note)
+    with st.expander("The same result as tables"):
+        workspace_tables(res, check, files)
+
+
+def workspace_tables(res, check, files):
+    from plumbline import workspace as W
+    s = res.stats()
     viz("tiles", {"items": [
         {"label": "Rows in", "value": s["rows"], "fmt": "int", "sub": f"{s['files']} file{'s' if s['files'] > 1 else ''}", "tone": "info"},
         {"label": "Customers", "value": s["people"], "fmt": "int", "sub": f"{W.n_(s['merged'], 'row was', 'rows were')} someone already counted", "tone": "pass"},
@@ -2006,7 +2022,6 @@ def workspace_result(res, check, files):
                 f"Checked against the sample's answer key: {check['precision']:.1%} of the joins are right (precision), "
                 f"{check['recall']:.1%} of the true joins were found (recall); {check['people_resolved_exactly']:.1%} of "
                 f"{check['people_really']:,} real people came out exactly right.")
-    st.caption(res.method_note)
     r = res.records
     once = r.groupby("person_id")["file"].transform("size") == 1
     left = [{"key": f"f{i}", "label": n, "short": n[:10], "value": int((r["file"] == n).sum()) + int((res.held["file"] == n).sum() if len(res.held) else 0),

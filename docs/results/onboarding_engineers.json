@@ -1,0 +1,9 @@
+{
+  "note": "As reported by each engineer (docs/results/onboarding_second_engineer.md). Both used an AI assistant.",
+  "engineers": [
+    {"who": "second engineer", "source": "Open-Meteo weather", "date": "2026-11-13", "minutes": 14, "verify": [true, true, true, true],
+     "guide": "commands broken; ran with a workaround", "file": "examples/sources/open_meteo_weather.py"},
+    {"who": "third engineer", "source": "NYC 311", "date": "2026-11-13", "minutes": 36, "verify": [true, true, true, true],
+     "guide": "fixed guide, no workaround", "file": "examples/sources/nyc_311.py"}
+  ]
+}

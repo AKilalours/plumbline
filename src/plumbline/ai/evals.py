@@ -180,7 +180,8 @@ def task_onboarding(rt: Runtime) -> dict:
 
     from .onboard import grade, heuristic_draft, model_draft, profile, validate
     w = eval_world()
-    tmp = Path(tempfile.mkdtemp(prefix="plumbline-onboard-"))
+    own = tempfile.TemporaryDirectory(prefix="plumbline-onboard-")                    # removed when this returns
+    tmp = Path(own.name)
     rows = []
     for p in partner_files(w.run, tmp / "files"):
         prof = profile(p["path"])
@@ -253,7 +254,8 @@ def offline_baselines(world_root: Path | None = None) -> dict:
     idx, items = Index.from_repo(ROOT), E.load(ROOT / "evals" / "knowledge.yaml")
     ans = {s: E.run(idx, items, split=s) for s in ("dev", "test")}
     w = eval_world(world_root)
-    tmp = Path(tempfile.mkdtemp(prefix="plumbline-baseline-"))
+    own = tempfile.TemporaryDirectory(prefix="plumbline-baseline-")                   # removed when this returns
+    tmp = Path(own.name)
     ob = []
     for p in partner_files(w.run, tmp):
         ob.append({"split": p["split"], **grade(heuristic_draft(profile(p["path"])), p["gold"], p["key"])})

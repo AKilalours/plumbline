@@ -6,6 +6,7 @@ replays the record; a test checks the record against a fresh run.
 """
 from __future__ import annotations
 
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -87,9 +88,9 @@ def playground(n_events: int = 600) -> dict:
     resume, and the careless cursor through the same crash. Plus verify on the good and the careless source."""
     feed = usgs_server.Feed.generated(n_events)
     srv, url = usgs_server.serve(feed)
+    base = Path(tempfile.mkdtemp(prefix="kitdemo-"))
     try:
         Good, Careless = _sources(url)
-        base = Path(tempfile.mkdtemp(prefix="kitdemo-"))
         out: dict = {"events": n_events, "page_size": SIZE}
 
         def scen(name, cls, crash=False, again=False):
@@ -129,6 +130,7 @@ def playground(n_events: int = 600) -> dict:
         return out
     finally:
         srv.shutdown()
+        shutil.rmtree(base, ignore_errors=True)          # the record is what the app replays; the warehouses are not kept
 
 
 def _stale_copy(feed, Good, base: Path) -> dict:

@@ -258,13 +258,19 @@ def _with_files(c, files: str):
 
 
 def draft(src: Source, *, out: Path | None = None, workdir: Path | None = None) -> Path:
-    """Read one page, write a contract draft for a person to review. Never applied on its own."""
+    """Read one page, write a contract draft for a person to review. Never applied on its own. Without a
+    workdir, the scratch folder is removed afterwards."""
+    if workdir is not None:
+        return _draft(src, out, workdir)
     import tempfile
+    with tempfile.TemporaryDirectory(prefix="plumbline-draft-") as tmp:
+        return _draft(src, out, Path(tmp))
 
+
+def _draft(src: Source, out: Path | None, workdir: Path) -> Path:
     import yaml
     from .ai.onboard import Draft, heuristic_draft, profile, to_contract, validate
 
-    workdir = workdir or Path(tempfile.mkdtemp())
     landing = workdir / "sources" / src.name
     sync(src, landing, None, max_pages=1)
     first = sorted(landing.glob("*.csv"))
@@ -277,7 +283,9 @@ def draft(src: Source, *, out: Path | None = None, workdir: Path | None = None) 
     upd = [src.updated] if src.updated else list(d.latest_by)
     cols = [c.model_copy(update={"required": True}) if c.name in key + upd else c for c in cols]
     d = Draft(key=key, latest_by=upd, columns=cols)
-    why = validate(d, src.name, Path(tempfile.mkdtemp()))
+    check = workdir / "check"
+    check.mkdir(parents=True, exist_ok=True)
+    why = validate(d, src.name, check)
     if why:
         raise ValueError(f"{src.name}: the draft does not load: {why}. Set `key = ...` on the source.")
     spec = to_contract(d, src.name, f"sources/{src.name}/*.csv")
@@ -299,12 +307,22 @@ def draft(src: Source, *, out: Path | None = None, workdir: Path | None = None) 
 def verify(make, *, contract: Path, workdir: Path | None = None, max_pages: int = 3) -> list[tuple[str, bool, str]]:
     """Run a new source the ways production will, and check the promises hold. `make()` returns a fresh
     Source (a class works). Returns (check, passed, detail) for each: passed is None when a check could not be
-    judged (the cursor check, when max_pages stopped the run mid-window). None may fail before a source ships."""
+    judged (the cursor check, when max_pages stopped the run mid-window). None may fail before a source ships.
+    Without a workdir, the five warehouses it builds are removed afterwards."""
+    if workdir is not None:
+        return _verify(make, contract=contract, workdir=workdir, max_pages=max_pages)
     import tempfile
+    with tempfile.TemporaryDirectory(prefix="plumbline-verify-") as tmp:
+        return _verify(make, contract=contract, workdir=Path(tmp), max_pages=max_pages)
 
+
+def _verify(make, *, contract: Path, workdir: Path | None = None, max_pages: int = 3) -> list[tuple[str, bool, str]]:
+    """Run a new source the ways production will, and check the promises hold. `make()` returns a fresh
+    Source (a class works). Returns (check, passed, detail) for each: passed is None when a check could not be
+    judged (the cursor check, when max_pages stopped the run mid-window). None may fail before a source ships."""
     import duckdb
 
-    base = workdir or Path(tempfile.mkdtemp())
+    base = workdir
     out = []
 
     a = run(make(), workdir=base / "a", contract=contract, max_pages=max_pages)

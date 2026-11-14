@@ -355,7 +355,8 @@ def agent_scenes(d, scenes=AGENT_SCENES) -> dict:
     import tempfile
     from ..agents.agent import handle
     from .queries import agent_context, example_roles
-    ctx = agent_context(d, Path(tempfile.mkdtemp(prefix="plumbline-scenes-")), use_model=False)
+    own = tempfile.TemporaryDirectory(prefix="plumbline-scenes-")                     # removed when this returns
+    ctx = agent_context(d, Path(own.name), use_model=False)
     roles = example_roles()
 
     def rep(who, q):

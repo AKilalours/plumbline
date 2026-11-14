@@ -8,13 +8,13 @@ caller, which reads it from the warehouse or a saved result, so a test can check
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
 Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace, people, agent,
-lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard.
+lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard, rowflow, proofwall.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard", "rowflow", "proofwall")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -122,6 +122,19 @@ pre.code .hl{background:rgba(229,183,77,.25);display:inline-block;width:100%;bor
 .sc-row .bars{display:flex;flex-direction:column;gap:5px}.sc-row .bb{height:12px;border-radius:6px;transition:width .9s cubic-bezier(.4,.1,.2,1);width:0}
 .sc-row .lbl{font:500 11px 'Geist Mono';color:var(--muted)}
 @media (max-width:560px){.sc-row{grid-template-columns:1fr}}
+@keyframes drawin{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}@keyframes travel{from{stroke-dashoffset:24}to{stroke-dashoffset:0}}
+.fl .bnd{animation:drawin .9s cubic-bezier(.2,.7,.2,1) both}.fl .dash{animation:travel 1.6s linear infinite}
+.fl g.st{cursor:pointer;transition:opacity .2s}.fl g.st.dim{opacity:.18}
+.fl text{font-family:Geist,system-ui,sans-serif}
+.pw{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.pc{height:250px;perspective:1200px}.pc button{all:unset;display:block;position:relative;width:100%;height:100%;cursor:pointer;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.3,.7,.2,1)}
+.pc.flip button{transform:rotateY(180deg)}.pc .face{position:absolute;inset:0;backface-visibility:hidden;border-radius:18px;padding:18px;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box}
+.pc .front{background:#fff;border:1px solid var(--line)}.pc .back{background:var(--navy);color:#EEF1FF;transform:rotateY(180deg)}
+.pc .ttl{font-size:16px;font-weight:600;line-height:1.25}.pc .hint{font:500 10.5px 'Geist Mono';color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.pc .back p{font-size:12.5px;line-height:1.45;margin:8px 0;opacity:.9;flex:1;overflow:auto;min-height:0}.pc .open{align-self:flex-start;background:#fff;color:var(--navy);border-radius:999px;padding:6px 14px;font-weight:600;font-size:13px;text-decoration:none}
+.pc .miss{color:var(--red)}.pc .big{font-size:34px;font-weight:300;line-height:1;font-variant-numeric:tabular-nums}
+.vs .b{height:12px;border-radius:6px;background:var(--tint);margin-top:4px}.vs .b i{display:block;height:100%;border-radius:6px;width:0;transition:width 1s cubic-bezier(.2,.7,.2,1)}
+.dt{display:flex;gap:5px;flex-wrap:wrap}.dt i{width:14px;height:14px;border-radius:50%;transform:scale(0);transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -1261,6 +1274,89 @@ R.scorecard = () => {
     requestAnimationFrame(() => list.querySelectorAll('.bb').forEach(b => b.style.width = b.dataset.w + '%'));
   }
   draw();
+};
+
+// Where every NYC row went: each source on the left splits into what happened to its rows. Bands draw in, dashes
+// travel along them; hover a stream to focus it and read the exact count, click it to pin what it means.
+R.rowflow = () => {
+  const COL = {written: 'var(--blue)', reread: '#9AA3C7', quarantined: 'var(--red)', same: 'var(--green)', changed: 'var(--gold)', gone: '#7E2414'};
+  const X0 = 250, X1 = 600, GAP = 16, LAB = 40, W = 1000;
+  const lay = (streams, top, band) => { const tot = streams.reduce((t, s) => t + s.n, 0) || 1; let a = top, b = top;
+    return streams.map(s => { const w = Math.max(5, band * s.n / tot), y0 = a + w / 2, y1 = b + w / 2; a += w; b += Math.max(w, LAB) + GAP;
+      return {s, w, y0, y1, d: `M${X0},${y0} C${(X0 + X1) / 2},${y0} ${(X0 + X1) / 2},${y1} ${X1},${y1}`}; }); };
+  const [A, B] = D.sources;
+  const ra = lay(A.streams, 20, 170), botA = Math.max(...ra.map(r => r.y1 + r.w / 2), 190);
+  const rb = lay(B.streams, botA + 70, 120), H = Math.max(...rb.map(r => r.y1 + r.w / 2), botA + 190) + 16;
+  const tot = ss => ss.reduce((t, s) => t + s.n, 0);
+  const src = (rows, title, n) => { const y = rows[0].y0 - rows[0].w / 2, h = rows.reduce((t, r) => t + r.w, 0);
+    return `<rect x="${X0 - 8}" y="${y}" width="8" height="${h}" rx="3" fill="var(--ink)"/>
+      <text x="${X0 - 18}" y="${y + h / 2 - 6}" text-anchor="end" font-size="30" font-weight="300">${F.int(n)}</text>
+      <text x="${X0 - 18}" y="${y + h / 2 + 16}" text-anchor="end" font-size="13" fill="var(--muted)">${esc(title)}</text>`; };
+  const all = [...ra, ...rb];
+  const svg = `<svg class="fl" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Where every NYC row went">
+    ${src(ra, A.title, tot(A.streams))}${src(rb, B.title, tot(B.streams))}
+    ${all.map(({s, w, y1, d}, i) => `<g class="st" data-k="${s.key}">
+      <path d="${d}" fill="none" stroke="transparent" stroke-width="${Math.max(w, 24)}" pointer-events="stroke"/>
+      <rect x="${X1}" y="${y1 - 18}" width="${W - X1}" height="34" fill="transparent"/>
+      <path class="bnd" d="${d}" fill="none" stroke="${COL[s.key]}" stroke-opacity=".45" stroke-width="${w}" pathLength="1" stroke-dasharray="1" style="animation-delay:${i * 90}ms"/>
+      <path class="dash" d="${d}" fill="none" stroke="${COL[s.key]}" stroke-width="${Math.min(Math.max(2, w * .3), 5)}" stroke-linecap="round" stroke-dasharray="1 23"
+        style="animation-duration:${s.key === 'reread' ? 2.6 : s.key === 'written' || s.key === 'changed' ? 0.9 : 1.6}s"/>
+      <rect x="${X1}" y="${y1 - w / 2}" width="8" height="${w}" rx="3" fill="${COL[s.key]}"/>
+      <text x="${X1 + 20}" y="${y1 - 2}" font-size="17" font-weight="600">${F.int(s.n)}<tspan dx="8" font-size="13.5" font-weight="400" fill="var(--muted)">${esc(s.label)}</tspan></text></g>`).join('')}
+  </svg>`;
+  const wrap = document.createElement('div'); wrap.className = 'card'; wrap.innerHTML = svg;
+  const cap = document.createElement('div'); cap.className = 'cap'; cap.style.minHeight = '42px'; cap.style.marginTop = '8px';
+  const def = `${F.int(D.runs)} real runs since ${esc((D.since || '').slice(0, 10))}. Hover a stream for what it is; click to pin it.`;
+  cap.textContent = def;
+  app.append(wrap, cap);
+  if (D.skipped) { const sk = document.createElement('div'); sk.className = 'band'; sk.style.marginTop = '10px';
+    sk.innerHTML = `<div class="row" style="justify-content:space-between"><div><div class="mono">Not read at all</div>
+      <div style="font-size:28px;font-weight:300">${F.int(D.skipped.rows)} <span style="font-size:15px">rows NYC re-stamped at once</span></div></div>
+      <div class="mono">${esc(D.skipped.timestamp.slice(0, 16).replace('T', ' '))} · counted, recorded, skipped</div></div>`;
+    app.appendChild(sk); }
+  let pinned = null;
+  const gs = wrap.querySelectorAll('g.st'), find = k => [...A.streams, ...B.streams].find(s => s.key === k);
+  const focus = k => { gs.forEach(g => g.classList.toggle('dim', k !== null && g.dataset.k !== k));
+    const s = k && find(k); cap.innerHTML = s ? `<b>${F.int(s.n)} · ${esc(s.label)}.</b> ${esc(s.tell)}` : def; };
+  gs.forEach(g => { g.onmouseenter = () => focus(g.dataset.k); g.onmouseleave = () => focus(pinned);
+    g.onclick = () => { pinned = pinned === g.dataset.k ? null : g.dataset.k; focus(pinned); }; });
+};
+
+// Claims a reviewer will doubt, as cards: the front shows the measure (rings and bars sweep in, misses in red),
+// tap to flip for how it was measured and a link to the evidence.
+R.proofwall = () => {
+  const grid = document.createElement('div'); grid.className = 'pw'; app.appendChild(grid);
+  const ring = v => { const r = 46, c = 2 * Math.PI * r, f = v.n ? v.k / v.n : 0, pct = f >= .995 ? (f * 100).toFixed(2) : (f * 100).toFixed(1);
+    return `<div class="row" style="gap:16px;flex-wrap:nowrap"><svg viewBox="0 0 112 112" width="104" height="104" aria-hidden="true">
+      <circle cx="56" cy="56" r="${r}" fill="none" stroke="var(--line)" stroke-width="11"/>
+      <circle class="arc" cx="56" cy="56" r="${r}" fill="none" stroke="${v.miss ? 'var(--red)' : 'var(--blue)'}" stroke-width="11" stroke-linecap="round"
+        stroke-dasharray="${c}" stroke-dashoffset="${c}" data-to="${c * (1 - f)}" transform="rotate(-90 56 56)" style="transition:stroke-dashoffset 1.1s cubic-bezier(.2,.7,.2,1)"/>
+      <line x1="56" y1="4" x2="56" y2="18" stroke="var(--ink)" stroke-width="2.5" transform="rotate(${v.target * 360} 56 56)"/></svg>
+      <div><div class="big ${v.miss ? 'miss' : ''}">${pct}%</div><div class="cap">${F.int(v.k)} of ${F.int(v.n)}</div>
+      <span class="pill ${v.miss ? 'p-fail' : 'p-pass'}" style="margin-top:6px;display:inline-block">${esc(v.note)}</span></div></div>`; };
+  const versus = v => { const mx = Math.max(v.left, v.right, 1), win = v.lower_better ? v.right < v.left : v.same;
+    const head = v.same !== undefined ? v.headline : `${Math.round(100 * (1 - v.right / v.left))}% less`;
+    const bar = (n, lab, col, bold) => `<div><div class="row" style="justify-content:space-between;flex-wrap:nowrap"><span class="cap" style="${bold ? 'color:var(--ink);font-weight:600' : ''}">${esc(lab)}</span><b class="num">${F.int(n)}</b></div>
+      <div class="b"><i data-w="${100 * n / mx}" style="background:${col}"></i></div></div>`;
+    return `<div class="vs"><div class="big" style="color:${win ? 'var(--green)' : 'var(--red)'};font-size:28px;margin-bottom:8px">${esc(head)}</div>
+      ${bar(v.left, v.left_label, '#C9CCD6', false)}<div style="height:8px"></div>${bar(v.right, v.right_label, win ? 'var(--green)' : 'var(--red)', true)}</div>`; };
+  const dots = v => v.groups.map(g => `<div style="margin-bottom:10px"><div class="dt">${Array.from({length: g.n}, (_, i) =>
+      `<i style="background:${i < g.ok ? 'var(--green)' : 'var(--red)'};transition-delay:${i * 60}ms"></i>`).join('')}</div>
+      <div class="cap" style="margin-top:4px"><b style="color:var(--ink)">${g.ok} of ${g.n} PASS</b> · ${esc(g.label)}</div></div>`).join('');
+  D.cards.forEach((c, i) => {
+    const el = document.createElement('div'); el.className = 'pc'; el.style.animation = `rise .4s ${i * 70}ms both`;
+    const v = c.visual;
+    el.innerHTML = `<button aria-pressed="false" aria-label="${esc(c.title)}: tap for how it was measured">
+      <div class="face front"><div class="ttl">${esc(c.title)}</div>${v.type === 'ring' ? ring(v) : v.type === 'dots' ? dots(v) : versus(v)}<div class="hint">tap: how it was measured</div></div>
+      <div class="face back"><div class="ttl">${esc(c.title)}</div><p>${esc(c.method)}</p>
+        <a class="open" href="${esc(c.href)}" target="_blank" rel="noopener">See the evidence ↗</a></div></button>`;
+    const btn = el.querySelector('button');
+    btn.onclick = e => { if (e.target.closest('a')) return; el.classList.toggle('flip'); btn.setAttribute('aria-pressed', el.classList.contains('flip')); };
+    grid.appendChild(el);
+  });
+  setTimeout(() => { grid.querySelectorAll('.arc').forEach(a => a.style.strokeDashoffset = a.dataset.to);
+    grid.querySelectorAll('.vs i').forEach(b => b.style.width = b.dataset.w + '%');
+    grid.querySelectorAll('.dt i').forEach(d => d.style.transform = 'scale(1)'); }, 120);
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

@@ -33,12 +33,31 @@ def _ops() -> dict:
                      "incidents": OV.incidents({"NYC": ("dob_now_permits", runs)}, entries),
                      "cost": OV.cost([job_record(0, 331.7), job_record(0, 170)], {}),
                      "snapshots": OV.snapshots(runs),
+                     "rowflow": OV.row_flow(_nyc_runs()),
+                     "proofwall": {"cards": OV.proof_cards(_nyc_runs(), json.loads((ROOT / "docs/results/postgres_cdc.json").read_text()),
+                                                           json.loads((ROOT / "docs/results/onboarding_engineers.json").read_text()),
+                                                           __import__("datetime").datetime(2026, 11, 13, 16, tzinfo=__import__("datetime").timezone.utc))},
                      "incident": OV.incident(_run(), "Future-dated feature", "The audit covers attributes with a first-seen date.", _fmt()),
                      "scorecard": OV.scorecard([("Agent picks the tool", "messages routed right", "12/20", "19/20"),
                                                 ("Agent answers from the docs", "answered right", "19/24", "19/24"),
                                                 ("Contract for a new partner file", "column types right", "31/34", "30/34"),
                                                 ("Questions in plain English", "answered right", "no rule-based way", "14/14")], "gpt-4.1-mini")})
     return _OPS
+
+
+def _nyc_runs():
+    """Run lines shaped like the history branch's: a stalled stretch, the fixed run, reconcile slices, a quarantine."""
+    r = lambda t, **k: {"run_at": t, "ok": True, "rows": 0, "rows_loaded": 0, "rows_quarantined": 0, "pages": 2, "seconds": 20, **k}
+    return [r("2026-11-07T03:45:49Z", rows=11970, rows_loaded=11968, rows_quarantined=2),
+            {"run_at": "2026-11-07T07:17:28Z", "ok": False, "rows": 0, "pages": 1, "seconds": 9},
+            r("2026-11-10T23:34:23Z", rows=58540, rows_loaded=58540, pages=60, seconds=691.65),
+            r("2026-11-11T06:48:08Z", rows=1460, rows_loaded=1460, pages=60, seconds=941.69),
+            r("2026-11-12T04:36:36Z", rows=2438, rows_loaded=2438, pages=4, seconds=41.87,
+              reload_skipped={"rows": 803457, "timestamp": "2026-11-10T19:43:03.479"}),
+            r("2026-11-12T13:35:00Z", reread=2438, rows_loaded=4, reconcile_rows=4,
+              reconcile={"checked": 2000, "same": 1990, "changed": 4, "gone": 6}),
+            r("2026-11-13T15:56:30Z", reread=1376, rows_loaded=4, reconcile_rows=4,
+              reconcile={"checked": 2000, "same": 1987, "changed": 4, "gone": 9})]
 
 
 def _fmt():
@@ -379,6 +398,36 @@ def test_the_scorecard_sorts_by_what_the_model_added_and_keeps_its_loss():
         first = pg.inner_text(".sc-row >> nth=0")
         assert "Agent picks the tool" in first and "+35 PTS" in first.upper()
         assert "-3 PTS" in pg.inner_text("#app").upper()
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_row_flow_pins_what_a_stream_means_on_click():
+    p, b = _browser()
+    try:
+        pg = b.new_page(viewport={"width": 1100, "height": 900})
+        pg.set_content(V.page("rowflow", _ops()["rowflow"]))
+        pg.wait_for_timeout(600)
+        pg.click("text=Quarantined, with the reason")
+        pg.mouse.move(5, 5)
+        assert "2 · Quarantined, with the reason." in pg.inner_text("#app")
+        assert "803,457" in pg.inner_text("#app")
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_a_proof_card_flips_to_how_it_was_measured_and_its_evidence():
+    p, b = _browser()
+    try:
+        pg = b.new_page()
+        pg.set_content(V.page("proofwall", _ops()["proofwall"]))
+        pg.wait_for_timeout(500)
+        pg.click(".pc >> nth=0")
+        pg.wait_for_timeout(700)
+        assert "flip" in pg.get_attribute(".pc >> nth=0", "class")
+        assert pg.get_attribute(".pc >> nth=0 >> a.open", "href").endswith("docs/results/postgres_cdc.json")
     finally:
         b.close()
         p.stop()

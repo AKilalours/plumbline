@@ -267,3 +267,15 @@ def test_the_draft_names_its_identity_columns_so_a_reviewer_checks_they_describe
     out = kit.draft(WithZip(), out=tmp_path / "d.yaml", workdir=tmp_path / "dw")
     head = [l for l in out.read_text().splitlines() if l.startswith("#")]
     assert any("Marked identity" in l and "incident_zip" in l for l in head), head
+
+
+def test_draft_and_verify_leave_no_temporary_folders_behind(tmp_path, feed, contract, monkeypatch):
+    """Each verify built five warehouses in a temporary folder and never removed it; running the guide's commands,
+    or the app's playground, filled a disk (it filled this project's CI workspace on 2026-11-13)."""
+    import tempfile
+    scratch = tmp_path / "tmp"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+    kit.verify(quakes(feed), contract=contract)
+    kit.draft(quakes(feed)(), out=tmp_path / "d.yaml")
+    assert list(scratch.iterdir()) == []

@@ -233,7 +233,8 @@ def gate_lab(demo: Demo, fault: str, release_by: str | None = None, release_reas
         raise ValueError("choose a CSV file to send")
     if upload and len(upload) > MAX_UPLOAD:
         raise ValueError(f"the file is over {MAX_UPLOAD // 1_000_000} MB")
-    work = Path(work or tempfile.mkdtemp(prefix="plumbline-gatelab-"))
+    own = None if work else tempfile.TemporaryDirectory(prefix="plumbline-gatelab-")   # removed when this returns
+    work = Path(work or own.name)
     run = work / "run"
     shutil.copytree(demo.run, run, ignore=shutil.ignore_patterns("truth", "campaign", "*.duckdb"))
     last = _newest_vendor_file(run)

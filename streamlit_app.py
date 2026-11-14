@@ -776,6 +776,8 @@ def agent():
     d = demo()
     header("Operations agent", "It quotes the docs, reads the live warehouse, and changes nothing without a second person.")
     if "agent_dir" not in st.session_state:
+        from plumbline.app.scratch import sweep
+        sweep()                                   # other visitors' folders idle for six hours (app/scratch.py)
         st.session_state.agent_dir = Path(tempfile.gettempdir()) / f"plumbline-agent-{uuid.uuid4().hex[:12]}"
         st.session_state.chat, st.session_state.pending = [], []
     ctx = Q.agent_context(d, st.session_state.agent_dir, use_model=USE_MODEL)
@@ -1185,10 +1187,23 @@ def snapshot_date() -> str:
         return "the snapshot date"
 
 
+def proof_wall():
+    """Claims a reviewer will doubt, from the real feeds and recorded runs (app/ops_visuals.py proof_cards)."""
+    from datetime import datetime, timezone
+    from plumbline.app import ops_visuals as OV
+    res = Path(__file__).parent / "docs/results"
+    load = lambda f: json.loads((res / f).read_text()) if (res / f).exists() else None
+    cards = OV.proof_cards(open_data_runs(), load("postgres_cdc.json"), load("onboarding_engineers.json"), datetime.now(timezone.utc))
+    if cards:
+        st.markdown('<div class="mono">Proof, measured on real feeds · tap a card for how</div>', unsafe_allow_html=True)
+        viz("proofwall", {"cards": cards}, 560)
+
+
 def overview():
     d = demo()
     header("Overview")
     st.page_link(PAGES["try"], label="Try it on your own customer files: drop CSVs, get one clean list back", icon="📤")
+    proof_wall()
     viz("city", city_data(d, key(d)), 120)
     with st.expander("The same city as a flow chart"):
         viz("flow", {"views": flows(d, key(d))[::-1]}, 120)
@@ -1609,6 +1624,10 @@ def sources_page():
         worth_buying()
         return
     if v == "Health":
+        from plumbline.app import ops_visuals as OV
+        if any("rows_loaded" in r for r in open_data_runs()):
+            st.markdown('<div class="mono">Where every NYC row went</div>', unsafe_allow_html=True)
+            viz("rowflow", OV.row_flow(open_data_runs()), 560)
         slo_panel()
         recovery_panel()
         cost_panel()

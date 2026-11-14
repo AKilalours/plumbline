@@ -98,3 +98,85 @@ def scorecard(rows: list[tuple], model: str | None) -> dict:
     return {"model": model or "not recorded yet",
             "rows": [{"feature": f, "measure": m, "without": str(b) if b is not None else "not run", "with": str(w) if w is not None else "not recorded",
                       "b": _frac(b), "w": _frac(w)} for f, m, b, w in rows]}
+
+
+def row_flow(runs: list[dict]) -> dict:
+    """Where every NYC row went, over the runs that recorded each count (rows_loaded appears on every run since
+    the first). Sums checked: written + re-read + quarantined = what NYC sent; same + changed + gone = checked."""
+    w = [r for r in runs if "rows_loaded" in r]
+    S = lambda k: sum(int(r.get(k) or 0) for r in w)
+    rc = [r["reconcile"] for r in w if isinstance(r.get("reconcile"), dict)]
+    R = lambda k: sum(int(x.get(k) or 0) for x in rc)
+    skipped = [r["reload_skipped"] for r in runs if isinstance(r.get("reload_skipped"), dict)]
+    q = S("rows_quarantined")
+    return {"runs": len(w), "since": w[0]["run_at"] if w else None,
+            "sources": [
+                {"key": "sent", "title": "rows NYC sent", "streams": [
+                    {"key": "written", "label": "Written to the warehouse", "n": S("rows") - q,
+                     "tell": "New or changed permits, landed, checked against the contract and loaded."},
+                    {"key": "reread", "label": "Re-read at the cursor, already held", "n": S("reread"),
+                     "tell": "Every run re-reads a few minutes back so nothing on the edge is missed; rows it already has add nothing."},
+                    {"key": "quarantined", "label": "Quarantined, with the reason", "n": q,
+                     "tell": "Rows that broke the contract: kept aside with why, never loaded."}]},
+                {"key": "checked", "title": "held rows checked against NYC", "streams": [
+                    {"key": "same", "label": "Still the same", "n": R("same"), "tell": "A rotating slice of what we hold, asked for again by id."},
+                    {"key": "changed", "label": "Changed: landed again", "n": R("changed"),
+                     "tell": "NYC changed a row without moving its update time; the reconcile found it and landed NYC's version."},
+                    {"key": "gone", "label": "Gone from NYC: reported", "n": R("gone"), "tell": "Removed at the source; reported, and an alert above 1%."}]}],
+            "skipped": skipped[0] if skipped else None}
+
+
+def proof_cards(nyc_runs: list[dict], cdc: dict | None, onboarding: dict | None, now) -> list[dict]:
+    """Claims a reviewer will doubt, each computed here from its measured source; misses shown as misses."""
+    from ..ingest.slo import measure
+    out = []
+    gh = "https://github.com/AKilalours/plumbline/blob/main/"
+    if cdc:
+        db = sum(len(v) for v in cdc["database"].values())
+        wh = sum(len(v) for v in cdc["current"].values())
+        out.append({"key": "cdc", "title": "A crash mid-replication loses nothing",
+                    "visual": {"type": "versus", "left": db, "left_label": "rows in Postgres", "right": wh, "right_label": "rows in the warehouse",
+                               "same": bool(cdc.get("matches_database")), "headline": "row for row" if cdc.get("matches_database") else "they differ"},
+                    "method": f"A real Postgres {cdc['postgres'].split()[0]}: copy, then {cdc['crash']['transactions']} transactions, a crash before the slot "
+                              f"moved, a restart that read {cdc['crash']['read_again']} changes again. The warehouse's current rows are compared with "
+                              f"the database's, value by value.", "href": gh + "docs/results/postgres_cdc.json"})
+    if nyc_runs:
+        m = measure(nyc_runs, now)
+        mt = m["matches"]
+        if mt["total"]:
+            out.append({"key": "reconcile", "title": "Rows checked against NYC again",
+                        "visual": {"type": "ring", "k": mt["good"], "n": mt["total"], "target": mt["target"],
+                                   "note": f"target {mt['target']:.1%}: {'met' if mt['status'] == 'met' else 'missed'}", "miss": mt["status"] != "met"},
+                        "method": "Every run asks NYC again for a slice of the rows held and compares them field by field. The miss "
+                                  "is real: most differences were apartment numbers an old bug dropped, now landed again.", "href": gh + "docs/postmortems/2026-11-07-apartment-number-dropped.md"})
+        fr = m["fresh"]
+        out.append({"key": "fresh", "title": "Data within 26 hours of NYC",
+                    "visual": {"type": "ring", "k": fr["good"], "n": fr["total"], "target": fr["target"],
+                               "note": f"target {fr['target']:.0%}: {'met' if fr['status'] == 'met' else 'missed'}", "miss": fr["status"] != "met"},
+                    "method": "Each hour since the feed began counts as fresh when the newest landed row is within 26 hours of NYC's newest "
+                              "update, asked of NYC every run.", "href": gh + "docs/reliability/slo.md"})
+        ru = m["runs"]
+        out.append({"key": "runs", "title": "Runs that succeeded",
+                    "visual": {"type": "ring", "k": ru["good"], "n": ru["total"], "target": ru["target"],
+                               "note": f"target {ru['target']:.0%}: {'met' if ru['status'] == 'met' else 'missed, budget spent'}", "miss": ru["status"] != "met"},
+                    "method": "Two failed runs on the first day (an unpinned DuckDB) spent the whole 28-day budget. Every run since succeeded.",
+                    "href": gh + "docs/postmortems/2026-11-07-motherduck-duckdb.md"})
+        first_skip = next((r for r in nyc_runs if isinstance(r.get("reload_skipped"), dict)), None)
+        if first_skip:
+            stuck = [r for r in nyc_runs if r["run_at"] < first_skip["run_at"] and int(r.get("pages") or 0) >= 60][-4:]
+            if stuck:
+                avg = round(sum(float(r["seconds"]) for r in stuck) / len(stuck))
+                out.append({"key": "reload", "title": "A publisher reload, skipped not re-read",
+                            "visual": {"type": "versus", "left": avg, "left_label": f"seconds a run took, stuck ({len(stuck)} runs)",
+                                       "right": round(float(first_skip["seconds"])), "right_label": "seconds after the fix", "lower_better": True},
+                            "method": f"NYC re-stamped {first_skip['reload_skipped']['rows']:,} rows with one time. The old connector re-read the same 60 "
+                                      f"pages every run. The fix counts the block, skips it, and landed the {first_skip['rows']:,} real changes after it.",
+                            "href": gh + "docs/postmortems/2026-11-10-nyc-reload-stall.md"})
+    if onboarding:
+        es = onboarding["engineers"]
+        out.append({"key": "onboard", "title": "Engineers who did not build it add a source",
+                    "visual": {"type": "dots", "groups": [{"label": f"{e['source']}, {e['minutes']} min", "ok": sum(e["verify"]), "n": len(e["verify"])} for e in es]},
+                    "method": "Each followed the guide on a real API and ran verify: lands, re-read adds nothing, a crash loses nothing, "
+                              "a cursor is kept. Both used an AI assistant; each found bugs, all fixed with tests.",
+                    "href": gh + "docs/results/onboarding_second_engineer.md"})
+    return out

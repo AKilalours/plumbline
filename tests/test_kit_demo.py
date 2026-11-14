@@ -25,3 +25,10 @@ def test_the_scraper_record_keeps_robots_first_blocks_login_and_waits_as_asked()
 def test_an_unreadable_robots_txt_means_one_request_and_nothing_else():
     r = K.scrape(robots="cannot be read (503)")
     assert [q["path"] for q in r["requests"]] == ["/robots.txt"] and "nothing is allowed" in r["outcome"]
+
+
+def test_the_playground_cleans_up_its_runs(tmp_path, monkeypatch):
+    import tempfile
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    K.playground(n_events=300)
+    assert list(tmp_path.iterdir()) == []

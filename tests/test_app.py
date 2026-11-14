@@ -792,3 +792,46 @@ def test_the_add_a_source_view_runs_the_kit_and_the_scraper_for_real(world, monk
     assert not at.exception, at.exception
     at.selectbox(key="sc_robots").set_value("cannot be read (503)").run()
     assert not at.exception, at.exception
+
+
+def _scratch(tmp_path, monkeypatch):
+    import tempfile
+    d = tmp_path / "scratch"
+    d.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(d))
+    return d
+
+
+def test_the_gate_lab_removes_its_working_copy(world, tmp_path, monkeypatch):
+    """Each press of "Send the file" copied the city into a new folder that was never removed: 268 of them,
+    1.7 GB, were found on 2026-11-13. On the public app the server's disk only grew."""
+    from plumbline.app import ops as O
+    w, _ = world
+    d = _scratch(tmp_path, monkeypatch)
+    assert O.gate_lab(w, "truncated")["status"] == "held"
+    assert list(d.iterdir()) == []
+
+
+def test_the_agent_scenes_remove_their_private_copy(world, tmp_path, monkeypatch):
+    from plumbline.app import visual_data as VD
+    w, _ = world
+    d = _scratch(tmp_path, monkeypatch)
+    assert VD.agent_scenes(w)["scenes"]
+    assert list(d.iterdir()) == []
+
+
+def test_idle_agent_session_folders_are_swept_and_active_ones_kept(tmp_path):
+    """A visitor's agent folder must live as long as their session, so it cannot be removed at once; one nobody
+    has touched for six hours is removed when the next session starts."""
+    import os
+    import time
+    from plumbline.app.scratch import sweep
+    old, fresh, other = tmp_path / "plumbline-agent-aaa", tmp_path / "plumbline-agent-bbb", tmp_path / "someone-else"
+    for p in (old, fresh, other):
+        (p / "runs").mkdir(parents=True)
+        (p / "runs" / "x.json").write_text("{}")
+    t = time.time() - 7 * 3600
+    for f in (old, old / "runs", old / "runs" / "x.json"):
+        os.utime(f, (t, t))
+    assert sweep(root=tmp_path) == 1
+    assert not old.exists() and fresh.exists() and other.exists()

@@ -201,3 +201,64 @@ def scrape(delay: float = 2.0, robots: str = "allows pages, blocks /login", slow
                 "agent": s.user_agent, "delay": delay, "robots": robots, "slow_down": slow_down, "pages": pages}
     finally:
         srv.shutdown()
+
+
+# ------------------------------------------------------------------ a publisher reload, replayed
+def reload_replay(block: int = 3000, budget: int = 5, changes: int = 30, page_size: int = 100, max_runs: int = 12) -> dict:
+    """The NYC reload of 2026-11-10, on the real Socrata connector against the stand-in API. Both lanes first sync
+    the table; then every row is re-stamped with one update time (`block` rows) and `changes` real changes are
+    published after it. Each lane then runs until the real changes have landed (or max_runs):
+
+    - skip: today's connector; a block over its reload limit is counted with one query and passed.
+    - read: the same connector with the limit off: it reads the whole block, `budget` pages a run, keeping its
+      place between runs, before it reaches the real changes. (The original bug, dropping its place at the
+      budget, is gone from the code, so it cannot be replayed; this lane is the honest stand-in.)
+    """
+    import csv as _csv
+    from datetime import timedelta
+
+    from ..ingest.connectors.socrata import SocrataClient, sync_dataset
+    from ..store.socrata_server import Dataset, make_rows, serve, ts
+
+    ds = Dataset(make_rows(block))
+    srv, url = serve(ds)
+    base = Path(tempfile.mkdtemp(prefix="plumbline-reload-"))
+    fast = dict(base_delay=0.0, max_delay=0.0, max_retries=12, jitter_seed=0, sleep=lambda s: None)
+    try:
+        lanes = {"skip": (base / "skip", max(1, block // 3)), "read": (base / "read", None)}
+        for folder, _ in lanes.values():
+            sync_dataset(SocrataClient(url, None, **fast), "x", folder, name="p", since="2026-01-01", page_size=page_size)
+        t = ds.now_max() + timedelta(days=1)
+        for r in ds.rows.values():
+            r[":updated_at"] = ts(t)
+        newer = sorted(ds.rows)[:changes]
+        for i, k in enumerate(newer):
+            ds.rows[k][":updated_at"] = ts(t + timedelta(hours=1, seconds=i))
+        want = {k: ds.rows[k][":updated_at"].rstrip("Z") for k in newer}
+
+        def landed(folder: Path) -> int:
+            seen = {}
+            for p in sorted(folder.glob("*.csv")):
+                with p.open() as f:
+                    for row in _csv.DictReader(f):
+                        if row.get("source_row_id") in want:
+                            seen[row["source_row_id"]] = row.get("source_updated_at", "")
+            return sum(1 for k, v in want.items() if seen.get(k) == v)
+
+        out = {}
+        for lane, (folder, limit) in lanes.items():
+            runs = []
+            for _ in range(max_runs):
+                s = sync_dataset(SocrataClient(url, None, **fast), "x", folder, name="p", page_size=page_size,
+                                 max_pages=budget, reload_rows=limit)
+                got = landed(folder)
+                runs.append({"pages": s.pages, "rows": s.pages * page_size if not s.reload_skipped else s.orders,
+                             "skipped": (s.reload_skipped or {}).get("rows", 0), "capped": bool(s.capped), "real": got})
+                if got == changes:
+                    break
+            out[lane] = runs
+        return {"block": block, "budget": budget, "changes": changes, "page_size": page_size, "max_runs": max_runs,
+                "lanes": out}
+    finally:
+        srv.shutdown()
+        shutil.rmtree(base, ignore_errors=True)

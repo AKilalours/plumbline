@@ -1217,20 +1217,21 @@ def overview():
                 st.markdown(f"**{c['title']}**  \n{c['unit']}. {c['note']}.")
                 ev = c["evidence"].head(500)      # mixed-type columns (a number here, a JSON object there) shown as text
                 st.dataframe(ev.astype({k: str for k in ev.columns[ev.dtypes == object]}), hide_index=True, width="stretch")
-    st.markdown(f'<p class="note">The cards count people in the data products, a snapshot as of {snapshot_date()} so that '
-                'nothing later can leak into a model. The animation above counts everyone the identity graph knows today, '
-                'including people first seen after that date, so its number is larger.</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="note" title="The cards count people in the data products, a snapshot as of {snapshot_date()} so '
+                'that nothing later can leak into a model. The animation counts everyone the identity graph knows today, so its '
+                f'number is larger.">Cards: snapshot as of {snapshot_date()} · animation: everyone known today ⓘ</p>', unsafe_allow_html=True)
     st.write("")
     left, right = st.columns([3, 2], gap="large")
     with left:
-        st.markdown('<div class="mono">Incidents</div>', unsafe_allow_html=True)
+        st.markdown('<div class="mono">Incidents · click one to play it</div>', unsafe_allow_html=True)
         rs = runs_list()
         if not rs:
             st.markdown('<p class="note">None open.</p>', unsafe_allow_html=True)
-        for r in rs[:6]:
-            area, name = INCIDENTS[r.scenario]
-            st.markdown(f'<div class="step">{status_pill(r)} <b>{name}</b> <span class="note">· {area} · {r.id}</span></div>',
-                        unsafe_allow_html=True)
+        else:
+            from plumbline.app import ops_visuals as OV
+            items = [{**OV.incident(r, INCIDENTS[r.scenario][1], SC.RISKS[r.scenario], SC._fmt), "area": INCIDENTS[r.scenario][0]}
+                     for r in rs[:6]]
+            viz("incidentdeck", {"items": items}, 820)
         st.page_link(PAGES["agent"], label="Open the incident lab", icon="🧪")
     with right:     # at 1M one wrongly deleted record was measured, then fixed on its saved state (docs/details.md, Scale item 7)
         viz("sizes", VD.sizes_band(Q.saved_results()["runs"]), 120)
@@ -1348,6 +1349,12 @@ def kit_playground() -> dict:
     return d
 
 
+@st.cache_data(show_spinner="Running the connector through the reload…", ttl=24 * 3600, max_entries=16)
+def reload_run(block: int, budget: int) -> dict:
+    from plumbline.app import kit_demo
+    return kit_demo.reload_replay(block=block, budget=budget)
+
+
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
 def scrape_run(delay: float, robots: str, slow_down: bool) -> dict:
     from plumbline.app import kit_demo
@@ -1362,6 +1369,11 @@ def add_source():
     how("Each scenario is a real run of `plumbline.kit` against a local stand-in for the USGS API, recorded page by page "
         "and replayed here. Two engineers who did not build it added Open-Meteo (about 14 min) and NYC 311 (36 min) this "
         "way, each with an AI assistant: docs/results/onboarding_second_engineer.md.")
+    st.markdown("#### A publisher reload, replayed")
+    a, b = st.columns(2)
+    block = a.select_slider("Rows NYC re-stamps at once", [500, 1000, 2000, 3000], value=2000, key="rl_block")
+    budget = b.select_slider("Pages a run may read", [2, 3, 5, 10], value=3, key="rl_budget")
+    viz("reload", reload_run(block, budget), 400)
     st.markdown("#### Scrape, politely")
     a, b, c = st.columns(3)
     delay = a.select_slider("Crawl-delay in robots.txt", [0.5, 1.0, 2.0, 2.5, 5.0], value=2.0, key="sc_delay")

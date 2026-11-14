@@ -32,3 +32,14 @@ def test_the_playground_cleans_up_its_runs(tmp_path, monkeypatch):
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     K.playground(n_events=300)
     assert list(tmp_path.iterdir()) == []
+
+
+def test_the_reload_replay_runs_the_real_connector_and_records_what_it_did(tmp_path, monkeypatch):
+    import tempfile
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    r = K.reload_replay(block=600, budget=2, changes=10)
+    skip, read = r["lanes"]["skip"], r["lanes"]["read"]
+    assert len(skip) == 1 and skip[0]["skipped"] == 590 and skip[0]["real"] == 10      # counted, passed, changes landed
+    assert len(read) == 3 and [x["real"] for x in read] == [0, 0, 10]                  # 600 rows at 200 a run: the third ends with the changes
+    assert all(x["capped"] for x in read[:-1])
+    assert list(tmp_path.iterdir()) == []

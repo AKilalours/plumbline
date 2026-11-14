@@ -34,6 +34,10 @@ def _ops() -> dict:
                      "cost": OV.cost([job_record(0, 331.7), job_record(0, 170)], {}),
                      "snapshots": OV.snapshots(runs),
                      "rowflow": OV.row_flow(_nyc_runs()),
+                     "reload": kit_demo.reload_replay(block=600, budget=2, changes=10),
+                     "incidentdeck": {"items": [
+                         {**OV.incident(_run(), "Future-dated feature", "Covers attributes with a first-seen date.", _fmt()), "area": "Models"},
+                         {**OV.incident(_run(), "Vendor file truncated", "A file missing whole rows is held.", _fmt()), "area": "Sources", "id": "run_aaaa11"}]},
                      "proofwall": {"cards": OV.proof_cards(_nyc_runs(), json.loads((ROOT / "docs/results/postgres_cdc.json").read_text()),
                                                            json.loads((ROOT / "docs/results/onboarding_engineers.json").read_text()),
                                                            __import__("datetime").datetime(2026, 11, 13, 16, tzinfo=__import__("datetime").timezone.utc))},
@@ -428,6 +432,37 @@ def test_a_proof_card_flips_to_how_it_was_measured_and_its_evidence():
         pg.wait_for_timeout(700)
         assert "flip" in pg.get_attribute(".pc >> nth=0", "class")
         assert pg.get_attribute(".pc >> nth=0 >> a.open", "href").endswith("docs/results/postgres_cdc.json")
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_reload_replay_races_the_two_lanes_to_every_real_change():
+    p, b = _browser()
+    try:
+        pg = b.new_page()
+        pg.set_content(V.page("reload", _ops()["reload"]))
+        pg.wait_for_timeout(4000)
+        t = pg.inner_text("#app")
+        assert "all in after run 1" in t and "all in after run 3" in t and "590 skipped" in t
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_each_incident_tile_opens_its_own_phase_rail_and_evidence():
+    """The incident visual read global data; drawn twice on one page, a click on a phase in the second could show the
+    first incident's evidence. Each tile now passes its own."""
+    p, b = _browser()
+    try:
+        pg = b.new_page(viewport={"width": 1000, "height": 900})
+        pg.set_content(V.page("incidentdeck", _ops()["incidentdeck"]))
+        pg.wait_for_timeout(400)
+        assert "Future-dated feature" in pg.inner_text(".deckview")
+        pg.click(".dk >> nth=1")
+        pg.click(".deckview .ph.approve")
+        t = pg.inner_text(".deckview")
+        assert "Vendor file truncated" in t and "run_aaaa11" in t.lower() and "Future-dated feature" not in t
     finally:
         b.close()
         p.stop()

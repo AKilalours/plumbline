@@ -8,13 +8,13 @@ caller, which reads it from the warehouse or a saved result, so a test can check
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
 Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace, people, agent,
-lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard, rowflow, proofwall.
+lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard, rowflow, proofwall, reload, incidentdeck.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard", "rowflow", "proofwall")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard", "rowflow", "proofwall", "reload", "incidentdeck")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -135,12 +135,28 @@ pre.code .hl{background:rgba(229,183,77,.25);display:inline-block;width:100%;bor
 .pc .miss{color:var(--red)}.pc .big{font-size:34px;font-weight:300;line-height:1;font-variant-numeric:tabular-nums}
 .vs .b{height:12px;border-radius:6px;background:var(--tint);margin-top:4px}.vs .b i{display:block;height:100%;border-radius:6px;width:0;transition:width 1s cubic-bezier(.2,.7,.2,1)}
 .dt{display:flex;gap:5px;flex-wrap:wrap}.dt i{width:14px;height:14px;border-radius:50%;transform:scale(0);transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+.rl{display:grid;grid-template-columns:140px 1fr;gap:12px;align-items:end;margin-top:16px;padding-bottom:12px;border-bottom:1px dashed #EEE}
+.rl .runs{display:flex;gap:10px;align-items:flex-end;overflow-x:auto;padding:6px 2px}
+.rl .run{display:flex;flex-direction:column;justify-content:flex-end;gap:3px;align-items:center;opacity:.12;transition:opacity .25s;min-width:44px}
+.rl .run.on{opacity:1}.rl .run i{width:40px;height:14px;border-radius:3px;background:#C9CCD6}.rl .run i.real{background:var(--blue)}
+.rl .run i.skip{height:44px;background:repeating-linear-gradient(45deg,var(--gold) 0 4px,#F6E3B0 4px 8px)}
+.rl .run span{font:500 10px 'Geist Mono';color:var(--muted);margin-top:4px}
+.race{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.race>div{border-radius:14px;padding:12px 14px;color:#fff}
+.race .v{font-size:34px;font-weight:300;font-variant-numeric:tabular-nums}
+@media (max-width:560px){.rl{grid-template-columns:1fr}}
+.deck{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.dk{border:1px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;background:#fff;transition:transform .15s,box-shadow .15s,border-color .15s;text-align:left;font:inherit}
+.dk:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(11,16,48,.08)}.dk.on{border-color:var(--blue);box-shadow:0 0 0 3px rgba(41,65,185,.15)}
+.dk .nm{font-weight:600;font-size:14px;margin:6px 0 2px}.dk .dots{display:flex;gap:3px;margin-top:8px}.dk .dots i{width:16px;height:5px;border-radius:3px;background:var(--blue)}
+.dk .dots i.inject{background:var(--red)}.dk .dots i.fix,.dk .dots i.verify{background:var(--green)}
+.deckview{margin-top:14px;border-top:1px dashed var(--line);padding-top:6px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
 _JS = r"""
 const D = JSON.parse(document.getElementById('data').textContent);
 const app = document.getElementById('app');
+window.__D = D; window.__app = app;
 const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const F = {
   int: v => Math.round(v).toLocaleString('en-US'),
@@ -1209,7 +1225,7 @@ R.snapshots = () => {
 
 // One agent-lab incident as phases you step through: what was injected, how it was caught, what a person approved,
 // and the verification. Play walks the phases at their real order; click any phase to open it.
-R.incident = () => {
+R.incident = (D = window.__D, app = window.__app) => {   // data and container can be passed in (incidentdeck)
   const P = D.phases, icon = {inject: '!', detect: '◉', inspect: '⌕', propose: '✎', approve: '✓', fix: '⚒', verify: '✔'};
   const head = document.createElement('div'); head.className = 'row'; head.style.justifyContent = 'space-between';
   const go = document.createElement('button'); go.className = 'btn blue'; go.textContent = '▶ Play the incident';
@@ -1357,6 +1373,55 @@ R.proofwall = () => {
   setTimeout(() => { grid.querySelectorAll('.arc').forEach(a => a.style.strokeDashoffset = a.dataset.to);
     grid.querySelectorAll('.vs i').forEach(b => b.style.width = b.dataset.w + '%');
     grid.querySelectorAll('.dt i').forEach(d => d.style.transform = 'scale(1)'); }, 120);
+};
+
+// A publisher reload, replayed on the real connector (app/kit_demo.py reload_replay): each column is one run,
+// each block a page it read. Grey: the re-stamped block; blue: real changes; gold: the block counted and skipped.
+// Play runs both lanes side by side; the counters race to every real change landed.
+R.reload = () => {
+  const L = D.lanes, N = Math.max(L.skip.length, L.read.length), col = 'var(--blue)';
+  const go = document.createElement('button'); go.className = 'btn blue'; go.textContent = '▶ Play the reload';
+  const race = document.createElement('div'); race.className = 'race';
+  race.innerHTML = `<div style="background:var(--navy)"><div class="mono" style="color:#C9D1F2">Reload skip on · real changes landed</div><div class="v a">0</div><div class="cap s1" style="color:#C9D1F2"></div></div>
+    <div style="background:#7E2414"><div class="mono" style="color:#F3C9C0">Skip off · reads through the block</div><div class="v b">0</div><div class="cap s2" style="color:#F3C9C0"></div></div>`;
+  const lane = (key, title) => { const w = document.createElement('div'); w.className = 'rl';
+    w.innerHTML = `<div><b style="font-size:14px">${title}</b><div class="mono">${L[key].length} run${L[key].length === 1 ? '' : 's'}</div></div><div class="runs">` +
+      L[key].map((r, i) => { const realPages = r.real && (i === 0 || r.real > L[key][i - 1].real) ? Math.max(1, Math.ceil((r.real - (i ? L[key][i - 1].real : 0)) / D.page_size)) : 0;
+        const blocks = r.skipped ? '<i class="real"></i>'.repeat(Math.max(1, r.pages - 1)) + '<i class="skip" title="' + F.int(r.skipped) + ' rows counted and skipped"></i>'
+          : '<i class="real"></i>'.repeat(Math.min(realPages, r.pages)) + '<i></i>'.repeat(Math.max(0, r.pages - realPages));
+        return `<div class="run" data-i="${i}" title="run ${i + 1}: ${r.pages} pages${r.skipped ? ', ' + F.int(r.skipped) + ' skipped' : ''}, ${r.real} of ${D.changes} real changes in">${blocks}
+          <span>run ${i + 1}</span>${r.skipped ? `<span style="color:var(--ink)">${F.int(r.skipped)} skipped</span>` : ''}</div>`; }).join('') + '</div>';
+    return w; };
+  const a = lane('skip', 'Skip on (today)'), b = lane('read', 'Skip off');
+  const note = document.createElement('div'); note.className = 'cap'; note.style.marginTop = '10px';
+  note.innerHTML = `<i style="display:inline-block;width:12px;height:8px;background:#C9CCD6;border-radius:2px"></i> a page of the re-stamped block &nbsp; <i style="display:inline-block;width:12px;height:8px;background:var(--blue);border-radius:2px"></i> real changes &nbsp; <i style="display:inline-block;width:12px;height:8px;background:var(--gold);border-radius:2px"></i> counted and skipped<br>${F.int(D.block)} rows re-stamped at once, then ${D.changes} real changes; ${D.budget} pages of ${D.page_size} a run. NYC's was 803,457 rows at 60 pages a run.`;
+  const top = document.createElement('div'); top.className = 'row'; top.appendChild(go);
+  app.append(top, race, a, b, note);
+  let tok = 0;
+  async function play() { const my = ++tok; [a, b].forEach(x => x.querySelectorAll('.run').forEach(r => r.classList.remove('on')));
+    race.querySelector('.a').textContent = '0'; race.querySelector('.b').textContent = '0'; race.querySelector('.s1').textContent = ''; race.querySelector('.s2').textContent = '';
+    for (let i = 0; i < N; i++) { if (my !== tok) return;
+      [['skip', a, '.a', '.s1'], ['read', b, '.b', '.s2']].forEach(([k, el, v, s]) => { const r = L[k][i]; if (!r) return;
+        el.querySelector(`.run[data-i="${i}"]`).classList.add('on'); race.querySelector(v).textContent = r.real;
+        race.querySelector(s).textContent = r.real === D.changes ? `all in after run ${i + 1}` : r.skipped ? `${F.int(r.skipped)} counted, skipped` : `run ${i + 1}: still in the block`; });
+      await new Promise(r => setTimeout(r, reduce ? 0 : 700)); }
+    if (L.read[L.read.length - 1].real < D.changes) race.querySelector('.s2').textContent = `not all in after ${L.read.length} runs`; }
+  go.onclick = play; play();
+};
+
+// Recent incidents as tiles: status, name, and a strip of its phases. Click one to open its playable phase rail here.
+R.incidentdeck = () => {
+  const deck = document.createElement('div'); deck.className = 'deck';
+  const view = document.createElement('div'); view.className = 'deckview';
+  deck.innerHTML = D.items.map((x, i) => `<button class="dk" data-i="${i}">
+    <span class="pill ${x.status === 'verified' ? 'p-pass' : x.status.includes('fail') ? 'p-fail' : 'p-info'}">${esc(x.status)}</span>
+    <div class="nm">${esc(x.title)}</div><div class="mono">${esc(x.area)} · ${esc(x.id)}</div>
+    <div class="dots">${x.phases.map(p => `<i class="${p.phase}" title="${esc(p.phase)}"></i>`).join('')}</div></button>`).join('');
+  app.append(deck, view);
+  deck.querySelectorAll('.dk').forEach(b => b.onclick = () => {
+    deck.querySelectorAll('.dk').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    view.innerHTML = ''; R.incident(D.items[+b.dataset.i], view); });
+  if (D.items.length) deck.querySelector('.dk').click();
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

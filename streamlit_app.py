@@ -1193,10 +1193,9 @@ def proof_wall():
     from plumbline.app import ops_visuals as OV
     res = Path(__file__).parent / "docs/results"
     load = lambda f: json.loads((res / f).read_text()) if (res / f).exists() else None
-    cards = OV.proof_cards(open_data_runs(), load("postgres_cdc.json"), load("onboarding_engineers.json"), datetime.now(timezone.utc))
-    if cards:
-        st.markdown('<div class="mono">Proof, measured on real feeds · tap a card for how</div>', unsafe_allow_html=True)
-        viz("proofwall", {"cards": cards}, 560)
+    attacks = OV.break_it(open_data_runs(), load("postgres_cdc.json"), load("onboarding_engineers.json"), datetime.now(timezone.utc))
+    if attacks:
+        viz("breakit", {"attacks": attacks}, 640)
 
 
 def overview():
@@ -1211,7 +1210,7 @@ def overview():
         with col.container(key=f"card_{c['id']}"):
             value = num(c["value"]) if isinstance(c["value"], float) else f"{c['value']:,}"
             stat(SHORT[c["id"]], value, CARD_UNIT[c["id"]].format(of=f"{c['of']:,}" if c["of"] else ""), c["status"])
-            with st.popover("Rows", icon=":material/table_rows:", width="stretch"):
+            with st.popover(":material/table_rows:", help="The rows behind this number", width="stretch"):
                 st.markdown(f"**{c['title']}**  \n{c['unit']}. {c['note']}.")
                 ev = c["evidence"].head(500)      # mixed-type columns (a number here, a JSON object there) shown as text
                 st.dataframe(ev.astype({k: str for k in ev.columns[ev.dtypes == object]}), hide_index=True, width="stretch")
@@ -1222,20 +1221,15 @@ def overview():
     st.page_link(PAGES["try"], label="Try it on your own customer files: drop CSVs, watch the rows become customers", icon="📤")
     proof_wall()
     st.write("")
-    left, right = st.columns([3, 2], gap="large")
-    with left:
-        st.markdown('<div class="mono">Incidents · click one to play it</div>', unsafe_allow_html=True)
-        rs = runs_list()
-        if not rs:
-            st.markdown('<p class="note">None open.</p>', unsafe_allow_html=True)
-        else:
-            from plumbline.app import ops_visuals as OV
-            items = [{**OV.incident(r, INCIDENTS[r.scenario][1], SC.RISKS[r.scenario], SC._fmt), "area": INCIDENTS[r.scenario][0]}
-                     for r in rs[:6]]
-            viz("incidentdeck", {"items": items}, 820)
-        st.page_link(PAGES["agent"], label="Open the incident lab", icon="🧪")
-    with right:     # at 1M one wrongly deleted record was measured, then fixed on its saved state (docs/details.md, Scale item 7)
-        viz("sizes", VD.sizes_band(Q.saved_results()["runs"]), 120)
+    rs = runs_list()
+    if rs:
+        from plumbline.app import ops_visuals as OV
+        items = [OV.oncall(r, INCIDENTS[r.scenario][1], INCIDENTS[r.scenario][0], SC.RISKS[r.scenario], SC._fmt) for r in rs[:5]]
+        viz("oncall", {"items": items}, 620)
+    st.page_link(PAGES["agent"], label="Inject your own incident in the lab", icon="🧪")
+    st.write("")
+    # at 1M one wrongly deleted record was measured, then fixed on its saved state (docs/details.md, Scale item 7)
+    viz("sizes", VD.sizes_band(Q.saved_results()["runs"]), 120)
     how("A synthetic city with an answer key the pipeline never sees. The six checks run live on it; the band shows "
         "the same pipeline measured at 20,000 to 1,000,000 people. At 1M, wrongly deleted records went 85 → 1 → 0. "
         f"[Source code]({REPO_URL})")

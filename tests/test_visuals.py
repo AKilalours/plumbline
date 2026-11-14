@@ -36,6 +36,10 @@ def _ops() -> dict:
                      "rowflow": OV.row_flow(_nyc_runs()),
                      "reload": kit_demo.reload_replay(block=600, budget=2, changes=10),
                      "merge": _merge(),
+                     "breakit": {"attacks": OV.break_it(_nyc_runs(), json.loads((ROOT / "docs/results/postgres_cdc.json").read_text()),
+                                                        json.loads((ROOT / "docs/results/onboarding_engineers.json").read_text()),
+                                                        __import__("datetime").datetime(2026, 11, 13, 16, tzinfo=__import__("datetime").timezone.utc))},
+                     "oncall": {"items": [OV.oncall(_run(), "Future-dated feature", "Models", "Covers attributes with a first-seen date.", _fmt())]},
                      "incidentdeck": {"items": [
                          {**OV.incident(_run(), "Future-dated feature", "Covers attributes with a first-seen date.", _fmt()), "area": "Models"},
                          {**OV.incident(_run(), "Vendor file truncated", "A file missing whole rows is held.", _fmt()), "area": "Sources", "id": "run_aaaa11"}]},
@@ -489,6 +493,59 @@ def test_the_merge_stage_settles_finds_a_customer_and_marks_only_the_odd_value()
         pg.fill(".mg-bar input", "wheeler")
         pg.wait_for_timeout(300)
         assert "Sherri Wheeler" in pg.inner_text(".mg-det")
+        assert not errors, errors
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_try_to_break_it_replays_each_attack_and_stamps_what_really_happened():
+    """Each attack plays the recorded answer and is stamped as it went: the crash test held, the reload broke before a
+    fix, the first-day failures are shown as failures."""
+    p, b = _browser()
+    try:
+        pg = b.new_page(viewport={"width": 1000, "height": 900})
+        errors = []
+        pg.on("pageerror", lambda e: errors.append(str(e)))
+        pg.set_content(V.page("breakit", _ops()["breakit"]))
+        # the fixture's runs are days apart, so stale hours really happened in it: shown as BROKE, not smoothed over
+        want = {"cdc": "HELD", "reload": "BROKE · FIXED", "quiet": "HELD", "stale": "BROKE", "fail": "BROKE", "stranger": "HELD"}
+        keys = [a["key"] for a in _ops()["breakit"]["attacks"]]
+        assert keys == list(want)
+        for i, k in enumerate(keys):
+            pg.click(f'.bk-t[data-i="{i}"]')
+            pg.click(".bk-go")
+            pg.wait_for_selector(".bk-stamp.in", timeout=30000)
+            assert pg.inner_text(".bk-stamp").startswith(want[k]), (k, pg.inner_text(".bk-stamp"))
+            if k == "cdc":       # the end state is the recorded Postgres rows against the warehouse's, every one the same
+                assert pg.locator(".cdc tbody tr").count() == 7 and pg.inner_text(".cdc tbody").count("✓ same") == 7
+            if k == "fail":
+                assert pg.locator(".rtrack i.no").count() == 1         # the fixture's one failed run, nothing invented
+        assert pg.inner_text(".bk-board").count("HELD") == 3
+        assert not errors, errors
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_on_call_refuses_the_agent_approving_itself_and_replays_the_recorded_fix():
+    p, b = _browser()
+    try:
+        pg = b.new_page(viewport={"width": 1000, "height": 800})
+        errors = []
+        pg.on("pageerror", lambda e: errors.append(str(e)))
+        pg.set_content(V.page("oncall", _ops()["oncall"]))
+        pg.click(".nt >> nth=0")
+        assert "1,347" in pg.inner_text(".appv")
+        pg.click(".appv .pbtn")
+        pg.click(".appv .pbtn")
+        pg.click(".appv .self")
+        assert "the agent never approves its own work" in pg.inner_text(".refuse")     # scenarios.approve's own words
+        pg.click(".slide span")
+        pg.wait_for_selector("text=Verified", timeout=8000)
+        pg.wait_for_timeout(1200)
+        assert pg.inner_text(".ba0") == "0" and "U0OPS0001" in pg.inner_text(".appv")
+        assert pg.locator(".oc-ev.on").count() == 7
         assert not errors, errors
     finally:
         b.close()

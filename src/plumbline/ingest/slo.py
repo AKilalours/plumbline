@@ -49,6 +49,30 @@ def _budget(good: int, total: int, target: float, elapsed: float) -> dict:
             "status": "met" if good / total >= target else "breached"}
 
 
+def fresh_hours(runs: list[dict], now: datetime, promise_hours: float = 26, window_days: int = 28) -> list[dict]:
+    """Every counted hour of the window: its end, the last successful run before it, that run's age and its measured
+    lag behind the publisher, and whether the hour was fresh. `measure` counts these; the app draws them."""
+    start = now - timedelta(days=window_days)
+    rs = sorted((r for r in runs if _at(r) >= start), key=_at)
+    if not rs:
+        return []
+    began = max(start, _at(rs[0]))
+    oks = [r for r in rs if r.get("ok")]
+    out, j = [], -1
+    for h in range(int((now - began).total_seconds() // 3600)):
+        t = began + timedelta(hours=h + 1)
+        while j + 1 < len(oks) and _at(oks[j + 1]) <= t:
+            j += 1
+        if j < 0:
+            continue                        # before the first success: the feed had not started
+        last = oks[j]
+        age = (t - _at(last)) / timedelta(hours=1)
+        lag = last.get("hours_behind_source") if last.get("source_newest") else None
+        out.append({"t": t.strftime("%Y-%m-%dT%H:%MZ"), "run": last["run_at"], "age": round(age, 1), "lag": lag,
+                    "good": age <= promise_hours and (lag is None or lag <= promise_hours)})
+    return out
+
+
 def measure(runs: list[dict], now: datetime, promise_hours: float = 26, window_days: int = 28) -> dict:
     """{runs, fresh, matches} for one feed's run history, each with its budget."""
     start = now - timedelta(days=window_days)
@@ -60,22 +84,8 @@ def measure(runs: list[dict], now: datetime, promise_hours: float = 26, window_d
 
     out = {"runs": _budget(sum(_ok(r) for r in rs), len(rs), TARGETS["runs"], elapsed)}
 
-    hours = int((now - began).total_seconds() // 3600)
-    oks = [r for r in rs if r.get("ok")]
-    good = counted = 0
-    j = -1
-    for h in range(hours):
-        t = began + timedelta(hours=h + 1)
-        while j + 1 < len(oks) and _at(oks[j + 1]) <= t:
-            j += 1
-        if j < 0:
-            continue                        # before the first success: the feed had not started
-        counted += 1
-        last = oks[j]
-        alive = (t - _at(last)) <= timedelta(hours=promise_hours)
-        lag = last.get("hours_behind_source") if last.get("source_newest") else None
-        good += alive and (lag is None or lag <= promise_hours)
-    out["fresh"] = _budget(good, counted, TARGETS["fresh"], elapsed)
+    hs = fresh_hours(runs, now, promise_hours, window_days)
+    out["fresh"] = _budget(sum(h["good"] for h in hs), len(hs), TARGETS["fresh"], elapsed)
 
     checked = [r["reconcile"] for r in rs if isinstance(r.get("reconcile"), dict) and r["reconcile"].get("checked")]
     out["matches"] = _budget(sum(c["same"] for c in checked), sum(c["checked"] for c in checked), TARGETS["matches"], elapsed)

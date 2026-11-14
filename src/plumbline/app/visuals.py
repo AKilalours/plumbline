@@ -8,13 +8,13 @@ caller, which reads it from the warehouse or a saved result, so a test can check
     page(kind, data) -> one self-contained HTML document (no outside scripts; fonts only)
 
 Kinds: tiles, flow, sizes, worth, scale, game, gate, onboard, history, city, threshold, funnel, waterfall, timeline, trace, people, agent,
-lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard, rowflow, proofwall, reload, incidentdeck, merge.
+lineage, stream, kit, polite, incidents, cost, snapshots, incident, scorecard, rowflow, proofwall, reload, incidentdeck, merge, breakit, oncall.
 """
 from __future__ import annotations
 
 import json
 
-KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard", "rowflow", "proofwall", "reload", "incidentdeck", "merge")
+KINDS = ("tiles", "flow", "sizes", "worth", "scale", "game", "gate", "onboard", "history", "city", "threshold", "funnel", "waterfall", "timeline", "trace", "people", "agent", "lineage", "stream", "kit", "polite", "incidents", "cost", "snapshots", "incident", "scorecard", "rowflow", "proofwall", "reload", "incidentdeck", "merge", "breakit", "oncall")
 
 _CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
@@ -165,6 +165,72 @@ pre.code .hl{background:rgba(229,183,77,.25);display:inline-block;width:100%;bor
 .chipf{font:500 10.5px 'Geist Mono';padding:3px 7px;border-radius:999px}.chipf.agree{background:#E8F5EE;color:#11583A}.chipf.differ{background:#FBEDEA;color:#7E2414}.chipf.missing{background:#F1F2F6;color:var(--muted)}
 .rings{display:flex;gap:14px;align-items:center}
 @media (max-width:640px){.mg-top{grid-template-columns:1fr 1fr}}
+.bk-board{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.bk-t{border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px 10px 9px;text-align:left;cursor:pointer;font:500 13px Geist,sans-serif;color:var(--ink);transition:all .15s;position:relative;min-height:78px}
+.bk-t:hover{border-color:var(--ink);transform:translateY(-2px)}.bk-t.on{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink)}
+.bk-t .ic{font-size:20px;display:block;margin-bottom:4px}.bk-t .st{position:absolute;top:8px;right:8px;font:600 9px 'Geist Mono',monospace;letter-spacing:.05em;padding:2px 6px;border-radius:99px;background:#F2F3F6;color:var(--muted)}
+.bk-t .st.held{background:#E8F5EE;color:var(--green)}.bk-t .st.fixed{background:#FFF4DA;color:#7A5A06}.bk-t .st.broke{background:#FBEDEA;color:var(--red)}
+.bk-stage{border:1px solid var(--line);border-radius:20px;margin-top:10px;padding:18px 20px;position:relative;overflow:hidden;background:#fff;min-height:330px}
+.bk-q{font-size:22px;font-weight:500;letter-spacing:-.01em;max-width:calc(100% - 270px)}
+.bk-go{margin-top:12px;border:0;border-radius:999px;padding:12px 22px;font:700 15px Geist,sans-serif;background:var(--red);color:#fff;cursor:pointer;box-shadow:0 6px 18px rgba(194,65,45,.35);animation:pulse 1.6s ease-in-out infinite}
+.bk-go:disabled{opacity:.45;animation:none;cursor:default}.bk-go:hover:not(:disabled){background:#9E3322}
+@keyframes pulse{0%,100%{box-shadow:0 6px 18px rgba(194,65,45,.35)}50%{box-shadow:0 6px 30px rgba(194,65,45,.7)}}
+.bk-scene{margin-top:16px}
+.bk-stamp{position:absolute;right:22px;top:18px;max-width:240px;border:4px solid currentColor;border-radius:10px;padding:6px 14px;font:800 22px 'Geist Mono',monospace;letter-spacing:.06em;transform:rotate(-8deg) scale(1.6);opacity:0;transition:all .35s cubic-bezier(.3,1.6,.5,1);background:rgba(255,255,255,.9);text-align:center}
+.bk-stamp small{display:block;font:600 10px 'Geist Mono',monospace;letter-spacing:.04em}
+.bk-stamp.in{transform:rotate(-8deg) scale(1);opacity:1}.bk-stamp.held{color:var(--green)}.bk-stamp.fixed{color:var(--amber)}.bk-stamp.broke{color:var(--red)}
+.bk-how{font-size:12px;color:var(--muted);margin-top:12px}.bk-how a{color:var(--blue)}
+.bk-flash{position:absolute;inset:0;background:var(--red);opacity:0;pointer-events:none}.bk-flash.on{animation:flash .6s}@keyframes flash{0%{opacity:.35}100%{opacity:0}}
+.shake{animation:shake .45s}@keyframes shake{20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+.cdc{display:grid;grid-template-columns:1.2fr 1fr;gap:14px}.cdc .log{border:1px solid var(--line);border-radius:12px;padding:8px;max-height:250px;overflow:auto;font:12px 'Geist Mono',monospace}
+.cdc .ln{display:flex;gap:8px;align-items:center;padding:3px 4px;border-radius:6px;animation:rise .25s both}.cdc .ln.again{background:#FFF8E6}
+.op{display:inline-block;min-width:44px;text-align:center;border-radius:5px;font:600 10px 'Geist Mono',monospace;padding:2px 4px;color:#fff}
+.op.r{background:#9AA3C7}.op.c{background:var(--green)}.op.u{background:var(--amber)}.op.d{background:var(--red)}
+.cdc table{width:100%;border-collapse:collapse;font-size:12px}.cdc td,.cdc th{padding:4px 6px;border-bottom:1px solid #F0F0F0;text-align:left}
+.cdc th{font:500 10px 'Geist Mono',monospace;color:var(--muted);text-transform:uppercase}.cdc tr.del td{text-decoration:line-through;color:var(--red)}.cdc tr.new td{background:#E8F5EE}
+.slot{font:12px 'Geist Mono',monospace;margin:8px 0;padding:6px 10px;border-radius:8px;background:var(--tint)}
+.pgs{display:grid;grid-template-columns:150px 1fr 90px;gap:10px;align-items:center;margin:6px 0;font-size:12px}
+.pgs .boxes{display:grid;grid-template-columns:repeat(60,1fr);gap:2px}.pgs .boxes i{height:14px;border-radius:2px;background:#ECEDF2;transition:background .1s}.pgs .boxes i.on{background:var(--red)}.pgs .boxes i.ok{background:var(--green)}
+.pgs .t{font:600 14px 'Geist Mono',monospace;text-align:right}.blk{height:22px;border-radius:6px;background:repeating-linear-gradient(45deg,#D9DCE6 0 6px,#ECEDF2 6px 12px);position:relative;font:500 11px 'Geist Mono',monospace;display:flex;align-items:center;padding:0 8px;color:var(--muted)}
+.blk.skip::after{content:"";position:absolute;left:4px;right:4px;top:50%;height:2px;background:var(--green)}
+.qgrid{display:grid;grid-template-columns:repeat(100,1fr);gap:1px}.qgrid i{aspect-ratio:1;background:#ECEDF2;border-radius:1px}
+.qgrid i.s{background:#BFE3CF}.qgrid i.c{background:var(--red);transform:scale(1.6);box-shadow:0 0 0 1px #fff;z-index:1}.qgrid i.g{background:#555}
+.hrs{display:flex;align-items:flex-end;gap:1px;height:140px;position:relative;border-bottom:1px solid var(--line)}.hrs i{flex:1;background:var(--blue);border-radius:2px 2px 0 0;height:0;transition:height .3s}
+.hrs i.bad{background:var(--red)}.hrs .lim{position:absolute;left:0;right:0;border-top:2px dashed var(--red);font:600 10px 'Geist Mono',monospace;color:var(--red)}
+.rtrack{display:flex;gap:6px;flex-wrap:wrap}.rtrack i{width:22px;height:22px;border-radius:50%;background:#ECEDF2;transition:background .2s,transform .2s;cursor:default}
+.rtrack i.ok{background:var(--green)}.rtrack i.no{background:var(--red);transform:scale(1.25)}
+.eng{display:grid;grid-template-columns:1fr 1fr;gap:12px}.eng .card{padding:14px 16px}.eng .ck{display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 0;opacity:.35;transition:opacity .2s}
+.eng .ck.on{opacity:1}.eng .ck b{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--green);color:#fff;font-size:12px}
+.bk-tip{font:12px Geist,sans-serif;color:var(--muted);margin-top:8px;min-height:18px}
+@media (max-width:760px){.bk-board{grid-template-columns:repeat(3,1fr)}.cdc,.eng{grid-template-columns:1fr}.bk-q{max-width:100%;font-size:18px}.bk-stamp{position:static;display:inline-block;margin-top:10px}.pgs{grid-template-columns:100px 1fr 70px}}
+.oc{display:grid;grid-template-columns:300px 1fr;gap:26px;align-items:start}
+.oc-ph{width:290px;height:590px;border-radius:44px;background:#0B0D14;padding:12px;box-shadow:0 18px 50px rgba(17,25,111,.25);position:relative}
+.oc-ph.buzz{animation:buzz .5s 2}@keyframes buzz{25%{transform:rotate(-3deg)}75%{transform:rotate(3deg)}}
+.oc-ph .scr{width:100%;height:100%;border-radius:34px;overflow:hidden;position:relative;background:linear-gradient(160deg,#1B2A8C,#11196F 55%,#2941B9);color:#fff}
+.oc-ph .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:90px;height:24px;border-radius:14px;background:#0B0D14;z-index:3}
+.lock{padding:52px 14px 14px;height:100%;overflow:auto}.lock .clk{text-align:center;font-size:56px;font-weight:300;letter-spacing:-.02em}.lock .oc-dt{text-align:center;font-size:13px;opacity:.8;margin-bottom:18px}
+.nt{background:rgba(255,255,255,.16);backdrop-filter:blur(8px);border-radius:16px;padding:10px 12px;margin-bottom:8px;cursor:pointer;animation:drop .45s cubic-bezier(.3,1.4,.5,1) both;transition:background .15s;border:0;width:100%;text-align:left;color:#fff;font:13px Geist,sans-serif}
+.nt:hover{background:rgba(255,255,255,.28)}@keyframes drop{from{opacity:0;transform:translateY(-30px) scale(.95)}to{opacity:1;transform:none}}
+.nt .ap{display:flex;gap:6px;align-items:center;font:600 10px 'Geist Mono',monospace;opacity:.8;margin-bottom:3px}.nt .ap i{width:16px;height:16px;border-radius:5px;background:var(--gold);display:inline-block}
+.nt b{display:block;font-size:14px}.nt .n{color:#FFB4A6;font-weight:600}
+.appv{position:absolute;inset:0;background:#fff;color:var(--ink);padding:46px 16px 16px;display:flex;flex-direction:column;animation:slidein .3s both}@keyframes slidein{from{transform:translateY(100%)}to{transform:none}}
+.appv .bk{font:500 13px Geist,sans-serif;color:var(--blue);background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.appv h3{margin:6px 0 2px;font-size:18px;font-weight:600}.appv .body{flex:1;overflow:auto;margin-top:8px}
+.big-n{font-size:46px;font-weight:300;color:var(--red);line-height:1;margin-top:8px;font-variant-numeric:tabular-nums}.big-n.ok{color:var(--green)}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:6px 0;border-bottom:1px solid #F0F0F0}.kv b{font:500 10px 'Geist Mono',monospace;color:var(--muted);text-transform:uppercase;padding-top:2px}.kv span{text-align:right;overflow-wrap:anywhere}
+.pbtn{width:100%;border-radius:14px;border:0;padding:12px;font:600 14px Geist,sans-serif;background:var(--blue);color:#fff;cursor:pointer;margin-top:8px}.pbtn.ghost{background:#F2F3F6;color:var(--ink)}
+.slide{position:relative;height:52px;border-radius:26px;background:#E8F5EE;margin-top:10px;overflow:hidden;user-select:none;touch-action:none}
+.slide span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:600 13px Geist,sans-serif;color:var(--green)}
+.slide .kn{position:absolute;left:4px;top:4px;width:44px;height:44px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:grab;transition:left .25s}
+.slide .kn.drag{transition:none}
+.refuse{color:var(--red);font-size:12px;margin-top:6px;min-height:16px}
+.spin{width:34px;height:34px;border:4px solid #E6E6E6;border-top-color:var(--blue);border-radius:50%;animation:sp 0.8s linear infinite;margin:14px auto}@keyframes sp{to{transform:rotate(360deg)}}
+.oc-tl{border-left:2px solid var(--line);margin-left:8px;padding-left:18px}
+.oc-ev{position:relative;padding:6px 0 10px;opacity:.35;transition:opacity .3s}.oc-ev.on{opacity:1}
+.oc-ev::before{content:"";position:absolute;left:-25px;top:10px;width:12px;height:12px;border-radius:50%;background:#C9CCD6;border:2px solid #fff;box-shadow:0 0 0 2px #C9CCD6}
+.oc-ev.on::before{background:var(--blue);box-shadow:0 0 0 2px var(--blue)}.oc-ev.on.verify::before{background:var(--green);box-shadow:0 0 0 2px var(--green)}.oc-ev.on.detect::before{background:var(--red);box-shadow:0 0 0 2px var(--red)}
+.oc-ev .l{font-size:14px;font-weight:500}.oc-ev .d{font-size:12px;color:var(--muted)}.oc-ev .m{font:500 10px 'Geist Mono',monospace;color:var(--muted)}
+@media (max-width:700px){.oc{grid-template-columns:1fr}.oc-ph{margin:0 auto}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -1551,6 +1617,262 @@ R.merge = () => {
   go.onclick = play;
   layout(); draw(); play();
   let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { layout(); draw(); }, 120); });
+};
+
+// "Try to break it": six attacks a reviewer would try, each answered by what was really recorded (ops_visuals.break_it).
+// Pick an attack, press the red button, watch the recorded answer replay, and the verdict is stamped as it really was:
+// HELD, BROKE THEN FIXED, or BROKE.
+R.breakit = () => {
+  const A = D.attacks, wait = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
+  const board = document.createElement('div'); board.className = 'bk-board';
+  const stage = document.createElement('div'); stage.className = 'bk-stage';
+  const head = document.createElement('div'); head.className = 'mono'; head.style.marginBottom = '8px';
+  app.append(head, board, stage);
+  const tried = {};
+  const verdict = a => a.held === true ? ['held', 'HELD'] : a.held === 'fixed' ? ['fixed', 'BROKE · FIXED'] : ['broke', 'BROKE'];
+  const score = () => { const v = Object.values(tried); head.textContent = `Try to break it · ${A.length} attacks · tried ${v.length}` +
+    (v.length ? ` · held ${v.filter(x => x === 'held').length} · broke ${v.length - v.filter(x => x === 'held').length}, shown below` : ''); };
+  board.innerHTML = A.map((a, i) => `<button class="bk-t" data-i="${i}"><span class="ic">${a.icon}</span>${esc(a.attack)}<span class="st">?</span></button>`).join('');
+  let run = 0;
+  const pick = i => {
+    run++; const a = A[i], me = run;
+    board.querySelectorAll('.bk-t').forEach(b => b.classList.toggle('on', +b.dataset.i === i));
+    stage.innerHTML = `<div class="bk-flash"></div><div class="bk-q">${esc(a.question)}</div>
+      <button class="bk-go">${a.icon} ${esc(a.attack)}</button><div class="bk-scene"></div><div class="bk-tip"></div>
+      <div class="bk-stamp"></div><div class="bk-how">Recorded, not simulated · <a href="${a.href}" target="_blank">how it was measured</a></div>`;
+    const sc = stage.querySelector('.bk-scene'), go = stage.querySelector('.bk-go'), tip = stage.querySelector('.bk-tip');
+    const alive = () => me === run;
+    SC[a.key].ready(a, sc);
+    go.onclick = async () => {
+      go.disabled = true;
+      const sub = await SC[a.key].play(a, sc, { alive, wait, tip, flash: () => { const f = stage.querySelector('.bk-flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); stage.classList.add('shake'); setTimeout(() => stage.classList.remove('shake'), 500); } });
+      if (!alive()) return;
+      const [cls, word] = verdict(a), s = stage.querySelector('.bk-stamp');
+      s.className = 'bk-stamp ' + cls; s.innerHTML = `${word}<small>${esc(sub || '')}</small>`; requestAnimationFrame(() => s.classList.add('in'));
+      tried[a.key] = cls; const t = board.querySelector(`.bk-t[data-i="${i}"] .st`); t.className = 'st ' + cls; t.textContent = word;
+      score(); go.disabled = false; go.textContent = '↻ Again';
+    };
+  };
+  const SC = {
+    cdc: {
+      ready(a, sc) {
+        sc.innerHTML = `<div class="cdc"><div><div class="mono">Postgres ${esc(a.postgres)} · change stream</div><div class="slot">slot at ${esc(a.slot)}</div><div class="log"></div></div>
+          <div><div class="mono">warehouse</div><table><thead><tr><th>table</th><th>id</th><th>value</th></tr></thead><tbody></tbody></table></div></div>`;
+      },
+      async play(a, sc, k) {
+        this.ready(a, sc);
+        const log = sc.querySelector('.log'), tb = sc.querySelector('tbody'), slot = sc.querySelector('.slot'), wh = new Map();
+        const line = (c, again) => { const d = document.createElement('div'); d.className = 'ln' + (again ? ' again' : '');
+          d.innerHTML = `<span class="op ${c.op}">${{ r: 'copy', c: 'insert', u: 'update', d: 'delete' }[c.op]}</span>${esc(c.table)} ${c.id}${c.v ? ' → ' + esc(c.v) : ''}<span style="margin-left:auto;color:var(--muted)">${again ? 'again' : esc(c.lsn)}</span>`;
+          log.appendChild(d); log.scrollTop = log.scrollHeight; };
+        const draw = (hl) => { tb.innerHTML = [...wh.entries()].map(([key, v]) => `<tr class="${v.gone ? 'del' : key === hl ? 'new' : ''}"><td>${esc(v.table)}</td><td>${v.id}</td><td>${esc(v.v ?? '')}</td></tr>`).join(''); };
+        const apply = c => { const key = c.table + c.id;
+          if (c.op === 'd') { if (wh.has(key)) wh.get(key).gone = true; }
+          else wh.set(key, { table: c.table, id: c.id, v: c.v, gone: false }); draw(key); };
+        for (const c of a.changes) { if (!k.alive()) return; line(c); apply(c); await k.wait(c.op === 'r' ? 120 : 330); }
+        k.tip.textContent = `${a.read_again} changes in ${a.transactions} transactions read. Now the crash, before the slot confirms them.`;
+        await k.wait(500); if (!k.alive()) return; k.flash();
+        slot.innerHTML = `💥 crash · slot still at ${esc(a.slot)}: Postgres will send them again`; slot.style.background = '#FBEDEA';
+        await k.wait(900);
+        const again = a.changes.filter(c => c.op !== 'r').slice(-a.read_again);
+        for (const c of again) { if (!k.alive()) return; line(c, true); apply(c); await k.wait(150); }
+        slot.innerHTML = `↻ restarted · ${a.read_again} changes read again · 0 doubled`; slot.style.background = '#E8F5EE';
+        await k.wait(500);
+        const rows = t => (a.database[t] || []).map((r, i) => { const w = (a.warehouse[t] || [])[i] || [], same = JSON.stringify(r) === JSON.stringify(w);
+          return `<tr><td>${esc(t)}</td><td>${esc(r.slice(1).join(' · '))}</td><td style="color:${same ? 'var(--green)' : 'var(--red)'}">${same ? '✓ same' : '✗ differs'}</td></tr>`; }).join('');
+        tb.parentElement.querySelector('thead').innerHTML = '<tr><th>table</th><th>Postgres row</th><th>warehouse</th></tr>';
+        tb.innerHTML = rows('customers') + rows('orders');
+        const n = Object.values(a.database).reduce((s, v) => s + v.length, 0);
+        k.tip.textContent = `Postgres now holds ${n} rows; each is compared with the warehouse, value by value.`;
+        return `${n} of ${n} rows · ${a.verdict}`;
+      }
+    },
+    reload: {
+      ready(a, sc) {
+        sc.innerHTML = `<div class="mono">NYC re-stamped ${F.int(a.block)} rows with one time (${esc(a.stamp.slice(0, 16).replace('T', ' '))})</div>
+          <div class="mono" style="margin-top:12px">before the fix · every run re-read the same 60 pages</div>
+          ${a.before.map((r, i) => `<div class="pgs b${i}"><span>${esc(r.t.slice(5, 16).replace('T', ' '))}</span><div class="boxes">${'<i></i>'.repeat(r.pages)}</div><span class="t">0 s</span></div>`).join('')}
+          <div class="mono" style="margin-top:14px">after the fix · the block counted with one query, then passed</div>
+          <div class="pgs aft"><span>${esc(a.after.t.slice(5, 16).replace('T', ' '))}</span><div><div class="blk">${F.int(a.block)} re-stamped rows</div><div class="boxes" style="margin-top:4px">${'<i></i>'.repeat(a.after.pages)}</div></div><span class="t">0 s</span></div>`;
+      },
+      async play(a, sc, k) {
+        this.ready(a, sc);
+        const runRow = async (el, r, cls) => { const bx = el.querySelectorAll('.boxes i'), t = el.querySelector('.t'), dur = Math.min(1700, 250 + r.seconds * 1.6);
+          const t0 = performance.now();
+          await new Promise(res => { const step = now => { if (!k.alive()) return res(); const p = reduce ? 1 : Math.min(1, (now - t0) / dur);
+            bx.forEach((b, i) => b.classList.toggle(cls, i < Math.round(p * bx.length))); t.textContent = Math.round(p * r.seconds) + ' s';
+            p < 1 ? requestAnimationFrame(step) : res(); }; requestAnimationFrame(step); }); };
+        for (let i = 0; i < a.before.length; i++) { if (!k.alive()) return; await runRow(sc.querySelector('.b' + i), a.before[i], 'on');
+          k.tip.textContent = `Run ${i + 1}: ${a.before[i].pages} pages, ${F.int(a.before[i].seconds)} s, and the next run starts at the same place.`; await k.wait(200); }
+        if (!k.alive()) return; k.flash(); await k.wait(600);
+        sc.querySelector('.aft .blk').classList.add('skip'); await k.wait(500);
+        await runRow(sc.querySelector('.aft'), a.after, 'ok');
+        const avg = a.before.reduce((s, r) => s + r.seconds, 0) / a.before.length;
+        k.tip.textContent = `It broke for ${a.before.length} runs. The fix landed ${F.int(a.after.rows)} real changes in ${a.after.seconds} s.`;
+        return `${F.int(avg)} s → ${F.int(a.after.seconds)} s a run`;
+      }
+    },
+    quiet: {
+      ready(a, sc, i) {
+        i = i ?? a.slices.length - 1; this.i = i; const s = a.slices[i];
+        sc.innerHTML = `<div class="row" style="gap:6px;margin-bottom:10px">${a.slices.map((x, j) => `<button class="btn${j === i ? ' blue' : ''}" data-j="${j}" style="padding:4px 10px;font-size:11px">${esc(x.t.slice(5, 16).replace('T', ' '))}</button>`).join('')}</div>
+          <div class="mono">${F.int(s.checked)} rows we hold, asked for again by id · run ${esc(s.t.slice(0, 16).replace('T', ' '))}</div><div class="qgrid" style="margin-top:6px">${'<i></i>'.repeat(s.checked)}</div>`;
+        sc.querySelectorAll('button[data-j]').forEach(b => b.onclick = () => { this.ready(a, sc, +b.dataset.j); });
+      },
+      async play(a, sc, k) {
+        this.ready(a, sc, this.i); const s = a.slices[this.i], cells = [...sc.querySelectorAll('.qgrid i')];
+        // which slots light up is layout only; the counts are the run's own
+        const order = cells.map((_, j) => j).sort((x, y) => (((x + 977) * 7919) % 2003) - (((y + 977) * 7919) % 2003));
+        const changed = new Set(order.slice(0, s.changed)), gone = new Set(order.slice(s.changed, s.changed + s.gone));
+        for (let j = 0; j < cells.length; j += 40) { if (!k.alive()) return;
+          for (let q = j; q < Math.min(cells.length, j + 40); q++) cells[q].className = changed.has(q) ? 'c' : gone.has(q) ? 'g' : 's';
+          if ([...changed].some(q => q >= j && q < j + 40)) k.flash(); await k.wait(28); }
+        const T = a.slices.reduce((o, x) => ({ c: o.c + x.checked, ch: o.ch + x.changed, g: o.g + x.gone }), { c: 0, ch: 0, g: 0 });
+        const same = (T.c - T.ch - T.g) / T.c;
+        k.tip.innerHTML = `This run: <b style="color:var(--red)">${s.changed} changed</b> (${esc(Object.keys(s.fields).join(', ').replace(/_/g, ' ') || 'fields')}) landed again · <b>${s.gone} gone</b> at NYC, reported. ` +
+          `All ${a.slices.length} runs: ${F.int(T.ch)} caught. Rows that still matched: ${(same * 100).toFixed(1)}%, under the 99.5% target.`;
+        return `${F.int(T.ch)} quiet edits caught · match target missed`;
+      }
+    },
+    stale: {
+      ready(a, sc) {
+        const mx = Math.max(a.promise * 1.15, ...a.hours.map(h => h.age));
+        sc.innerHTML = `<div class="mono">${a.hours.length} hours · bar = hours since the last good run</div>
+          <div class="hrs">${a.hours.map(h => `<i class="${h.good ? '' : 'bad'}" data-h="${h.age / mx * 100}"></i>`).join('')}
+          <div class="lim" style="bottom:${a.promise / mx * 100}%">${a.promise} h promise</div></div>`;
+        const hs = sc.querySelectorAll('.hrs i'), tip = stage.querySelector('.bk-tip');
+        hs.forEach((el, i) => el.onmouseenter = () => { const h = a.hours[i]; tip.textContent = `${h.t.replace('T', ' ')} · last good run ${h.run.slice(5, 16).replace('T', ' ')} · ${h.age} h ago` + (h.lag != null ? ` · ${h.lag} h behind NYC` : ''); });
+      },
+      async play(a, sc, k) {
+        this.ready(a, sc); const hs = sc.querySelectorAll('.hrs i');
+        for (let i = 0; i < hs.length; i += 6) { if (!k.alive()) return; for (let j = i; j < Math.min(hs.length, i + 6); j++) hs[j].style.height = hs[j].dataset.h + '%'; await k.wait(22); }
+        const worst = a.hours.reduce((m, h) => h.age > m.age ? h : m), bad = a.hours.filter(h => !h.good).length;
+        if (bad) k.flash();
+        k.tip.textContent = `Worst hour: ${worst.age} h since a good run (${worst.t.replace('T', ' ')}). Hover any bar.`;
+        return `${a.hours.length - bad} of ${a.hours.length} hours fresh · worst ${worst.age} h`;
+      }
+    },
+    fail: {
+      ready(a, sc) {
+        sc.innerHTML = `<div class="mono">every NYC run since the feed began</div><div class="rtrack" style="margin-top:8px">${a.runs.map(() => '<i></i>').join('')}</div>
+          <div class="row" style="margin-top:14px;gap:28px"><div><div class="mono">since the last failure</div><div class="big-n ok streak" style="font-size:40px">0</div></div>
+          <div><div class="mono">succeeded</div><div class="big-n ok rate" style="font-size:40px;color:var(--ink)">0</div></div></div>`;
+        const dots = sc.querySelectorAll('.rtrack i'), tip = stage.querySelector('.bk-tip');
+        dots.forEach((el, i) => el.onmouseenter = () => { const r = a.runs[i]; tip.textContent = `${r.t.replace('T', ' ').slice(0, 16)} · ${r.ok ? 'ok' : 'FAILED'} · ${r.seconds} s · ${F.int(r.rows)} rows` + (r.error ? ' · ' + r.error : ''); });
+      },
+      async play(a, sc, k) {
+        this.ready(a, sc); const dots = sc.querySelectorAll('.rtrack i'), st = sc.querySelector('.streak'), rt = sc.querySelector('.rate');
+        let streak = 0, ok = 0;
+        for (let i = 0; i < a.runs.length; i++) { if (!k.alive()) return; const r = a.runs[i];
+          dots[i].className = r.ok ? 'ok' : 'no'; if (r.ok) { streak++; ok++; } else { streak = 0; k.flash(); k.tip.textContent = `${r.t.slice(0, 16).replace('T', ' ')}: ${r.error || 'failed'}`; await k.wait(700); }
+          st.textContent = streak; rt.textContent = `${ok} of ${i + 1}`; await k.wait(90); }
+        const bad = a.runs.length - ok;
+        if (!bad) return `${ok} of ${ok} runs`;
+        k.tip.textContent = `${bad} failed on the first day (an unpinned DuckDB). Fixed with a pin and a test; ${streak} in a row since. The ${Math.round(a.target * 100)}% target is missed: the budget is spent.`;
+        return `${bad} failed · ${streak} in a row since`;
+      }
+    },
+    stranger: {
+      ready(a, sc) {
+        sc.innerHTML = `<div class="eng">${a.engineers.map((e, i) => `<div class="card e${i}"><div class="mono">${esc(e.who)}</div>
+          <div style="font-size:17px;font-weight:600;margin:4px 0">${esc(e.source)}</div><div class="big-n ok mins" style="font-size:34px;color:var(--ink)">0 min</div>
+          ${a.checks.map((c, j) => `<div class="ck c${j}"><b>${e.verify[j] ? '✓' : '✗'}</b>${esc(c)}</div>`).join('')}<div class="cap">${esc(e.guide)}</div></div>`).join('')}</div>
+          <div class="cap">${esc(a.note)}</div>`;
+      },
+      async play(a, sc, k) {
+        this.ready(a, sc); let n = 0, all = 0;
+        for (let i = 0; i < a.engineers.length; i++) { const e = a.engineers[i], card = sc.querySelector('.e' + i);
+          const m = card.querySelector('.mins'); count(m, e.minutes, 'int'); setTimeout(() => m.textContent = e.minutes + ' min', reduce ? 0 : 900); await k.wait(300);
+          for (let j = 0; j < a.checks.length; j++) { if (!k.alive()) return; card.querySelector('.c' + j).classList.add('on'); n += e.verify[j] ? 1 : 0; all++; await k.wait(280); } }
+        return `${n} of ${all} verify checks passed`;
+      }
+    }
+  };
+  board.querySelectorAll('.bk-t').forEach(b => b.onclick = () => pick(+b.dataset.i));
+  score(); if (A.length) pick(0);
+};
+
+// "You are on call": a recorded incident arrives on a phone. Open it, read the evidence, try letting the agent approve
+// its own fix (refused, by the real rule), slide to approve, and watch the recorded fix and verification replay.
+R.oncall = () => {
+  const I = D.items, wait = ms => new Promise(r => setTimeout(r, reduce ? 0 : ms));
+  const wrap = document.createElement('div'); wrap.className = 'oc';
+  wrap.innerHTML = `<div class="oc-ph"><div class="notch"></div><div class="scr"></div></div><div class="side"></div>`;
+  app.appendChild(wrap);
+  const ph = wrap.querySelector('.oc-ph'), scr = wrap.querySelector('.scr'), side = wrap.querySelector('.side');
+  const hm = s => { const d = new Date(s); return isNaN(d) ? '' : d.toISOString().slice(11, 16); };
+  const head = x => x.headline ? `<span class="n">${F.int(x.headline.v)}</span> ${esc(x.headline.k)}` : esc(x.status);
+  let token = 0;
+  function lock() {
+    token++; const first = I[0];
+    scr.innerHTML = `<div class="lock"><div class="clk">${hm(first.opened)}</div><div class="oc-dt">${esc(String(first.opened).slice(0, 10))} · UTC</div>
+      ${I.map((x, i) => `<button class="nt" data-i="${i}" style="animation-delay:${i * 260}ms"><div class="ap"><i></i>PLUMBLINE · ${esc(x.area)}</div><b>${esc(x.title)}</b>${head(x)}</button>`).join('')}
+      <div style="text-align:center;font-size:11px;opacity:.7;margin-top:10px">tap an alert</div></div>`;
+    scr.querySelectorAll('.nt').forEach(b => b.onclick = () => open(+b.dataset.i));
+    ph.classList.remove('buzz'); void ph.offsetWidth; ph.classList.add('buzz');
+    side.innerHTML = `<div class="mono">You are on call</div><div style="font-size:22px;font-weight:500;margin:6px 0 10px">${I.length} alert${I.length > 1 ? 's' : ''} on your phone.</div>
+      <div class="cap">Each is a recorded incident from the incident lab. Open one.</div>`;
+  }
+  function timeline(x, upto) {
+    const ph_ = x.phases.map(p => p.phase), at = upto < 0 ? -1 : upto;
+    side.innerHTML = `<div class="mono">Replay of ${esc(x.id)} · ${esc(String(x.opened).slice(0, 16).replace('T', ' '))} UTC</div>
+      <div style="font-size:20px;font-weight:500;margin:6px 0 12px">${esc(x.title)}</div><div class="oc-tl">${x.phases.map((p, i) =>
+      `<div class="oc-ev ${esc(p.phase)} ${i <= at ? 'on' : ''}"><div class="m">${esc(p.phase)} · ${esc(p.at)} · ${p.seconds.toFixed(2)} s</div><div class="l">${esc(p.label)}</div><div class="d">${esc(p.detail)}</div></div>`).join('')}</div>
+      <div class="cap" style="margin-top:10px">${esc(x.risk)}</div>`;
+    return ph_;
+  }
+  const upTo = (x, phase) => { let j = -1; x.phases.forEach((p, i) => { if (p.phase === phase) j = i; }); return j; };
+  function open(i) {
+    const x = I[i], me = ++token;
+    const screen = (title, body) => { scr.innerHTML = `<div class="appv"><button class="bk">‹ Alerts</button><div class="mono" style="margin-top:6px">${esc(x.area)} · ${esc(x.id)}</div><h3>${esc(title)}</h3><div class="body">${body}</div></div>`;
+      scr.querySelector('.bk').onclick = lock; return scr.querySelector('.body'); };
+    const kvs = l => l.map(k => `<div class="kv"><b>${esc(k.k)}</b><span>${esc(k.v)}</span></div>`).join('');
+    // 1. the alert
+    timeline(x, Math.max(upTo(x, 'detect'), upTo(x, 'inspect')));
+    let b = screen(x.title, `${x.headline ? `<div class="big-n">${F.int(x.headline.v)}</div><div class="mono">${esc(x.headline.k)}</div>` : ''}
+      <div style="margin-top:10px">${kvs(x.found)}</div><button class="pbtn">See the evidence ›</button>`);
+    b.querySelector('.pbtn').onclick = () => {
+      // 2. the evidence
+      b = screen('Evidence', `${kvs(x.evidence)}<button class="pbtn">What is the fix? ›</button>`);
+      b.querySelector('.pbtn').onclick = () => {
+        // 3. the fix, waiting for a person
+        timeline(x, upTo(x, 'propose'));
+        const p = x.proposal;
+        if (!p) { screen('No fix proposed', `<div class="cap">Status: ${esc(x.status)}. Open it in the incident lab.</div>`); return; }
+        b = screen('Proposed fix', `<div style="font-size:15px;font-weight:500">${esc(p.summary)}</div>
+          <div class="cap">by ${esc(p.by)} · needs a person with the <b>${esc(p.role)}</b> role</div>
+          <button class="pbtn ghost self">Let the agent approve itself</button><div class="refuse"></div>
+          ${x.approval ? `<div class="slide"><span>slide to approve ›››</span><div class="kn">✓</div></div>` : `<div class="cap">Not approved yet: open the incident lab to approve it.</div>`}`);
+        b.querySelector('.self').onclick = () => { const r = b.querySelector('.refuse'); r.textContent = x.refusal ? 'Refused: ' + x.refusal : 'Refused.';
+          ph.classList.remove('buzz'); void ph.offsetWidth; ph.classList.add('buzz'); };
+        const sl = b.querySelector('.slide'); if (!sl) return;
+        const kn = sl.querySelector('.kn'); let sx = null, dx = 0;
+        const max = () => sl.clientWidth - kn.offsetWidth - 8;
+        const done = () => { kn.style.left = (max() + 4) + 'px'; fix(); };
+        kn.addEventListener('pointerdown', e => { sx = e.clientX; kn.classList.add('drag'); kn.setPointerCapture(e.pointerId); });
+        kn.addEventListener('pointermove', e => { if (sx === null) return; dx = Math.max(0, Math.min(max(), e.clientX - sx)); kn.style.left = (4 + dx) + 'px'; });
+        kn.addEventListener('pointerup', () => { kn.classList.remove('drag'); sx = null; if (dx > max() * .8) done(); else { dx = 0; kn.style.left = '4px'; } });
+        sl.addEventListener('click', e => { if (e.target === sl || e.target.tagName === 'SPAN') done(); });
+      };
+    };
+    async function fix() {
+      // 4. the recorded fix and verification
+      timeline(x, upTo(x, 'approve'));
+      const fixp = x.phases.find(p => p.phase === 'fix');
+      b = screen('Applying the fix', `<div class="spin"></div><div class="cap" style="text-align:center">${esc(fixp ? fixp.label : 'Fixing')}<br>${fixp ? fixp.seconds.toFixed(2) + ' s recorded' : ''}</div>`);
+      await wait(Math.min(2200, 600 + (fixp ? fixp.seconds * 180 : 0))); if (me !== token) return;
+      timeline(x, x.phases.length - 1);
+      const ok = x.status === 'verified';
+      b = screen(ok ? 'Verified' : 'Verification failed', `${x.before_after.map((r, j) => `<div class="mono" style="margin-top:8px">${esc(r.k)}</div>
+          <div class="row" style="gap:10px"><span class="big-n" style="font-size:28px;color:var(--muted);text-decoration:line-through">${F.int(r.before)}</span><span>→</span><span class="big-n ${ok ? 'ok' : ''} ba${j}">${F.int(r.before)}</span></div>`).join('')}
+        <div style="margin-top:10px">${kvs(x.checks)}</div>
+        <div class="cap" style="margin-top:10px">Recorded: approved by ${esc(x.approval.by)} at ${esc(hm(x.approval.at))} UTC · key ${esc(x.approval.key)}</div>
+        <button class="pbtn ghost">‹ Back to alerts</button>`);
+      x.before_after.forEach((r, j) => count(b.querySelector('.ba' + j), r.after, 'int', r.before));
+      b.querySelector('.pbtn').onclick = lock;
+    }
+  }
+  lock();
 };
 
 (R[D.kind] || (() => app.textContent = 'unknown visual'))();

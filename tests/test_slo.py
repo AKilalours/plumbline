@@ -50,3 +50,15 @@ def test_burn_compares_budget_spent_with_window_gone():
     m = measure(rs, NOW)["runs"]
     assert m["total"] == 85 and abs(m["budget_spent"] - 1 / (0.05 * 85)) < 1e-3
     assert m["burn"] == round(m["budget_spent"] / (167.5 / 24 / 28), 2)
+
+
+def test_the_hour_list_the_app_draws_is_what_the_slo_counts():
+    """fresh_hours was pulled out of measure so the app can draw every hour; both must count the same hours."""
+    from datetime import datetime, timezone
+    from plumbline.ingest.slo import fresh_hours, measure
+    runs = [{"run_at": "2026-11-07T03:00:00Z", "ok": True}, {"run_at": "2026-11-07T09:00:00Z", "ok": False},
+            {"run_at": "2026-11-09T12:00:00Z", "ok": True, "source_newest": "x", "hours_behind_source": 30}]
+    now = datetime(2026, 11, 10, tzinfo=timezone.utc)
+    hs, m = fresh_hours(runs, now), measure(runs, now)["fresh"]
+    assert len(hs) == m["total"] and sum(h["good"] for h in hs) == m["good"]
+    assert any(not h["good"] for h in hs) and hs[-1]["lag"] == 30

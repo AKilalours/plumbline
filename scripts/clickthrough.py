@@ -196,9 +196,18 @@ def run(url: str, width: int = 1400) -> tuple[list[str], int]:
         return w.problems, w.steps
 
 
-def deployed_version(url: str, expect: str, wait_minutes: float) -> str | None:
+def _outer(url: str) -> str:
+    """The app's own address, without Streamlit's inner path: https://x.streamlit.app/~/+/ -> https://x.streamlit.app/"""
+    return url.split("/~/+")[0].rstrip("/") + "/"
+
+
+def deployed_version(url: str, expect: str, wait_minutes: float, *, page_timeout_s: float = 300, poll_s: float = 60) -> str | None:
     """Wait until the app at url reports the code fingerprint `expect` in its footer. Returns None when it does,
-    otherwise what it reports: a stale deploy fails the check instead of passing on old code."""
+    otherwise what it reports: a stale deploy fails the check instead of passing on old code.
+
+    Each try first opens the app's outer page. Streamlit wakes a sleeping app only from there ("Your app is waking
+    up!"); the inner /~/+/ address of a sleeping app never answers. Opening only the inner address kept the check
+    waiting 20 minutes on 2026-11-16 (live app run #44) while one visit to the outer page woke it in 90 seconds."""
     import time
     from playwright.sync_api import sync_playwright
     seen, deadline = None, time.time() + wait_minutes * 60
@@ -206,22 +215,28 @@ def deployed_version(url: str, expect: str, wait_minutes: float) -> str | None:
         b = pw.chromium.launch()
         page = b.new_page(viewport={"width": 1200, "height": 900})
         while True:
+            said = ""
             try:
-                page.goto(url)
+                page.goto(_outer(url))
                 wake = page.get_by_role("button", name=re.compile("get this app back up", re.I))
                 try:
                     wake.click(timeout=10_000)
                 except Exception:
                     pass
-                page.wait_for_selector("text=Built by", timeout=300_000)
+                page.goto(url)
+                page.wait_for_selector("text=Built by", timeout=page_timeout_s * 1000)
                 m = re.search(r"code ([0-9a-f]{10}|unknown)", page.locator("body").inner_text())
                 seen = m.group(1) if m else "no fingerprint shown"
             except Exception as e:                          # a redeploying app may not answer for a while
-                seen = f"not reachable ({type(e).__name__})"
+                try:
+                    said = " ".join(page.locator("body").inner_text(timeout=5_000).split())[:160]
+                except Exception:
+                    pass
+                seen = f"not reachable ({type(e).__name__}); the page said: {said or 'nothing'}"
             if seen == expect or time.time() > deadline:
                 break
             print(f"deployed app runs {seen}, waiting for {expect}", flush=True)
-            time.sleep(60)
+            time.sleep(poll_s)
         b.close()
     return None if seen == expect else seen
 

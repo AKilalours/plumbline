@@ -719,8 +719,8 @@ that names an unknown tool, has no owner, or no eval file is refused at load.
 | Answered right, with the right source | 19 of 25 (dev half), **19 of 24 (test half)**; the refusal threshold (0.45) was chosen on the dev half only, and is re-tuned only when another beats it there by more than one question |
 | Refused when the documents have no answer | 8 of 9 (dev), **8 of 9 (test)**: an "AWS account" question and "which Slack channel for incidents" each share enough words with a section to get through (the second since the alert docs mention Slack) |
 | Routed to the right skill and tool | 32 of 32 |
-| Security questionnaire, drafted right with the right source | 20 of 20 (dev half), **15 of 20 (test half)**; 16 of 20 before the threshold first moved, 12 of 20 if it had stayed at 0.3 (below) |
-| Security questionnaire, left for a person when the controls page does not settle it | 6 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer); the dev miss is "which cloud regions host the data?", answered at 0.31 coverage since the runbook gained the Iceberg section |
+| Security questionnaire, drafted right with the right source | 19 of 20 (dev half), **13 of 20 (test half)** at 0.3; it has been 16, 13, 15 and now 13 as runbook edits moved the dev-chosen threshold (below). The dev miss: "how do you handle a consumer's request to delete their data?" is refused at 0.28 coverage |
+| Security questionnaire, left for a person when the controls page does not settle it | 7 of 7 (dev), **6 of 6 (test)** (certifications, audits, insurance, retention, incident timelines, a data protection officer); "which cloud regions host the data?" is refused again at the 0.3 threshold |
 
 The top-3 count was 45 until a later section began to outrank a labelled one that it also answers; the labels were left as they were, because changing an answer key after seeing a result is grading your own test.
 
@@ -740,7 +740,8 @@ not from the agent, which is the clearest case for retrieval that scores meaning
 words. A test re-runs the choice on every change, so a stale threshold fails the build. It failed again on
 2026-11-12: two new runbook sections moved the questionnaire's dev-chosen threshold from 0.3 to 0.25. The
 constant followed the dev half (the test half did not choose it); the held-out score is 15 of 20 there, and
-one unanswerable dev question now gets through.
+one unanswerable dev question now gets through. On 2026-11-15 runbook section 10 (the warehouse refused the
+load) moved it back to 0.3, and the held-out score fell to 13 of 20.
 
 These numbers are for the offline mode, which quotes the best-matching bullets and table rows with
 their source. What it misses: different words for the same thing ("runs the whole pipeline" vs "every
@@ -786,12 +787,12 @@ query, not a spreadsheet someone keeps.
 encryption at rest, no user accounts, no automated backups), because a questionnaire is signed as
 fact. A question the documents do not settle is marked "needs a person", not guessed. Questionnaire
 items are long and use words the controls page does not, so they have their own refusal threshold,
-chosen on the dev half by the same rule as the knowledge eval (now 0.25). A test re-runs that choice
+chosen on the dev half by the same rule as the knowledge eval (now 0.3). A test re-runs that choice
 on the current documents and fails if the constant no longer matches, and it did: adding the
 date-of-birth review case to the ingestion runbook made 0.25 and 0.3 tie on the dev half, the rule
 picks the one nearer 0.5, and the held-out result fell from 16 of 20 to 13 of 20 (6 answerable items
 now refused). On 2026-11-12 two more runbook sections moved it back to 0.25, and the held-out result rose
-to 15 of 20, for the same non-reason. I kept the rule rather than pick the threshold the test half likes: the lesson is
+to 15 of 20, for the same non-reason. On 2026-11-15 one more section moved it to 0.3 again: 13 of 20. I kept the rule rather than pick the threshold the test half likes: the lesson is
 that lexical refusal sits on a knife edge, and a few paragraphs of documentation can move it. A
 retrieval model that scores meaning instead of shared words is the real fix, and is not built.
 Suffix stemming ("encrypted", "encryption") helped a little.

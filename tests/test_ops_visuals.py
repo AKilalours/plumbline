@@ -71,3 +71,19 @@ def test_on_call_takes_the_refusal_from_the_real_approval_rule():
     d = OV.oncall(_run(), "Future-dated feature", "Models", "risk", _fmt())
     assert d["headline"] == {"k": "values from the future", "v": 1347}
     assert d["refusal"].startswith("whoever proposed a fix cannot approve it")
+
+
+def test_a_run_whose_warehouse_load_failed_is_drawn_as_a_failure_with_its_reason():
+    from datetime import datetime, timezone
+    from plumbline.app import ops_visuals as OV
+    trial = ('InvalidInputException: Invalid Input Error: Initialization function "motherduck_duckdb_cpp_init" threw an '
+             'exception: "Invalid Error: Your MotherDuck trial has ended. For more info, please open: https://app.motherduck.com.')
+    runs = [{"run_at": "2026-11-14T01:30:19Z", "ok": True, "rows": 3233},
+            {"run_at": "2026-11-14T22:37:04Z", "ok": True, "rows": 1581, "publish_error": trial},
+            {"run_at": "2026-11-15T06:50:37Z", "ok": False, "error": "SocrataError: no progress"}]
+    a = {x["key"]: x for x in OV.break_it(runs, None, None, datetime(2026, 11, 16, tzinfo=timezone.utc))}["fail"]
+    assert [r["ok"] for r in a["runs"]] == [True, False, False] and a["held"] is False
+    assert a["runs"][1]["error"] == "the warehouse refused the load: the MotherDuck trial ended"
+    assert OV._causes(runs) == {"the warehouse refused the load: the MotherDuck trial ended": 1, "SocrataError: no progress": 1}
+    inc = OV.incidents({"NYC": ("dob_now_permits", runs)}, [])
+    assert [r["ok"] for r in inc["feeds"][0]["runs"]] == [True, False, False]

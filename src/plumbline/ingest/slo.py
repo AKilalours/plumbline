@@ -57,7 +57,7 @@ def fresh_hours(runs: list[dict], now: datetime, promise_hours: float = 26, wind
     if not rs:
         return []
     began = max(start, _at(rs[0]))
-    oks = [r for r in rs if r.get("ok")]
+    oks = [r for r in rs if _ok(r)]           # a run whose warehouse publish failed refreshed nothing a reader sees
     out, j = [], -1
     for h in range(int((now - began).total_seconds() // 3600)):
         t = began + timedelta(hours=h + 1)

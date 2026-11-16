@@ -107,3 +107,25 @@ Any time you rerun a job by hand, change code or config to bring a feed back, or
 `docs/reliability/recoveries.yaml` (feed, when consumers were first affected, when the first good run landed,
 what you did, the postmortem). A run started by hand with no entry is counted anyway, as "unexplained", on the
 Health page. `python -m plumbline.ingest.recoveries` prints the per-feed counts.
+
+## 10. The warehouse refused the load (alert "the cloud publish failed")
+
+The source was read and the rows passed their contract, but MotherDuck did not take them. The run line has
+`publish_error` and `cursor_held: true`, and the job is red.
+
+- **What the system already did:** it held the cursor. The next run reads the same rows again, so nothing is
+  owed by hand. Reading twice is harmless: the upsert keys on the row id and the Iceberg copy appends by row hash.
+- **What you do:** read `publish_error`.
+  - "trial has ended", "plan", "billing": an organization admin picks a plan at app.motherduck.com. The free
+    plan is enough for these feeds.
+  - "not yet supported" or a version number: pin the DuckDB version MotherDuck supports in the job (see the
+    2026-11-07 postmortem).
+  - a token error: replace the `MOTHERDUCK_TOKEN` secret.
+- **After the fix,** the next run lands everything held since the outage began. Check that `published` is back
+  on the run line and `cursor_held` is gone.
+- **A window lost before this rule existed** (runs that show `publish_error` without `cursor_held`): run the job by
+  hand (Actions → open data → Run workflow) with `rewind_to` set to a time just before the first lost run's
+  starting cursor. That run reads the window again, and only that run. A time ahead of the cursor is ignored.
+- **The Wikimedia stream cannot be replayed:** each run reads a live two-minute window. A window whose load
+  failed is lost from the warehouse; its run line keeps the counts.
+- Then add the recovery to `docs/reliability/recoveries.yaml` (section 9).

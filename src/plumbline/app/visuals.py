@@ -166,10 +166,18 @@ pre.code .hl{background:rgba(229,183,77,.25);display:inline-block;width:100%;bor
 .rings{display:flex;gap:14px;align-items:center}
 @media (max-width:640px){.mg-top{grid-template-columns:1fr 1fr}}
 .bk-board{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
-.bk-t{border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px 10px 9px;text-align:left;cursor:pointer;font:500 13px Geist,sans-serif;color:var(--ink);transition:all .15s;position:relative;min-height:78px}
-.bk-t:hover{border-color:var(--ink);transform:translateY(-2px)}.bk-t.on{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink)}
-.bk-t .ic{font-size:20px;display:block;margin-bottom:4px}.bk-t .st{position:absolute;top:8px;right:8px;font:600 9px 'Geist Mono',monospace;letter-spacing:.05em;padding:2px 6px;border-radius:99px;background:#F2F3F6;color:var(--muted)}
-.bk-t .st.held{background:#E8F5EE;color:var(--green)}.bk-t .st.fixed{background:#FFF4DA;color:#7A5A06}.bk-t .st.broke{background:#FBEDEA;color:var(--red)}
+.bk-t{border:1px dashed #CDD1DE;border-radius:12px;background:#fff;padding:9px 11px 8px;text-align:left;cursor:pointer;font:500 13px Geist,sans-serif;color:var(--ink);transition:background .2s,border-color .2s,transform .15s;position:relative;display:flex;flex-direction:column;gap:5px;min-width:0;overflow:hidden}
+.bk-t:hover{border-color:var(--navy);transform:translateY(-2px)}
+.bk-t .no{font:600 10px 'Geist Mono',monospace;letter-spacing:.08em;color:var(--muted)}
+.bk-t .nm{line-height:1.2;min-height:31px}
+.bk-t svg{width:100%;height:30px;display:block}
+.bk-t .res{font:600 10px 'Geist Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bk-t::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:transparent;transition:background .3s}
+.bk-t.held{border-style:solid}.bk-t.held::after{background:var(--green)}.bk-t.held .res{color:var(--green)}
+.bk-t.fixed{border-style:solid}.bk-t.fixed::after{background:var(--gold)}.bk-t.fixed .res{color:#8A6411}
+.bk-t.broke{border-style:solid}.bk-t.broke::after{background:var(--red)}.bk-t.broke .res{color:var(--red)}
+.bk-t.on{background:var(--navy);border:1px solid var(--navy);color:#fff}.bk-t.on .no,.bk-t.on .res{color:rgba(255,255,255,.75)}
+.bk-t.on.held .res{color:#8EE0B5}.bk-t.on.fixed .res{color:var(--gold)}.bk-t.on.broke .res{color:#FFB4A6}
 .bk-stage{border:1px solid var(--line);border-radius:20px;margin-top:10px;padding:18px 20px;position:relative;overflow:hidden;background:#fff;min-height:330px}
 .bk-q{font-size:22px;font-weight:500;letter-spacing:-.01em;max-width:calc(100% - 270px)}
 .bk-go{margin-top:12px;border:0;border-radius:999px;padding:12px 22px;font:700 15px Geist,sans-serif;background:var(--red);color:#fff;cursor:pointer;box-shadow:0 6px 18px rgba(194,65,45,.35);animation:pulse 1.6s ease-in-out infinite}
@@ -1233,7 +1241,7 @@ R.polite = () => {
 // are the times a consumer was hurt until a person fixed it; click one for what was done and its postmortem.
 R.incidents = () => {
   const ts = D.feeds.flatMap(f => f.runs.map(r => Date.parse(r.t)).concat(f.recoveries.flatMap(x => [Date.parse(x.start), Date.parse(x.end)])));
-  const t0 = Math.min(...ts), t1 = Math.max(Date.now(), ...ts), x = t => `${100 * (Date.parse(t) - t0) / (t1 - t0)}%`;
+  const t0 = Math.min(...ts), t1 = Math.max(Date.now(), ...ts), x = t => `calc(6px + (100% - 12px) * ${(Date.parse(t) - t0) / (t1 - t0)})`;   // a dot is 12px and centred: inset by half so the end ones stay inside
   const card = document.createElement('div'); card.className = 'card'; card.style.marginTop = '12px';
   card.innerHTML = '<div class="cap">Click a shaded span: what broke, how long, what a person did.</div>';
   const sum = tiles(D.feeds.map(f => ({label: f.name, value: f.recoveries.length, fmt: 'int', tone: f.recoveries.length ? 'warn' : 'pass',
@@ -1632,13 +1640,30 @@ R.breakit = () => {
   const verdict = a => a.held === true ? ['held', 'HELD'] : a.held === 'fixed' ? ['fixed', 'BROKE · FIXED'] : ['broke', 'BROKE'];
   const score = () => { const v = Object.values(tried); head.textContent = `Try to break it · ${A.length} attacks · tried ${v.length}` +
     (v.length ? ` · held ${v.filter(x => x === 'held').length} · broke ${v.length - v.filter(x => x === 'held').length}, shown below` : ''); };
-  board.innerHTML = A.map((a, i) => `<button class="bk-t" data-i="${i}"><span class="ic">${a.icon}</span>${esc(a.attack)}<span class="st">?</span></button>`).join('');
+  // each panel carries a miniature of its own recorded data, so the row already says something before a click
+  const mini = a => {
+    const W = 120, H = 30, red = 'var(--red)', ok = 'currentColor';
+    const bars = (vals, col, mx) => { const m = mx || Math.max(...vals, 1), w = W / vals.length;
+      return vals.map((v, i) => `<rect x="${(i * w + w * .15).toFixed(1)}" y="${(H - v / m * H).toFixed(1)}" width="${(w * .7).toFixed(1)}" height="${(v / m * H).toFixed(1)}" rx="1" fill="${typeof col === 'function' ? col(i) : col}"/>`).join(''); };
+    let g = '';
+    if (a.key === 'cdc') g = a.changes.map((c, i) => `<rect x="${i * W / a.changes.length + 1}" y="${c.op === 'r' ? 12 : 4}" width="${W / a.changes.length - 2}" height="${c.op === 'r' ? 14 : 22}" rx="1.5" fill="${{ r: '#9AA3C7', c: 'var(--green)', u: 'var(--gold)', d: red }[c.op]}"/>`).join('');
+    if (a.key === 'reload') g = bars([...a.before.map(r => r.seconds), a.after.seconds], i => i < a.before.length ? red : 'var(--green)');
+    if (a.key === 'quiet') g = bars(a.slices.map(s => s.changed), red);
+    if (a.key === 'stale') { const mx = Math.max(a.promise * 1.15, ...a.hours.map(h => h.age)), y = H - a.promise / mx * H;
+      g = bars(a.hours.map(h => h.age), i => a.hours[i].good ? '#6E82E0' : red, mx) + `<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="${red}" stroke-dasharray="3 2" stroke-width="1"/>`; }
+    if (a.key === 'fail') { const n = a.runs.length, w = W / n; g = a.runs.map((r, i) => `<circle cx="${i * w + w / 2}" cy="${H / 2}" r="${Math.min(w / 2 - .4, r.ok ? 2 : 3.6)}" fill="${r.ok ? 'var(--green)' : red}"/>`).join(''); }
+    if (a.key === 'stranger') { const ch = a.engineers.flatMap(e => e.verify), w = W / ch.length;
+      g = ch.map((v, i) => `<rect x="${i * w + 2}" y="8" width="${w - 4}" height="14" rx="3" fill="${v ? 'var(--green)' : red}"/>`).join(''); }
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${g}</svg>`;
+  };
+  board.innerHTML = A.map((a, i) => `<button class="bk-t" data-i="${i}"><span class="no">${String(i + 1).padStart(2, '0')}</span>
+    <span class="nm">${esc(a.attack)}</span>${mini(a)}<span class="res">not tried</span></button>`).join('');
   let run = 0;
   const pick = i => {
     run++; const a = A[i], me = run;
     board.querySelectorAll('.bk-t').forEach(b => b.classList.toggle('on', +b.dataset.i === i));
     stage.innerHTML = `<div class="bk-flash"></div><div class="bk-q">${esc(a.question)}</div>
-      <button class="bk-go">${a.icon} ${esc(a.attack)}</button><div class="bk-scene"></div><div class="bk-tip"></div>
+      <button class="bk-go">Try it: ${esc(a.attack.toLowerCase())}</button><div class="bk-scene"></div><div class="bk-tip"></div>
       <div class="bk-stamp"></div><div class="bk-how">Recorded, not simulated · <a href="${a.href}" target="_blank">how it was measured</a></div>`;
     const sc = stage.querySelector('.bk-scene'), go = stage.querySelector('.bk-go'), tip = stage.querySelector('.bk-tip');
     const alive = () => me === run;
@@ -1649,7 +1674,8 @@ R.breakit = () => {
       if (!alive()) return;
       const [cls, word] = verdict(a), s = stage.querySelector('.bk-stamp');
       s.className = 'bk-stamp ' + cls; s.innerHTML = `${word}<small>${esc(sub || '')}</small>`; requestAnimationFrame(() => s.classList.add('in'));
-      tried[a.key] = cls; const t = board.querySelector(`.bk-t[data-i="${i}"] .st`); t.className = 'st ' + cls; t.textContent = word;
+      tried[a.key] = cls; const t = board.querySelector(`.bk-t[data-i="${i}"]`); t.classList.remove('held', 'fixed', 'broke'); t.classList.add(cls);
+      t.querySelector('.res').textContent = word; t.title = sub || '';
       score(); go.disabled = false; go.textContent = '↻ Again';
     };
   };
@@ -1768,7 +1794,10 @@ R.breakit = () => {
           st.textContent = streak; rt.textContent = `${ok} of ${i + 1}`; await k.wait(90); }
         const bad = a.runs.length - ok;
         if (!bad) return `${ok} of ${ok} runs`;
-        k.tip.textContent = `${bad} failed on the first day (an unpinned DuckDB). Fixed with a pin and a test; ${streak} in a row since. The ${Math.round(a.target * 100)}% target is missed: the budget is spent.`;
+        // the causes come from the runs themselves, grouped, so a new kind of failure is never described as an old one
+        const why = {}; a.runs.filter(r => !r.ok).forEach(r => { const w = r.error || 'failed'; why[w] = (why[w] || 0) + 1; });
+        k.tip.textContent = Object.entries(why).map(([w, n]) => `${n} × ${w}`).join(' · ') +
+          ` · ${streak ? streak + ' in a row since' : 'the latest run failed'} · the ${Math.round(a.target * 100)}% target is ${ok / a.runs.length >= a.target ? 'met' : 'missed'}.`;
         return `${bad} failed · ${streak} in a row since`;
       }
     },

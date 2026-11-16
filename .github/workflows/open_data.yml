@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: "23 */3 * * *"       # asked for every 3 hours; GitHub's scheduler is best effort and drops or delays some
   workflow_dispatch:
+    inputs:
+      rewind_to:
+        description: "Read NYC again from this UTC time (e.g. 2026-11-14T06:00:00Z), for a window the warehouse missed. Leave empty for a normal run."
+        required: false
+        default: ""
   push:                          # and when the connector, the job or the contract changes
     branches: [main]
     paths:
@@ -59,7 +64,9 @@ jobs:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
           # the Iceberg copy of the feed (lake/iceberg.py): one snapshot per run, kept on the history branch
           PLUMBLINE_FEED_LAKE: /tmp/hist/lake
-        run: python -m plumbline.ingest.open_data_daily
+          # passed as data, never pasted into the script; the program rejects anything that is not a time
+          REWIND_TO: ${{ inputs.rewind_to }}
+        run: python -m plumbline.ingest.open_data_daily --rewind-to "$REWIND_TO"
       - name: Read a window of Wikimedia's live stream
         id: stream
         continue-on-error: true

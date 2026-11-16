@@ -72,7 +72,7 @@ to code and to the measurement that backs it. Gaps are listed as gaps.
 | Webhooks and their failure modes | `agents/slack.py` | signature, replay window, retry and double-click dedupe, bot loops |
 | Measure adoption and cost; retire what nobody opens | `agents/usage.py` | per skill: requests, refusals, people, tokens, cost, hours retired (measured uses times an owner's baseline); unused skills |
 | Access provisioning with an access record that writes itself | `agents/access.py`, `skills/access_admin.yaml`, `ops.access` | grant, remove, offboard only by an admin who neither asked nor is the person; last admin cannot be removed; `tests/test_access.py` |
-| Security questionnaires answered from documented controls | `docs/security.md`, `agents/questionnaire.py` | on 53 items, 15 of 20 drafted right on the held-out half (16 before runbook changes moved the dev-chosen threshold), 6 of 6 controls we lack left for a person |
+| Security questionnaires answered from documented controls | `docs/security.md`, `agents/questionnaire.py` | on 53 items, 13 of 20 drafted right on the held-out half (it has moved between 13 and 16 as runbook edits moved the dev-chosen threshold), 6 of 6 controls we lack left for a person |
 | Runbooks people follow | `docs/runbooks/agent.md` | |
 | An internal tool people can use without the command line | `streamlit_app.py` (Ask the agent) | the same agent, approvals and audit behind a chat page; each viewer gets their own copy of the warehouse; no model key on a public page |
 

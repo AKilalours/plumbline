@@ -29,6 +29,25 @@ TYPED = {   # where a visitor types, and what a curious or hostile one might typ
 class Walker:
     def __init__(self, page, base: str):
         self.p, self.base, self.problems, self.steps = page, base.rstrip("/") + "/", [], 0
+        # A visual is a page of its own inside a frame: its script errors and its overflow never reach a Streamlit
+        # error box, so they are collected here. Failed resource loads are left out: a font host blocked by a
+        # network says nothing about the app.
+        self.js: list[str] = []
+        page.on("pageerror", lambda e: self.js.append(str(e)[:200]))
+        page.on("console", lambda m: self.js.append(m.text[:200])
+                if m.type == "error" and "Failed to load resource" not in m.text and "ERR_" not in m.text else None)
+
+    def overflow(self) -> list[str]:
+        """Visuals wider than their frame: a phone shows a sideways scroll, a desktop a clipped edge."""
+        out = []
+        for f in self.p.frames[1:]:
+            try:
+                kind = f.evaluate("() => (document.getElementById('data') && JSON.parse(document.getElementById('data').textContent).kind) || ''")
+                if kind and f.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 2"):
+                    out.append(kind)
+            except Exception:                        # a frame torn down by a rerun mid-check
+                continue
+        return out
 
     # ------------------------------------------------------------ plumbing
     def idle(self, timeout: float = 240):
@@ -43,6 +62,11 @@ class Walker:
         boxes = self.p.locator('[data-testid="stException"]')
         if boxes.count():
             self.problems.append(f"{where}: {boxes.first.inner_text()[:300]}")
+        if self.js:
+            self.problems.append(f"{where}: script error in a visual: {self.js[0]}")
+            self.js.clear()
+        for kind in self.overflow():
+            self.problems.append(f"{where}: the {kind} visual is wider than the page")
 
     def main(self):
         return self.p.locator("main")
@@ -208,6 +232,7 @@ if __name__ == "__main__":
     ap.add_argument("url", nargs="?", default="http://localhost:8501/")
     ap.add_argument("--expect-version", help="fail unless the app's footer shows this code fingerprint (plumbline.app.version)")
     ap.add_argument("--wait-minutes", type=float, default=20, help="how long to wait for a redeploy to show the expected code")
+    ap.add_argument("--width", type=int, default=1400, help="browser width: 420 walks the app as a phone would")
     a = ap.parse_args()
     if a.expect_version:
         stale = deployed_version(a.url, a.expect_version, a.wait_minutes)
@@ -216,7 +241,7 @@ if __name__ == "__main__":
                   f"Reboot it from share.streamlit.io and check its logs.")
             sys.exit(2)
         print(f"deployed app runs code {a.expect_version}")
-    problems, steps = run(a.url)
+    problems, steps = run(a.url, a.width)
     print(f"{steps} checks, {len(problems)} problems")
     for p in problems:
         print(" -", p)

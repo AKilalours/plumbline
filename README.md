@@ -87,7 +87,16 @@ truth; places and income are real NYC and Census data.
 </tr>
 </table>
 
-<p align="center"><a href="docs/video/plumbline-demo.mp4"><img src="docs/img/video.png" width="880" alt="Watch the 80-second tour of the live app"></a></p>
+<table>
+<tr>
+<td width="50%"><a href="docs/video/plumbline-how-it-works.mp4"><img src="docs/img/video-how-it-works.jpg" alt="Video 1, How it works: the city of records, every NYC row accounted for, a bad vendor file held at the gate, a new source that survives a crash, identity through typos, the release gate, try to break it, and the agent that cannot approve its own change"></a></td>
+<td width="50%"><a href="docs/video/plumbline-using-it.mp4"><img src="docs/img/video-using-it.jpg" alt="Video 2, Using it: a visitor uploads three messy CSVs, watches every row become a customer, finds one person across three files, tries to break the pipeline, handles an incident on a phone, injects one in the lab, and sees it in the log"></a></td>
+</tr>
+<tr>
+<td align="center"><b>▶ How it works</b><br><sub>1:50 · 4K · the pipeline, the proofs, the agent</sub></td>
+<td align="center"><b>▶ Using it</b><br><sub>1:50 · 4K · a recorded visitor session, from upload to the log</sub></td>
+</tr>
+</table>
 
 <table>
 <tr>

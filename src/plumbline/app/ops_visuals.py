@@ -12,6 +12,30 @@ ROOT = Path(__file__).resolve().parents[3]
 REPO = "https://github.com/AKilalours/plumbline/blob/main/"
 
 
+def _ok(r: dict) -> bool:
+    """A run succeeded when it read the source AND the warehouse took the rows: the SLO's own rule (ingest/slo.py)."""
+    from ..ingest.slo import _ok as ok
+    return ok(r)
+
+
+def _why(r: dict) -> str | None:
+    e = r.get("error") or r.get("publish_error")
+    if not e:
+        return None
+    e = str(e)
+    if "trial has ended" in e:
+        return "the warehouse refused the load: the MotherDuck trial ended"
+    return ("warehouse load failed: " if r.get("publish_error") and not r.get("error") else "") + e.split("\n")[0][:90]
+
+
+def _causes(runs: list[dict]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for r in runs:
+        if not _ok(r):
+            out[_why(r) or "failed"] = out.get(_why(r) or "failed", 0) + 1
+    return out
+
+
 def _title(postmortem: str | None) -> str:
     if not postmortem or not (ROOT / postmortem).exists():
         return "A person stepped in"
@@ -27,7 +51,7 @@ def incidents(feeds: dict[str, tuple[str, list[dict]]], entries: list[dict]) -> 
             continue
         mine = [e for e in entries if e["feed"] == feed]
         out.append({"name": label,
-                    "runs": [{"t": r["run_at"], "ok": bool(r.get("ok")), "trigger": r.get("trigger"),
+                    "runs": [{"t": r["run_at"], "ok": _ok(r), "trigger": r.get("trigger"),
                               "hand": r.get("trigger") == "workflow_dispatch"} for r in runs],
                     "retries": sum(int(r.get("retries") or 0) for r in runs),
                     "recoveries": [{"start": str(e["started"]).replace("+00:00", "Z"), "end": str(e["recovered"]).replace("+00:00", "Z"),
@@ -159,7 +183,8 @@ def proof_cards(nyc_runs: list[dict], cdc: dict | None, onboarding: dict | None,
         out.append({"key": "runs", "title": "Runs that succeeded",
                     "visual": {"type": "ring", "k": ru["good"], "n": ru["total"], "target": ru["target"],
                                "note": f"target {ru['target']:.0%}: {'met' if ru['status'] == 'met' else 'missed, budget spent'}", "miss": ru["status"] != "met"},
-                    "method": "Two failed runs on the first day (an unpinned DuckDB) spent the whole 28-day budget. Every run since succeeded.",
+                    "method": "A run counts only when it read NYC and the warehouse took the rows. Failures: " +
+                              "; ".join(f"{n} × {w}" for w, n in _causes(nyc_runs).items()) + ".",
                     "href": gh + "docs/postmortems/2026-11-07-motherduck-duckdb.md"})
         first_skip = next((r for r in nyc_runs if isinstance(r.get("reload_skipped"), dict)), None)
         if first_skip:
@@ -197,7 +222,7 @@ def break_it(nyc_runs: list[dict], cdc: dict | None, onboarding: dict | None, no
     if cdc:
         ch = [{"op": c["op"], "lsn": c["lsn_text"], "xid": c["xid"], "table": c["source"].replace("pg_", ""), "id": c["id"],
                "v": c.get("email") or c.get("plan") if c["source"] == "pg_customers" else c.get("status")} for c in cdc["changes"]]
-        out.append({"key": "cdc", "attack": "Crash the replication", "icon": "💥", "held": bool(cdc.get("matches_database")),
+        out.append({"key": "cdc", "attack": "Crash the replication", "held": bool(cdc.get("matches_database")),
                     "question": "Can a crash lose a database change?",
                     "postgres": cdc["postgres"].split()[0], "slot": cdc["slot_point"], "copied": sum(cdc["copied"].values()),
                     "changes": ch, "read_again": cdc["crash"]["read_again"], "transactions": cdc["crash"]["transactions"],
@@ -209,7 +234,7 @@ def break_it(nyc_runs: list[dict], cdc: dict | None, onboarding: dict | None, no
         skip = next((r for r in runs if isinstance(r.get("reload_skipped"), dict)), None)
         if skip:
             stuck = [r for r in runs if r["run_at"] < skip["run_at"] and int(r.get("pages") or 0) >= 60][-4:]
-            out.append({"key": "reload", "attack": "Re-stamp the whole table", "icon": "🔁", "held": "fixed",
+            out.append({"key": "reload", "attack": "Re-stamp the whole table", "held": "fixed",
                         "question": "NYC gives every row one new update time. Does the feed choke?",
                         "block": skip["reload_skipped"]["rows"], "stamp": skip["reload_skipped"]["timestamp"],
                         "before": [{"t": r["run_at"], "pages": int(r["pages"]), "seconds": round(float(r["seconds"]), 1),
@@ -221,23 +246,23 @@ def break_it(nyc_runs: list[dict], cdc: dict | None, onboarding: dict | None, no
         if rc:
             sl = [{"t": r["run_at"], "checked": int(r["reconcile"]["checked"]), "changed": int(r["reconcile"].get("changed") or 0),
                    "gone": int(r["reconcile"].get("gone") or 0), "fields": {FIELD.get(k, k.replace("_", " ")): v for k, v in (r["reconcile"].get("fields") or {}).items()}} for r in rc]
-            out.append({"key": "quiet", "attack": "Edit a row without telling", "icon": "✏️", "held": True,
+            out.append({"key": "quiet", "attack": "Edit a row without telling", "held": True,
                         "question": "NYC changes a row but not its update time. Does anyone notice?",
                         "slices": sl, "href": gh + "docs/postmortems/2026-11-07-apartment-number-dropped.md"})
         hs = fresh_hours(runs, now)
         if hs:
-            out.append({"key": "stale", "attack": "Let the data go stale", "icon": "⏱", "held": all(h["good"] for h in hs),
+            out.append({"key": "stale", "attack": "Let the data go stale", "held": all(h["good"] for h in hs),
                         "question": "Is there an hour when what we hold was over 26 hours behind NYC?",
                         "promise": 26, "hours": hs, "href": gh + "docs/reliability/slo.md"})
         m = measure(runs, now)["runs"]
-        out.append({"key": "fail", "attack": "Make a run fail", "icon": "🧨", "held": m["status"] == "met",
+        out.append({"key": "fail", "attack": "Make a run fail", "held": m["status"] == "met",
                     "question": "Do runs fail, and does the feed recover?", "target": m["target"],
-                    "runs": [{"t": r["run_at"], "ok": bool(r.get("ok")), "seconds": round(float(r.get("seconds") or 0), 1),
-                              "rows": int(r.get("rows") or 0), "error": (str(r.get("error"))[:90] if r.get("error") else None),
+                    "runs": [{"t": r["run_at"], "ok": _ok(r), "seconds": round(float(r.get("seconds") or 0), 1),
+                              "rows": int(r.get("rows") or 0), "error": _why(r),
                               "trigger": r.get("trigger")} for r in runs],
                     "href": gh + "docs/postmortems/2026-11-07-motherduck-duckdb.md"})
     if onboarding:
-        out.append({"key": "stranger", "attack": "Hand it to a stranger", "icon": "🧑‍💻",
+        out.append({"key": "stranger", "attack": "Hand it to a stranger",
                     "held": all(all(e["verify"]) for e in onboarding["engineers"]),
                     "question": "Can an engineer who never saw the code add a source?", "checks": CHECKS,
                     "engineers": [{"who": e["who"], "source": e["source"], "minutes": e["minutes"], "verify": e["verify"],

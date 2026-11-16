@@ -62,3 +62,15 @@ def test_the_hour_list_the_app_draws_is_what_the_slo_counts():
     hs, m = fresh_hours(runs, now), measure(runs, now)["fresh"]
     assert len(hs) == m["total"] and sum(h["good"] for h in hs) == m["good"]
     assert any(not h["good"] for h in hs) and hs[-1]["lag"] == 30
+
+
+def test_an_hour_after_a_failed_warehouse_load_is_not_fresh():
+    """From 2026-11-14 every load was refused (the MotherDuck trial ended) while the reads succeeded: readers of the
+    warehouse saw nothing new, yet those hours counted as fresh because the run line said ok."""
+    from datetime import datetime, timezone
+    from plumbline.ingest.slo import fresh_hours
+    runs = [{"run_at": "2026-11-14T00:00:00Z", "ok": True},
+            {"run_at": "2026-11-14T06:00:00Z", "ok": True, "publish_error": "Your MotherDuck trial has ended"},
+            {"run_at": "2026-11-15T06:00:00Z", "ok": True, "publish_error": "Your MotherDuck trial has ended"}]
+    hs = fresh_hours(runs, datetime(2026, 11, 15, 12, tzinfo=timezone.utc))
+    assert hs[-1]["run"] == "2026-11-14T00:00:00Z" and hs[-1]["age"] == 36.0 and not hs[-1]["good"]

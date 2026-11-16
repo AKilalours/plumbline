@@ -35,7 +35,8 @@ TITLE = "DOB NOW: Build, Approved Permits"
 def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, out: Path = OUT,
         contracts: Path = ROOT / "sources" / "open_data", since: str = "2026-11-01", max_pages: int = 60, page_size: int = 1000, reload_rows: int = 100_000,
         client_kw: dict | None = None, now=lambda: datetime.now(timezone.utc), publish_to: str | None = None,
-        reconcile_budget: int = 2000, held_rows=None, reconcile_by: str = "work_permit", lake_dir: str | None = None) -> dict:
+        reconcile_budget: int = 2000, held_rows=None, reconcile_by: str = "work_permit", lake_dir: str | None = None,
+        rewind_to: str | None = None) -> dict:
     from .connectors.socrata import source_newest, DEFAULT_HOST, SocrataClient, sync_dataset
     from .contracts import load_contracts
     from .engine import ingest
@@ -53,6 +54,8 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
         landing.mkdir(parents=True)
         if (state_dir / "_sync_state.json").exists():          # the cursor lives in the repo between runs
             shutil.copy(state_dir / "_sync_state.json", landing / "_sync_state.json")
+        if rewind_to:                                          # a person replays a window (runbook section 10)
+            _rewind(landing / "_sync_state.json", rewind_to, rec)
         try:
             client = SocrataClient(host or DEFAULT_HOST, os.environ.get("SOCRATA_APP_TOKEN"), **(client_kw or {}))
             contract = contracts / f"{name}.yaml"
@@ -82,8 +85,10 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
                 with duckdb.connect(str(wh), read_only=True) as con:
                     rec["rows_loaded"] = con.execute(f"SELECT count(*) FROM current_{name}").fetchone()[0]
                     rec["rows_quarantined"] = con.execute("SELECT count(*) FROM quarantine WHERE source = ?", [name]).fetchone()[0]
-                # A cloud publish that fails must not cost the source its cursor: the sync is recorded as done
-                # and the failure as publish_error, which alerts and turns the job red (main returns 1).
+                # The warehouse confirms before the cursor moves. A failed publish is recorded as publish_error
+                # (alerts, the job red) and the cursor is held, so the next run reads the same rows again. Saving it
+                # anyway lost 1,581 rows from the warehouse when the MotherDuck trial ended on 2026-11-14: they
+                # lived only in this run's temporary folder (runbook section 10).
                 try:
                     rec["published"] = _publish(wh, name, publish_to, rec["run_at"])
                 except Exception as e:
@@ -95,7 +100,10 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
                     rec["lake"], rec["lake_error"] = None, f"{type(e).__name__}: {e}"[:400]
             elif not contract.exists():
                 rec["note"] = f"no reviewed contract at sources/open_data/{name}.yaml yet: synced, not loaded"
-            shutil.copy(landing / "_sync_state.json", state_dir / "_sync_state.json")
+            if rec.get("publish_error"):
+                rec["cursor_held"] = True
+            else:
+                shutil.copy(landing / "_sync_state.json", state_dir / "_sync_state.json")
             rec["ok"] = True
         except Exception as e:                       # recorded, then re-raised so the job shows red
             rec["error"] = f"{type(e).__name__}: {e}"[:400]
@@ -105,6 +113,22 @@ def run(*, host: str | None = None, dataset: str = DATASET, name: str = NAME, ou
     rec["seconds"] = round(time.perf_counter() - t0, 2)
     _append(out, rec)
     return rec
+
+
+def _rewind(state_file: Path, to: str, rec: dict) -> None:
+    """Move the cursor back to `to` (never forward), so this run reads that window again. For a window the warehouse
+    missed: the upsert and the lake's append by row hash make reading rows twice harmless."""
+    if not state_file.exists():
+        return
+    st = json.loads(state_file.read_text())
+    to = to.rstrip("Z")
+    datetime.fromisoformat(to)                                   # a bad time fails here, before anything is read
+    if st.get("watermark") and to < st["watermark"]:
+        rec["rewound"] = {"from": st["watermark"], "to": to}
+        # window_ids are the rows seen at the old edge, skipped by the overlap as already landed; after a rewind they
+        # are rows of the window being replayed, so they must be read again too (a test caught 1 of 1,200 skipped)
+        st["watermark"], st["in_progress"], st["window_ids"] = to, None, []
+        state_file.write_text(json.dumps(st, indent=1))
 
 
 def _reconcile(rec, client, dataset, contract, landing, state, state_dir, st, held_rows, target, budget, name, by) -> None:
@@ -221,9 +245,10 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--max-pages", type=int, default=60, help="a cap per run; a larger change continues next run")
+    ap.add_argument("--rewind-to", default=None, help="read again from this time (ISO, UTC): for a window the warehouse missed")
     a = ap.parse_args(argv)
     try:
-        r = run(max_pages=a.max_pages)
+        r = run(max_pages=a.max_pages, rewind_to=a.rewind_to or None)
     except Exception:
         traceback.print_exc()
         return 1

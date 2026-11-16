@@ -119,26 +119,49 @@ def test_an_unchanged_source_lands_nothing_new_on_the_next_run(city):
     assert OD.summary(OD.history(kw["out"]))["rows"] == 1200
 
 
-def test_a_failed_cloud_publish_keeps_the_cursor_and_still_turns_the_job_red(city, monkeypatch):
-    """On 2026-11-07 MotherDuck refused DuckDB 2.0 ("not yet supported"); the exception failed the whole run
-    before the cursor was saved, so every following run pulled the same rows again."""
+def test_a_failed_cloud_publish_holds_the_cursor_until_the_warehouse_has_the_rows(city, monkeypatch, tmp_path):
+    """On 2026-11-14 the MotherDuck trial ended. The run saved its cursor anyway, so the 1,581 rows it read lived only
+    in its temporary folder and never reached the warehouse. Now the cursor waits for the warehouse: the next run reads
+    the same rows again, and once publishing works they all land, once."""
+    import duckdb
     from plumbline.products import publish as P
     ds, kw = city
+    real = P.publish
 
     def refuse(*a, **k):
-        raise RuntimeError("Your DuckDB version (v2.0.0) is not yet supported by MotherDuck")
+        raise RuntimeError("Your MotherDuck trial has ended")
     monkeypatch.setattr(P, "publish", refuse)
-    first = OD.run(**kw, publish_to="md:plumbline")
-    assert first["ok"] and first["rows"] == 1200 and "not yet supported" in first["publish_error"]
-    again = OD.run(**kw, publish_to="md:plumbline")
-    assert again["rows"] == 0                                   # the cursor was saved despite the failed publish
+    cloud = str(tmp_path / "cloud.duckdb")
+    first = OD.run(**kw, publish_to=cloud)
+    assert first["ok"] and first["rows"] == 1200 and "trial has ended" in first["publish_error"]
+    again = OD.run(**kw, publish_to=cloud)
+    assert again["rows"] == 1200                                # read again: the old code saved the cursor, so 0 here
+    assert first.get("cursor_held") and again.get("cursor_held")
     monkeypatch.setattr(OD, "run", lambda **k: first)
-    assert OD.main([]) == 1                                     # and the job still shows red
+    assert OD.main([]) == 1                                     # the job still shows red
+    monkeypatch.undo()
+    monkeypatch.setattr(P, "publish", real)
+    back = OD.run(**kw, publish_to=cloud)                       # access restored
+    assert back["rows"] == 1200 and back["published"]["rows_after"] == 1200 and "cursor_held" not in back
+    with duckdb.connect(cloud, read_only=True) as con:
+        assert con.execute("SELECT count(*) FROM current_permits").fetchone()[0] == 1200
+    assert OD.run(**kw, publish_to=cloud)["rows"] == 0           # and then the cursor moves on as before
     from plumbline.ingest.alerts import problems
     from plumbline.ingest.freshness import Feed
     from datetime import datetime, timezone
     p = problems([Feed("NYC Open Data permits", 26, lambda: [first])], datetime.now(timezone.utc))
     assert any("cloud publish failed" in t for t in p)
+
+
+def test_rewind_reads_a_window_again_and_never_moves_the_cursor_forward(city):
+    ds, kw = city
+    first = OD.run(**kw)
+    r = OD.run(**kw, rewind_to="2026-09-01T00:00:00Z")
+    assert r["rewound"]["from"] == first["watermark"] and r["rows"] == 1200        # the whole window, read again
+    later = OD.run(**kw, rewind_to="2099-01-01T00:00:00Z")                         # forward is ignored
+    assert "rewound" not in later and later["rows"] == 0
+    with pytest.raises(ValueError):
+        OD.run(**kw, rewind_to="yesterday")
 
 
 def test_lag_is_measured_against_the_publishers_newest_update_not_the_clock(city):

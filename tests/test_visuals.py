@@ -512,6 +512,8 @@ def test_try_to_break_it_replays_each_attack_and_stamps_what_really_happened():
         want = {"cdc": "HELD", "reload": "BROKE · FIXED", "quiet": "HELD", "stale": "BROKE", "fail": "BROKE", "stranger": "HELD"}
         keys = [a["key"] for a in _ops()["breakit"]["attacks"]]
         assert keys == list(want)
+        assert pg.locator(".bk-t svg").count() == 6                  # each panel draws its own recorded data
+        assert pg.locator(".bk-t svg rect, .bk-t svg circle").count() > 60
         for i, k in enumerate(keys):
             pg.click(f'.bk-t[data-i="{i}"]')
             pg.click(".bk-go")
@@ -547,6 +549,26 @@ def test_on_call_refuses_the_agent_approving_itself_and_replays_the_recorded_fix
         assert pg.inner_text(".ba0") == "0" and "U0OPS0001" in pg.inner_text(".appv")
         assert pg.locator(".oc-ev.on").count() == 7
         assert not errors, errors
+    finally:
+        b.close()
+        p.stop()
+
+
+def test_the_run_track_keeps_its_end_dots_inside_the_page():
+    """Run dots are centred on their time, so the newest one hung half a dot past the edge: the frame was 4px wider
+    than the page (a sideways scroll on a phone). Found by the click-through's new overflow check on Sources."""
+    p, b = _browser()
+    try:
+        runs = [{"run_at": "2026-11-07T07:17:28Z", "ok": False}, {"run_at": "2100-01-01T00:00:00Z", "ok": True}]  # the last is the far end
+        from plumbline.app import ops_visuals as OV
+        pg = b.new_page(viewport={"width": 700, "height": 600})
+        pg.set_content(V.page("incidents", OV.incidents({"NYC": ("dob_now_permits", runs)}, [])))
+        pg.wait_for_timeout(400)
+        assert pg.evaluate("() => document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+        box = pg.locator(".track2").bounding_box()
+        for d in pg.locator(".track2 .rd").all():
+            bb = d.bounding_box()
+            assert bb["x"] >= box["x"] - 0.5 and bb["x"] + bb["width"] <= box["x"] + box["width"] + 0.5
     finally:
         b.close()
         p.stop()

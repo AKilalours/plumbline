@@ -1,7 +1,7 @@
 {
   "dataset": "rbx6-tga4",
   "watermark": "2026-11-18T19:44:20.542",
-  "next_sync": 49,
+  "next_sync": 50,
   "columns": [
     "source_row_id",
     "source_updated_at",
@@ -52,8 +52,13 @@
   ],
   "drift": [],
   "in_progress": null,
-  "bulk_rewrite": null,
-  "last_sync_at": "2026-11-18T20:44:52Z",
+  "bulk_rewrite": {
+    "timestamp": "2026-11-18T19:44:20.542",
+    "rows": 8514,
+    "of": 8514,
+    "share": 1.0
+  },
+  "last_sync_at": "2026-11-19T02:41:03Z",
   "window_ids": [
     "row-2289.gwes.capw|2026-11-18T19:44:20.542",
     "row-22bq.uskb~8v39|2026-11-18T19:44:20.542",
